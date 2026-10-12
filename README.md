@@ -1,6 +1,6 @@
-# Perfume Cloud · Apps
+# Perfume Cloud · Team-App
 
-Interne Apps für Perfume Cloud. Aktuell: die **Team-App** für Marius, Ben und Keanu.
+Die interne App von Perfume Cloud für Marius, Ben und Keanu.
 
 ## Team-App
 
@@ -16,7 +16,7 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 
 **Kosten:** keine. Die App läuft auf dem vorhandenen netcup-Webhosting (PHP + MySQL + Cronjob) und nutzt den Shopify-Zugang aus dem bestehenden Abo.
 
-➡️ **Einrichtung:** [docs/ANLEITUNG.md](docs/ANLEITUNG.md)
+➡️ **Schritt-für-Schritt-Anleitung (online stellen + aufs Handy):** [docs/ANLEITUNG.md](docs/ANLEITUNG.md)
 
 ### Aufbau
 

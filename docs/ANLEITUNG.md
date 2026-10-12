@@ -1,143 +1,175 @@
-# Perfume Cloud Team-App – Einrichtung Schritt für Schritt
+# Team-App aufs Handy bringen – Schritt für Schritt
 
-Diese Anleitung ist auf **netcup Webhosting 1000** zugeschnitten. Es entstehen **keine zusätzlichen Kosten**: Alles läuft auf eurem vorhandenen Webhosting und im vorhandenen Shopify-Abo.
+Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https://team.perfumecloud.de` und wird von dort auf iPhone, Mac und Windows-PC installiert. Es gibt keinen App Store, kein Apple-Entwicklerkonto und **keine Zusatzkosten**.
 
-| Was die App braucht | Webhosting 1000 bietet | Passt? |
+| Teil | Wer | Dauer |
 |---|---|---|
-| PHP 8.1 oder neuer | PHP 8.x | ✅ |
-| 1 Datenbank | 1 MySQL-Datenbank (alternativ: SQLite, braucht gar keine) | ✅ |
-| 1 Cronjob alle 5 Minuten | Cronjobs in Plesk | ✅ |
-| 1 Subdomain (`team.perfumecloud.de`) | 100 Subdomains | ✅ – verbraucht **keine** eurer Domains |
-| Kostenloses SSL-Zertifikat | Let's Encrypt | ✅ |
-| Node.js | nicht nötig | – |
+| **A – App online stellen** | Marius, einmalig am Computer | ca. 30–45 Min. |
+| **B – App aufs iPhone** | jede:r auf dem eigenen iPhone | ca. 2 Min. |
+| **C – Windows-PC / Mac** | wer möchte | ca. 1 Min. |
+| **D – iPhone-Widget** | optional | ca. 3 Min. |
+| **E – Updates automatisch** | optional, einmalig | ca. 10 Min. |
 
-Die App läuft unter einer **Subdomain eurer offiziellen Domain**, z. B. `https://team.perfumecloud.de`. Der Shop unter `www.perfumecloud.de` bleibt unverändert bei Shopify.
+**Bereitlegen:**
+- Zugang zum netcup **Customer Control Panel (CCP)**: <https://www.customercontrolpanel.de>
+- Die Datei **`perfumecloud-team-app-upload.zip`**. Ihr findet sie im Chat mit Claude oder auf GitHub unter **Actions** → letzter grüner Lauf „Team-App“ → unten **team-app-upload**.
 
-> **Wichtig:** Passwörter und Zugangsdaten nie in den Chat oder ins Repo schreiben. Sie gehören nur in die Formulare der App bzw. in die GitHub-Secrets.
+> 🔐 Passwörter nie in Chats oder ins Repo schreiben. Am besten in eurer Notion-Passwortliste ablegen.
 
 ---
 
-## 1. GitHub-Repo anlegen (1 Minute)
+## Teil A – App online stellen (Marius, einmalig)
 
-1. Auf <https://github.com/new> gehen.
-2. **Repository name:** `perfumecloud-apps`, **Private** auswählen, **ohne** README/.gitignore/Lizenz.
-3. **Create repository** – den Rest (Code hochladen) erledigt Claude.
+### A1 · Subdomain anlegen
+1. Im **CCP** anmelden.
+2. Links auf **Produkte** und dann bei eurem **Webhosting 1000** auf **Login WCP**. Das öffnet Plesk, die Verwaltung eures Webhostings.
+3. In Plesk auf **Websites & Domains** und dann auf **Subdomain hinzufügen**.
+4. Eintragen:
+   - **Subdomain-Name:** `team`
+   - **Domain:** `perfumecloud.de`
+   - **Dokumentenstamm:** `team.perfumecloud.de/public` ← wichtig: mit `/public` am Ende
+5. **OK** klicken.
 
-## 2. Subdomain bei netcup anlegen
+> Taucht `perfumecloud.de` in Plesk nicht auf, ist die Domain dem Webhosting noch nicht zugeordnet. Dann kurz Claude fragen.
 
-1. Im **Webhosting Control Panel** (Plesk) anmelden – erreichbar über das netcup Customer Control Panel (CCP) → *Produkte* → euer Webhosting → *Login WCP*.
-2. **Websites & Domains → Subdomain hinzufügen**
-   - Subdomain-Name: `team`
-   - Übergeordnete Domain: `perfumecloud.de`
-   - **Dokumentenstamm:** `team.perfumecloud.de/public` ← wichtig, mit `/public`
-3. **DNS-Eintrag prüfen:** Die Subdomain muss auf euer Webhosting zeigen.
-   - Liegt die Domain bei netcup, legt Plesk/netcup den Eintrag meist selbst an. Sonst im CCP unter *Domains → perfumecloud.de → DNS* einen **A-Eintrag** `team` → IP-Adresse eures Webhostings hinzufügen (die IP steht in Plesk bei der Domain unter *Hosting-Einstellungen*).
-   - Wird die Domain bei Shopify oder einem anderen Anbieter verwaltet, kommt derselbe **A-Eintrag** `team` → IP dort hinein (Shopify: *Einstellungen → Domains → perfumecloud.de → Domaineinstellungen → DNS-Einstellungen bearbeiten*).
-   - **Die bestehenden Shopify-Einträge (`@` und `www`) nicht ändern.**
-4. **SSL:** Bei `team.perfumecloud.de` → *SSL/TLS-Zertifikate* → **Let's Encrypt** → installieren (kostenlos, verlängert sich automatisch).
-5. **PHP:** Bei `team.perfumecloud.de` → *PHP-Einstellungen* → **PHP 8.3** (mindestens 8.1) wählen.
+### A2 · DNS-Eintrag setzen (bei netcup)
+Damit `team.perfumecloud.de` auf euer Webhosting zeigt, während der Shop bei Shopify bleibt:
 
-## 3. Datenbank anlegen
+1. Im **CCP** links auf **Produkte** und dann auf euer **Webhosting 1000**. Unter **Übersicht** steht die **IPv4-Adresse**: notieren.
+2. Im **CCP** links auf **Domains** und dann neben **perfumecloud.de** auf die **Lupe**. Dort den Reiter **DNS** öffnen.
+3. Zur Orientierung: Dort stehen die Einträge für den Shop (`@` → `23.227.38.65`, `www` → `shops.myshopify.com`) und für die Mails (MX). **Diese nicht verändern!**
+4. Gibt es schon einen Eintrag mit **Host `team`** oder **Host `*`**, Typ **A**, Ziel **eure IP aus Schritt 1**? Dann ist nichts zu tun, weiter mit A3.
+5. Sonst einen neuen Eintrag anlegen:
+   - **Host:** `team`
+   - **Typ:** `A`
+   - **Ziel:** die IPv4-Adresse aus Schritt 1
+6. Speichern („DNS-Records speichern“) und die Sicherheitsabfrage bestätigen.
+7. **Warten:** Meist dauert es 15–30 Minuten, manchmal bis zu 2 Stunden, bis der Eintrag überall bekannt ist. In der Zeit kannst du mit A4 und A5 weitermachen.
 
-Plesk → **Datenbanken → Datenbank hinzufügen**: Name, Benutzername und Passwort festlegen und notieren.
+### A3 · SSL-Zertifikat und PHP-Version
+1. In Plesk unter **Websites & Domains** bei **team.perfumecloud.de** auf **SSL/TLS-Zertifikate** und dann **Let's Encrypt** wählen. **Kostenloses Zertifikat installieren** und bestätigen.
+   - Kommt eine Fehlermeldung, ist der DNS-Eintrag aus A2 noch nicht aktiv. 30 Minuten warten und erneut versuchen.
+2. Bei **team.perfumecloud.de** auf **PHP** bzw. **PHP-Einstellungen** und dort die Version **8.3** wählen (oder die höchste 8.x, mindestens 8.1). Speichern.
 
-*Ist die eine Datenbank im Paket schon belegt?* Dann im Einrichtungsassistenten einfach **SQLite** wählen – das braucht keine Datenbank.
+### A4 · Datenbank anlegen
+1. In Plesk auf **Datenbanken** und dann **Datenbank hinzufügen**.
+2. Datenbankname z. B. `teamapp`, Benutzer z. B. `teamapp`, Passwort **generieren lassen**.
+3. Alle drei Angaben notieren und **OK** klicken.
 
-## 4. App hochladen
+> Meldet Plesk, dass das Limit erreicht ist (Webhosting 1000 hat 1 Datenbank), überspringst du diesen Schritt und wählst in A6 **SQLite**.
 
-### Automatisch über GitHub (empfohlen)
+### A5 · App hochladen
+1. In Plesk auf **Dateien** (Dateimanager) und den Ordner **`team.perfumecloud.de`** öffnen.
+2. Oben auf **Hochladen** und die Datei **`perfumecloud-team-app-upload.zip`** auswählen.
+3. Bei der hochgeladenen ZIP-Datei auf das Menü (**⋯**) und dann **Dateien extrahieren**. „Vorhandene Dateien ersetzen“ anhaken und **OK** klicken.
+4. Danach liegen im Ordner die drei Ordner **`app`**, **`public`** und **`storage`**. Die ZIP-Datei kann gelöscht werden.
 
-Bei jeder Änderung testet GitHub die App und lädt sie per verschlüsseltem FTP zu netcup hoch – kostenlos.
+### A6 · Einrichtungsassistent
+1. Im Browser **`https://team.perfumecloud.de`** öffnen. Es erscheint „Willkommen!“.
+2. **Datenbank:**
+   - **MySQL:** Server `localhost`, Port `3306`, dazu Name, Benutzer und Passwort aus A4.
+   - Oder **SQLite**, wenn es keine freie Datenbank gibt.
+3. **Dein Admin-Konto:** Name `Marius`, deine E-Mail und ein sicheres Passwort.
+4. Auf **App einrichten** klicken. Du bist angemeldet und siehst die Übersicht.
 
-1. In Plesk unter **FTP-Zugang** den FTP-Server, Benutzer und das Passwort nachsehen (oder einen eigenen FTP-Benutzer anlegen).
-2. Auf GitHub im Repo: **Settings → Secrets and variables → Actions**
-   - Tab **Secrets** → *New repository secret*:
-     - `FTP_SERVER` – z. B. der Hostname aus Plesk
-     - `FTP_USERNAME`
-     - `FTP_PASSWORD`
-   - Tab **Variables** → *New repository variable*:
-     - `FTP_DIR` = `team.perfumecloud.de/` (der Ordner der Subdomain, mit `/` am Ende)
-     - `DEPLOY_ENABLED` = `true`
-3. **Actions → Team-App → Run workflow.** Nach ca. 2 Minuten ist die App online.
+> Bitte A5 und A6 direkt nacheinander erledigen: Solange noch kein Konto existiert, könnte theoretisch jemand anderes den Assistenten aufrufen.
 
-### Manuell
+### A7 · Ben und Keanu anlegen
+1. In der App auf **Einstellungen**, dann **Team** und **Person hinzufügen**.
+2. Name **Ben**, seine E-Mail und ein Startpasswort (mindestens 8 Zeichen) eintragen und **Hinzufügen** klicken.
+3. Dasselbe für **Keanu**.
+4. Beiden E-Mail und Startpasswort **persönlich** geben. Das Passwort ändern sie später selbst unter **Einstellungen**.
 
-1. GitHub → **Actions** → letzter erfolgreicher Lauf „Team-App“ → unten das Paket **team-app-upload** herunterladen und entpacken.
-2. Den **Inhalt** (Ordner `public`, `app`, `storage`) mit dem Plesk-**Dateimanager** in den Ordner `team.perfumecloud.de` hochladen.
+### A8 · Postfächer info@ und support@ verbinden
+1. Den IMAP-Server nachsehen: In Plesk auf **E-Mail**, eine Adresse anklicken und dann die Einstellungen für E-Mail-Programme öffnen. Der Servername sieht bei netcup etwa so aus: `mxXXXXXX.netcup.net`.
+2. In der App auf **Einstellungen**, dann **Integrationen** und zu **Postfächer**. Beide Adressen sind schon eingetragen.
+3. Bei beiden den **IMAP-Server**, Port **993** und das **Passwort** des Postfachs eintragen.
+4. Auf **Speichern & testen** klicken. Erscheint ein grüner Haken, holt die App ab jetzt die wichtigen Mails.
 
-## 5. Einrichtungsassistent
+### A9 · Shopify verbinden
+1. <https://dev.shopify.com> öffnen und mit deinem Shopify-Konto (Shop-Inhaber) anmelden.
+2. Auf **Apps** und dann **App erstellen** klicken, Name `Perfume Cloud Team`.
+3. Bei der App-Version unter **Zugriffsbereiche / Scopes** diese drei anhaken: `read_orders`, `read_products`, `read_inventory`. Dann die Version **freigeben**.
+4. Die App im Shop **Perfume Cloud** **installieren**.
+5. In den **Einstellungen** der App die **Client-ID** und das **Client-Secret** kopieren.
+6. In der Team-App auf **Einstellungen**, dann **Integrationen** und zu **Shopify**. Die myshopify-Adresse `ks8yin-mg.myshopify.com` ist schon eingetragen. Client-ID und Secret einfügen und **Speichern & testen** klicken.
+7. Nach etwa einer Minute füllt sich die **Statistik**.
 
-1. `https://team.perfumecloud.de` öffnen.
-2. Datenbank auswählen (MySQL mit den Daten aus Schritt 3 oder SQLite).
-3. Dein Admin-Konto anlegen (Marius). **Fertig – du bist angemeldet.**
+### A10 · Cronjob (für Push-Nachrichten bei geschlossener App)
+1. In der App auf **Einstellungen**, dann **Integrationen** und zu **Cronjob**. Dort auf **Kopieren** klicken.
+2. In Plesk auf **Geplante Aufgaben** und dann **Aufgabe hinzufügen**.
+3. Eintragen:
+   - **Aufgabentyp:** URL abrufen
+   - **URL:** die kopierte Adresse
+   - **Ausführen:** Cron-Stil `*/5 * * * *` (alle 5 Minuten)
+   - **Benachrichtigung:** keine
+4. Mit **OK** speichern. Nach ein paar Minuten steht in der App „Cronjob lief zuletzt vor … Min.“
 
-> Den Assistenten direkt nach dem Hochladen abschließen – solange kein Konto existiert, könnte ihn sonst jemand anderes aufrufen.
+✅ **Teil A ist erledigt, die App ist online.**
 
-## 6. Team einladen
+---
 
-**Einstellungen → Team → Person hinzufügen** für **Ben** und **Keanu**: Name, E-Mail und ein Startpasswort. Das Passwort persönlich weitergeben – jede:r kann es danach unter *Einstellungen* ändern.
+## Teil B – App aufs iPhone (jede:r, 2 Minuten)
 
-## 7. Shopify verbinden (kostenlos)
+Voraussetzung: **iOS 16.4 oder neuer**. Die Version steht unter Einstellungen → Allgemein → Info.
 
-Seit 2026 erstellt man den API-Zugang im **Shopify Dev Dashboard**:
+1. Auf dem iPhone **Safari** öffnen.
+2. Oben **`team.perfumecloud.de`** eingeben und öffnen.
+3. Mit **E-Mail und Passwort** anmelden (von Marius).
+4. Auf das **Teilen-Symbol** tippen (Quadrat mit Pfeil nach oben).
+   - Ist es nicht zu sehen, erst unten rechts auf **•••** tippen und dann auf **Teilen**.
+5. Nach unten scrollen und **Zum Home-Bildschirm** antippen.
+6. Den Namen **PC Team** so lassen. Wird **„Als Web-App öffnen“** angezeigt, bleibt es eingeschaltet. Dann **Hinzufügen** tippen.
+7. Auf dem Home-Bildschirm ist jetzt das **Perfume-Cloud-Icon** mit eurem Monogramm. **Ab jetzt die App immer über dieses Icon öffnen**, nicht über Safari.
+8. Die App über das Icon öffnen und **noch einmal anmelden**. Die installierte App hat ihren eigenen Speicher, das ist normal.
+9. **Benachrichtigungen einschalten:**
+   - Oben rechts auf deinen **Kreis mit Initiale** tippen. Das öffnet die **Einstellungen**.
+   - Bei **Benachrichtigungen** auf **Aktivieren** tippen und bei der iPhone-Abfrage **Erlauben** wählen.
+   - **Test senden** antippen. Nach ein paar Sekunden kommt eine Mitteilung ✓
+10. Darunter mit den Schaltern festlegen, was du bekommen möchtest: wichtige Mails, neue Bestellungen, Aufgaben für mich, Kommentare und die Erinnerung am Morgen.
 
-1. <https://dev.shopify.com> mit dem Shopify-Konto des Shop-Inhabers öffnen.
-2. **Apps → App erstellen** → Name `Perfume Cloud Team`.
-3. In der App-Version unter **Zugriffsbereiche (Scopes)** auswählen: `read_orders`, `read_products`, `read_inventory` → Version **freigeben**.
-4. Die App im Shop **Perfume Cloud** installieren.
-5. Unter **Einstellungen** der App **Client-ID** und **Client-Secret** kopieren.
-6. In der Team-App: **Einstellungen → Integrationen → Shopify**
-   - myshopify-Adresse: `ks8yin-mg.myshopify.com` (ist schon vorausgefüllt)
-   - Client-ID und Client-Secret einfügen → **Speichern & testen**.
+🎉 **Fertig!** Die Zahl am App-Icon zeigt die wichtigen offenen Mails.
 
-Der erste Abgleich lädt die Bestellungen der letzten 60–90 Tage. Danach baut die App die Historie selbst weiter auf.
+---
 
-*Meldet der Test fehlende Berechtigungen?* Dann die Scopes in Schritt 3 prüfen, eine neue Version freigeben und die Änderung im Shop bestätigen.
+## Teil C – Windows-PC und Mac
 
-## 8. Postfächer verbinden
+**Windows (Edge oder Chrome):**
+1. `https://team.perfumecloud.de` öffnen und anmelden.
+2. Rechts in der Adressleiste auf das Symbol **App installieren** klicken (Bildschirm mit Pfeil). Alternativ im Menü **⋯** → **Apps** → **Diese Website als App installieren**.
+3. Auf **Installieren** klicken. Die App erscheint im Startmenü und lässt sich an die Taskleiste anheften.
+4. In der App unter **Einstellungen**, **Benachrichtigungen** auf **Aktivieren** klicken.
 
-**Einstellungen → Integrationen → Postfächer** – `info@perfumecloud.de` und `support@perfumecloud.de` sind schon eingetragen.
+**Mac (Safari):** Die Seite öffnen und im Menü **Ablage** auf **Zum Dock hinzufügen** klicken.
 
-- **IMAP-Server:** steht in Plesk unter *E-Mail → Adresse → Mail-Client einrichten* (bei netcup in der Form `mxXXXXXX.netcup.net`), Port **993**.
-- **Benutzername:** die E-Mail-Adresse
-- **Passwort:** das Passwort des Postfachs
+---
 
-**Speichern & testen.** Die App liest nur – sie verändert, verschiebt oder löscht keine Mails und markiert nichts als gelesen.
+## Teil D – iPhone-Widget (optional)
 
-## 9. Cronjob (alle 5 Minuten)
+1. Die kostenlose App **[Scriptable](https://apps.apple.com/app/scriptable/id1405459188)** aus dem App Store laden.
+2. In der Team-App auf **Einstellungen**, dann **iPhone-Widget** und **Widget-Skript erstellen**, danach **Skript kopieren**.
+3. **Scriptable** öffnen, oben rechts auf **+** tippen und den Text einfügen. Oben als Namen **Perfume Cloud** eintragen und **Fertig** tippen.
+4. Auf dem Home-Bildschirm auf eine freie Stelle lange drücken. Dann **Bearbeiten**, **Widget hinzufügen**, **Scriptable** wählen, eine Größe (klein, mittel oder groß) auswählen und **Widget hinzufügen** tippen.
+5. Das neue Widget lange drücken, **Widget bearbeiten** wählen und bei **Script** **Perfume Cloud** auswählen.
 
-Damit Mails, Bestellungen und Push-Nachrichten auch aktuell sind, wenn niemand die App geöffnet hat:
+Das geht genauso auf dem **Sperrbildschirm**: Sperrbildschirm lange drücken, **Anpassen** und dort Widgets hinzufügen.
 
-1. In der App: **Einstellungen → Integrationen → Cronjob** → Adresse **kopieren**.
-2. Plesk → **Geplante Aufgaben → Aufgabe hinzufügen**
-   - Aufgabentyp: **URL abrufen**
-   - URL: die kopierte Adresse
-   - Ausführen: **Cron-Stil** `*/5 * * * *`
-   - Benachrichtigung: keine
-3. Speichern. In der App erscheint nach ein paar Minuten „Cronjob lief zuletzt vor … Min.“
+---
 
-*Ohne Cronjob* funktioniert die App trotzdem: Sie holt Mails und Bestellungen ab, sobald jemand sie öffnet. Nur Push-Nachrichten bei geschlossener App brauchen den Cronjob.
+## Teil E – Updates automatisch (optional)
 
-## 10. Auf euren Geräten installieren
+Wenn Claude etwas an der App ändert, landet das auf GitHub. Damit es ohne erneutes Hochladen der ZIP-Datei auch auf netcup ankommt:
 
-**iPhone (jede:r einmal):**
-1. `https://team.perfumecloud.de` in **Safari** öffnen und anmelden.
-2. **Teilen** → **Zum Home-Bildschirm** → Hinzufügen.
-3. Die App **über das neue Icon** öffnen → **Einstellungen → Benachrichtigungen → Aktivieren** → Mitteilungen erlauben.
-4. *Test senden* – die Nachricht sollte sofort ankommen.
-
-**Mac:** Safari → *Ablage* → **Zum Dock hinzufügen**.
-**Windows-PC:** In **Edge** oder **Chrome** öffnen → in der Adressleiste auf das Installieren-Symbol klicken (oder Menü → *App installieren*) → danach in der App Benachrichtigungen aktivieren.
-
-## 11. iPhone-Widget (optional, kostenlos)
-
-1. Die kostenlose App **[Scriptable](https://apps.apple.com/app/scriptable/id1405459188)** installieren.
-2. Team-App → **Einstellungen → iPhone-Widget → Widget-Skript erstellen → Skript kopieren.**
-3. In Scriptable oben rechts **+**, einfügen, als Namen **Perfume Cloud** eintragen.
-4. Home-Bildschirm lange drücken → **Bearbeiten → Widget hinzufügen → Scriptable** → Größe wählen.
-5. Widget antippen und halten → **Widget bearbeiten** → Script: **Perfume Cloud**.
-
-Funktioniert auch auf dem Sperrbildschirm. Das Widget ist nur lesend; der Zugang lässt sich in den Einstellungen jederzeit sperren.
+1. Die FTP-Daten nachsehen: In Plesk auf **FTP-Zugang** (Server, Benutzer, Passwort).
+2. Auf GitHub im Repo **Team-App** auf **Settings**, dann **Secrets and variables** und **Actions**.
+3. Im Reiter **Secrets** mit **New repository secret** diese drei anlegen:
+   - `FTP_SERVER`
+   - `FTP_USERNAME`
+   - `FTP_PASSWORD`
+4. Im Reiter **Variables** mit **New repository variable** diese zwei anlegen:
+   - `FTP_DIR` = `team.perfumecloud.de/`
+   - `DEPLOY_ENABLED` = `true`
+5. Ab jetzt landet jede Änderung nach etwa 2 Minuten automatisch auf netcup.
 
 ---
 
@@ -145,9 +177,12 @@ Funktioniert auch auf dem Sperrbildschirm. Das Widget ist nur lesend; der Zugang
 
 | Problem | Lösung |
 |---|---|
-| Seite zeigt „Forbidden“ oder eine Ordnerliste | Dokumentenstamm muss auf `…/public` zeigen (Schritt 2). |
-| „Interner Fehler“ | Fehlermeldung steht in `storage/app.log` (Plesk-Dateimanager). |
-| Push kommt auf dem iPhone nicht an | App muss vom Home-Bildschirm geöffnet sein (nicht Safari); iOS 16.4 oder neuer; in den iPhone-Einstellungen unter *Mitteilungen → PC Team* erlauben. |
-| Passwort vergessen | Ein Admin setzt unter *Einstellungen → Team → Passwort* ein neues. |
-| Mail-Test schlägt fehl | IMAP-Server und Passwort prüfen; Port 993. |
-| Shopify-Test schlägt fehl | Client-ID/Secret neu kopieren; Scopes prüfen; App im Shop installiert? |
+| `team.perfumecloud.de` öffnet den Shop oder gar nichts | Der DNS-Eintrag (A2) fehlt oder ist noch nicht aktiv. Etwas warten. |
+| „Forbidden“ oder eine Ordnerliste | Der Dokumentenstamm muss `team.perfumecloud.de/public` sein (A1). Ändern lässt er sich in Plesk unter **Hosting-Einstellungen**. |
+| Let's Encrypt schlägt fehl | Der DNS-Eintrag ist noch nicht aktiv. 30 Minuten warten. |
+| „Interner Fehler“ | Die Details stehen in `team.perfumecloud.de/storage/app.log` (Plesk-Dateimanager). Den Inhalt Claude zeigen. |
+| Keine Push-Nachricht auf dem iPhone | Die App über das **Home-Bildschirm-Icon** öffnen, nicht über Safari. Mindestens iOS 16.4. In den iPhone-Einstellungen unter **Mitteilungen**, **PC Team** erlauben. Ohne Cronjob (A10) gibt es bei geschlossener App keine Push-Nachrichten. |
+| „Zum Home-Bildschirm“ fehlt | Die Seite in **Safari** öffnen, nicht in einer anderen App. |
+| Passwort vergessen | Marius setzt unter **Einstellungen**, **Team**, **Passwort** ein neues. |
+| Mail-Test rot | IMAP-Server und Postfach-Passwort prüfen, Port 993. |
+| Shopify-Test rot | Client-ID und Secret neu kopieren. Prüfen, ob die drei Scopes angehakt sind und die App im Shop installiert ist. |
