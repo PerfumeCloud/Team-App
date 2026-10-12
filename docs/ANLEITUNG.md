@@ -27,8 +27,10 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 4. Eintragen:
    - **Subdomain-Name:** `team`
    - **Domain:** `perfumecloud.de`
-   - **Dokumentenstamm:** `team.perfumecloud.de/public` ← wichtig: mit `/public` am Ende
+   - **Dokumentenstamm:** `team.perfumecloud.de/httpdocs/public` ← wichtig: mit `/public` am Ende
 5. **OK** klicken.
+
+> Hat Plesk den Dokumentenstamm schon auf `team.perfumecloud.de/httpdocs` gesetzt, änderst du ihn unter **Websites & Domains** → team.perfumecloud.de → **Hosting-Einstellungen** auf `team.perfumecloud.de/httpdocs/public`.
 
 > Taucht `perfumecloud.de` in Plesk nicht auf, ist die Domain dem Webhosting noch nicht zugeordnet. Dann kurz Claude fragen.
 
@@ -57,7 +59,8 @@ Andere Einträge für `@` oder `www` (z. B. ein A- oder **AAAA-Eintrag mit netcu
 ### A3 · SSL-Zertifikat und PHP-Version
 1. In Plesk unter **Websites & Domains** bei **team.perfumecloud.de** auf **SSL/TLS-Zertifikate** und dann **Let's Encrypt** wählen. **Kostenloses Zertifikat installieren** und bestätigen.
    - Kommt eine Fehlermeldung, ist der DNS-Eintrag aus A2 noch nicht aktiv. 30 Minuten warten und erneut versuchen.
-2. Bei **team.perfumecloud.de** auf **PHP** bzw. **PHP-Einstellungen** und dort die Version **8.3** wählen (oder die höchste 8.x, mindestens 8.1). Speichern.
+2. Bei **team.perfumecloud.de** auf **PHP** bzw. **PHP-Einstellungen** und dort die Version **8.3** wählen (oder die höchste 8.x, mindestens 8.1).
+3. **Wichtig:** Auf derselben Seite bei **open_basedir** die Option **`{WEBSPACEROOT}{/}{:}{TMP}{/}…`** wählen (nicht die Standard-Option mit `{DOCROOT}`). Sonst darf PHP die Ordner `app` und `storage` neben `public` nicht lesen und die App zeigt einen Fehler. Speichern.
 
 ### A4 · Datenbank anlegen
 1. In Plesk auf **Datenbanken** und dann **Datenbank hinzufügen**.
@@ -67,10 +70,10 @@ Andere Einträge für `@` oder `www` (z. B. ein A- oder **AAAA-Eintrag mit netcu
 > Meldet Plesk, dass das Limit erreicht ist (Webhosting 1000 hat 1 Datenbank), überspringst du diesen Schritt und wählst in A6 **SQLite**.
 
 ### A5 · App hochladen
-1. In Plesk auf **Dateien** (Dateimanager) und den Ordner **`team.perfumecloud.de`** öffnen.
+1. In Plesk auf **Dateien** (Dateimanager) und den Ordner **`team.perfumecloud.de/httpdocs`** öffnen.
 2. Oben auf **Hochladen** und die Datei **`perfumecloud-team-app-upload.zip`** auswählen.
 3. Bei der hochgeladenen ZIP-Datei auf das Menü (**⋯**) und dann **Dateien extrahieren**. „Vorhandene Dateien ersetzen“ anhaken und **OK** klicken.
-4. Danach liegen im Ordner die drei Ordner **`app`**, **`public`** und **`storage`**. Die ZIP-Datei kann gelöscht werden.
+4. Danach liegen in `httpdocs` die drei Ordner **`app`**, **`public`** und **`storage`**. Die ZIP-Datei und die Platzhalter-Dateien `index.html` und `favicon.ico` von netcup löschen.
 
 ### A6 · Einrichtungsassistent
 1. Im Browser **`https://team.perfumecloud.de`** öffnen. Es erscheint „Willkommen!“.
@@ -175,7 +178,7 @@ Wenn Claude etwas an der App ändert, landet das auf GitHub. Damit es ohne erneu
    - `FTP_USERNAME`
    - `FTP_PASSWORD`
 4. Im Reiter **Variables** mit **New repository variable** diese zwei anlegen:
-   - `FTP_DIR` = `team.perfumecloud.de/`
+   - `FTP_DIR` = `team.perfumecloud.de/httpdocs/`
    - `DEPLOY_ENABLED` = `true`
 5. Ab jetzt landet jede Änderung nach etwa 2 Minuten automatisch auf netcup.
 
@@ -186,9 +189,10 @@ Wenn Claude etwas an der App ändert, landet das auf GitHub. Damit es ohne erneu
 | Problem | Lösung |
 |---|---|
 | `team.perfumecloud.de` öffnet den Shop oder gar nichts | Der DNS-Eintrag (A2) fehlt oder ist noch nicht aktiv. Etwas warten. |
-| „Forbidden“ oder eine Ordnerliste | Der Dokumentenstamm muss `team.perfumecloud.de/public` sein (A1). Ändern lässt er sich in Plesk unter **Hosting-Einstellungen**. |
+| „Hier entsteht eine neue Webseite“, „Forbidden“ oder eine Ordnerliste | Der Dokumentenstamm muss `team.perfumecloud.de/httpdocs/public` sein (A1). Ändern lässt er sich in Plesk unter **Hosting-Einstellungen**. |
+| Weiße Seite oder „Interner Fehler“ ohne `app.log` | In den **PHP-Einstellungen** bei **open_basedir** die Option mit `{WEBSPACEROOT}` wählen (A3). |
 | Let's Encrypt schlägt fehl | Der DNS-Eintrag ist noch nicht aktiv. 30 Minuten warten. |
-| „Interner Fehler“ | Die Details stehen in `team.perfumecloud.de/storage/app.log` (Plesk-Dateimanager). Den Inhalt Claude zeigen. |
+| „Interner Fehler“ | Die Details stehen in `team.perfumecloud.de/httpdocs/storage/app.log` (Plesk-Dateimanager). Den Inhalt Claude zeigen. |
 | Keine Push-Nachricht auf dem iPhone | Die App über das **Home-Bildschirm-Icon** öffnen, nicht über Safari. Mindestens iOS 16.4. In den iPhone-Einstellungen unter **Mitteilungen**, **PC Team** erlauben. Ohne Cronjob (A10) gibt es bei geschlossener App keine Push-Nachrichten. |
 | „Zum Home-Bildschirm“ fehlt | Die Seite in **Safari** öffnen, nicht in einer anderen App. |
 | Passwort vergessen | Marius setzt unter **Einstellungen**, **Team**, **Passwort** ein neues. |
