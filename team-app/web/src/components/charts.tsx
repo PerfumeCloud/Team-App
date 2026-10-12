@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight } from 'lucide-react';
 import { cx } from './ui';
 import { euro, euroAxis, pctChange } from '../lib/format';
 
@@ -162,7 +162,7 @@ export function Sparkline({ values, height = 36 }: { values: number[]; height?: 
 }
 
 /** Waagerechte Balken (eine Farbe), Wert am Balkenende. */
-export function BarList({ items }: { items: { label: string; value: number; sub?: string; display: string }[] }) {
+export function BarList({ items }: { items: { label: string; value: number; sub?: string; display: string; trend?: ReactNode }[] }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   return (
     <ul className="space-y-3.5">
@@ -180,6 +180,7 @@ export function BarList({ items }: { items: { label: string; value: number; sub?
               />
             </div>
             <span className="tnum w-[84px] shrink-0 text-right text-[13px] font-semibold text-ink">{it.display}</span>
+            {it.trend !== undefined && <span className="flex w-[68px] shrink-0 justify-end">{it.trend}</span>}
           </div>
         </li>
       ))}
@@ -187,18 +188,63 @@ export function BarList({ items }: { items: { label: string; value: number; sub?
   );
 }
 
-export function Delta({ cur, prev, suffix = 'zum Vorzeitraum' }: { cur: number; prev: number; suffix?: string }) {
-  const pct = pctChange(cur, prev);
-  if (pct === null) return <span className="text-[12px] text-ink-3">Kein Vergleichswert</span>;
-  const up = pct >= 0;
-  return (
-    <span className="inline-flex items-center gap-1 text-[12px]">
-      <span className={cx('inline-flex items-center gap-0.5 font-semibold', up ? 'text-good' : 'text-bad')}>
-        {up ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-        {up ? '+' : '−'}
-        {Math.abs(pct).toLocaleString('de-DE', { maximumFractionDigits: Math.abs(pct) < 10 ? 1 : 0 })} %
+/**
+ * Veränderung als kleines Etikett: grün = besser, rot = schlechter – immer mit Pfeil und Vorzeichen,
+ * damit es nicht nur an der Farbe hängt. `invert` für Kennzahlen, bei denen weniger besser ist.
+ * `absolute` zeigt die Differenz statt Prozent (sinnvoll bei kleinen Stückzahlen).
+ */
+export function Trend({
+  cur,
+  prev,
+  invert,
+  absolute,
+  against = 'zum Vorzeitraum',
+  size = 'md',
+}: {
+  cur: number;
+  prev: number;
+  invert?: boolean;
+  absolute?: boolean;
+  against?: string;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const sizes = { sm: 'h-5 px-1.5 text-[11.5px]', md: 'h-6 px-2 text-[12.5px]', lg: 'h-7 px-2.5 text-[14px]' };
+  const icon = size === 'lg' ? 'h-4 w-4' : 'h-3.5 w-3.5';
+  const base = cx('tnum inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full font-semibold', sizes[size]);
+  if (!absolute && !prev) {
+    if (!cur) return null;
+    return (
+      <span className={cx(base, 'bg-surface-2 text-ink-2')} title={`Neu – im Vergleichszeitraum noch nichts`}>
+        neu
       </span>
-      <span className="text-ink-3">{suffix}</span>
+    );
+  }
+  const diff = cur - prev;
+  const pct = absolute ? diff : (pctChange(cur, prev) ?? 0);
+  const flat = absolute ? diff === 0 : Math.abs(pct) < 0.5;
+  const better = !flat && diff > 0 !== !!invert;
+  const abs = Math.abs(pct);
+  const num = absolute ? String(abs) : abs >= 1000 ? '999+' : abs.toLocaleString('de-DE', { maximumFractionDigits: abs < 10 ? 1 : 0 });
+  const label = flat ? (absolute ? '±0' : '±0 %') : `${diff > 0 ? '+' : '−'}${num}${absolute ? '' : ' %'}`;
+  const Icon = flat ? ArrowRight : diff > 0 ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span
+      className={cx(base, flat ? 'bg-surface-2 text-ink-2' : better ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad')}
+      title={`${label} ${against}${flat ? '' : better ? ' – besser' : ' – schlechter'}`}
+      aria-label={`${label} ${against}${flat ? '' : better ? ', besser' : ', schlechter'}`}
+    >
+      <Icon className={icon} strokeWidth={2.4} />
+      {label}
+    </span>
+  );
+}
+
+export function Delta({ cur, prev, suffix = 'zum Vorzeitraum', invert }: { cur: number; prev: number; suffix?: string; invert?: boolean }) {
+  if (!prev && !cur) return <span className="text-[12px] text-ink-3">Kein Vergleichswert</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12px]">
+      <Trend cur={cur} prev={prev} invert={invert} against={suffix} />
+      {suffix && <span className="text-ink-3">{suffix}</span>}
     </span>
   );
 }
@@ -209,11 +255,14 @@ export function StatTile({
   sub,
   footer,
   icon,
+  trend,
   onClick,
   className,
 }: {
   label: string;
   value: ReactNode;
+  /** Steht direkt neben der Zahl (z. B. <Trend />). */
+  trend?: ReactNode;
   sub?: ReactNode;
   footer?: ReactNode;
   icon?: ReactNode;
@@ -230,7 +279,10 @@ export function StatTile({
         <span className="text-[13px] font-medium text-ink-2">{label}</span>
         {icon && <span className="text-ink-3">{icon}</span>}
       </div>
-      <div className="mt-2 text-[26px] font-semibold leading-none tracking-[-0.02em] text-ink">{value}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <span className="tnum text-[26px] font-semibold leading-none tracking-[-0.02em] text-ink">{value}</span>
+        {trend}
+      </div>
       {sub && <div className="mt-1.5 text-[12.5px] text-ink-2">{sub}</div>}
       {footer && <div className="mt-auto pt-3">{footer}</div>}
     </Comp>

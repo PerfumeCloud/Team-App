@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, BellRing, CircleCheck, Inbox, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus } from 'lucide-react';
-import { Sparkline, StatTile } from '../components/charts';
+import { ArrowRight, ArrowUp, BellRing, CircleCheck, Inbox, Lightbulb, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus } from 'lucide-react';
+import { Sparkline, StatTile, Trend } from '../components/charts';
 import { TaskCard } from '../components/tasks';
 import { Avatar, Button, Chip, cx, SectionHeader } from '../components/ui';
 import { openImportantCount, sortTasks, useStore } from '../lib/store';
@@ -22,6 +22,7 @@ export default function Home() {
   const navigate = useNavigate();
   const now = useNow();
   const [push, setPush] = useState<string>('subscribed');
+  const [idea, setIdea] = useState('');
 
   useEffect(() => {
     if (meta?.shopifyConfigured) void loadStats(7);
@@ -66,6 +67,32 @@ export default function Home() {
         </h1>
       </div>
 
+      <form
+        className="card flex items-center gap-2 p-2 pl-3.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (idea.trim()) navigate('/ideen', { state: { text: idea } });
+        }}
+      >
+        <Lightbulb className="h-[18px] w-[18px] shrink-0 text-accent" />
+        <input
+          value={idea}
+          onChange={(e) => setIdea(e.target.value)}
+          placeholder="Idee oder Aufgabe festhalten …"
+          aria-label="Idee oder Aufgabe festhalten"
+          enterKeyHint="send"
+          className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-ink placeholder:text-ink-3 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={!idea.trim()}
+          aria-label="Weiter"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-ink transition-opacity active:scale-95 disabled:opacity-35"
+        >
+          <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.4} />
+        </button>
+      </form>
+
       {setupOpen.length > 0 && (
         <div className="card p-4 md:p-5">
           <div className="flex items-center gap-3">
@@ -96,7 +123,18 @@ export default function Home() {
         <StatTile
           label="Umsatz heute"
           value={meta?.shopifyConfigured && stats ? euro(stats.today.revenue) : '–'}
-          sub={meta?.shopifyConfigured ? (stats ? `${stats.today.orders} Bestellung${stats.today.orders === 1 ? '' : 'en'}` : 'Lädt …') : 'Shopify nicht verbunden'}
+          trend={
+            meta?.shopifyConfigured && stats?.yesterdaySameTime ? (
+              <Trend cur={stats.today.revenue} prev={stats.yesterdaySameTime.revenue} size="sm" against="zu gestern um diese Zeit" />
+            ) : undefined
+          }
+          sub={
+            meta?.shopifyConfigured
+              ? stats
+                ? `${stats.today.orders} Bestellung${stats.today.orders === 1 ? '' : 'en'}${stats.yesterdaySameTime ? ' · vs. gestern' : ''}`
+                : 'Lädt …'
+              : 'Shopify nicht verbunden'
+          }
           footer={stats && meta?.shopifyConfigured ? <Sparkline values={stats.series.map((d) => d.revenue)} /> : undefined}
           onClick={() => navigate('/statistik')}
         />

@@ -135,10 +135,12 @@ export interface Stats {
   configured: boolean;
   lastSync: number;
   today: { revenue: number; orders: number };
-  current: { revenue: number; orders: number; items: number; aov: number };
-  previous: { revenue: number; orders: number; items: number; aov: number };
+  /** Gestern bis zur gleichen Uhrzeit (fehlt bei älteren Server-Versionen). */
+  yesterdaySameTime?: { revenue: number; orders: number };
+  current: { revenue: number; orders: number; items: number; aov: number; cancelled?: number; refunded?: number };
+  previous: { revenue: number; orders: number; items: number; aov: number; cancelled?: number; refunded?: number };
   series: { date: string; revenue: number; orders: number }[];
-  topProducts: { title: string; qty: number; revenue: number }[];
+  topProducts: { title: string; qty: number; revenue: number; prevRevenue?: number }[];
   toShip: { count: number; oldest: number | null };
   recent: {
     id: string;

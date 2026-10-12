@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ChartLine, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, TriangleAlert, Truck } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Ban, ChartLine, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, Trophy, TriangleAlert, Truck, Undo2 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
-import { AreaChart, BarList, Delta, StatTile } from '../components/charts';
+import { AreaChart, BarList, StatTile, Trend } from '../components/charts';
 import { Button, Chip, cx, EmptyState, IconButton, Segmented, Spinner } from '../components/ui';
 import { useStats } from '../lib/stats';
 import { useStore } from '../lib/store';
-import { dateTime, euro, int, relative } from '../lib/format';
+import type { Stats } from '../lib/types';
+import { dateTime, euro, int, relative, time } from '../lib/format';
 import { useNow } from '../lib/hooks';
 
 const RANGES = [7, 30, 90] as const;
+
+const perOrder = (t: { orders: number; items: number }) => (t.orders ? t.items / t.orders : 0);
+const rate = (n: number, orders: number) =>
+  orders + n ? `${((n / (orders + n)) * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })} % der Bestellungen` : 'keine';
 
 const FULFILLMENT: Record<string, { label: string; tone: 'good' | 'warn' | 'neutral' | 'bad' }> = {
   FULFILLED: { label: 'Versendet', tone: 'good' },
@@ -30,6 +35,7 @@ export default function Statistics() {
   const now = useNow();
   const [table, setTable] = useState(false);
   const s = data[days];
+  const best = s?.series.reduce<Stats['series'][number] | null>((b, d) => (d.revenue > 0 && (!b || d.revenue > b.revenue) ? d : b), null) ?? null;
 
   useEffect(() => {
     void load(days);
@@ -93,17 +99,22 @@ export default function Statistics() {
             <div className="card flex flex-col justify-between p-5">
               <div>
                 <span className="text-[13px] font-medium text-ink-2">Umsatz · letzte {days} Tage</span>
-                <div className="mt-2 text-[48px] font-semibold leading-none tracking-[-0.03em] text-ink">{euro(s.current.revenue)}</div>
-                <div className="mt-2.5">
-                  <Delta cur={s.current.revenue} prev={s.previous.revenue} />
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span className="tnum text-[44px] font-semibold leading-none tracking-[-0.03em] text-ink sm:text-[48px]">{euro(s.current.revenue)}</span>
+                  <Trend cur={s.current.revenue} prev={s.previous.revenue} size="lg" />
                 </div>
+                <div className="mt-2 text-[12.5px] text-ink-3">gegenüber den {days} Tagen davor</div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
                 <div>
                   <div className="text-[12.5px] text-ink-2">Heute</div>
-                  <div className="text-[18px] font-semibold text-ink">{euro(s.today.revenue)}</div>
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span className="tnum text-[18px] font-semibold text-ink">{euro(s.today.revenue)}</span>
+                    {s.yesterdaySameTime && <Trend cur={s.today.revenue} prev={s.yesterdaySameTime.revenue} size="sm" against={`zu gestern bis ${time(now)}`} />}
+                  </div>
                   <div className="text-[12px] text-ink-3">
                     {s.today.orders} Bestellung{s.today.orders === 1 ? '' : 'en'}
+                    {s.yesterdaySameTime ? ` · gestern bis ${time(now)}: ${euro(s.yesterdaySameTime.revenue)}` : ''}
                   </div>
                 </div>
                 <div>
@@ -151,10 +162,51 @@ export default function Statistics() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatTile label="Bestellungen" value={int(s.current.orders)} footer={<Delta cur={s.current.orders} prev={s.previous.orders} suffix="" />} />
-            <StatTile label="Ø Warenkorb" value={euro(s.current.aov)} footer={<Delta cur={s.current.aov} prev={s.previous.aov} suffix="" />} />
-            <StatTile label="Verkaufte Artikel" value={int(s.current.items)} footer={<Delta cur={s.current.items} prev={s.previous.items} suffix="" />} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <StatTile
+              label="Bestellungen"
+              value={int(s.current.orders)}
+              trend={<Trend cur={s.current.orders} prev={s.previous.orders} />}
+              sub={`vorher ${int(s.previous.orders)}`}
+            />
+            <StatTile
+              label="Ø Warenkorb"
+              value={euro(s.current.aov)}
+              trend={<Trend cur={s.current.aov} prev={s.previous.aov} />}
+              sub={`vorher ${euro(s.previous.aov)}`}
+            />
+            <StatTile
+              label="Verkaufte Artikel"
+              value={int(s.current.items)}
+              trend={<Trend cur={s.current.items} prev={s.previous.items} />}
+              sub={`vorher ${int(s.previous.items)}`}
+            />
+            <StatTile
+              label="Artikel pro Bestellung"
+              value={perOrder(s.current).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              trend={<Trend cur={perOrder(s.current)} prev={perOrder(s.previous)} />}
+              sub={`vorher ${perOrder(s.previous).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+            />
+            <StatTile
+              label="Bester Tag"
+              icon={<Trophy className="h-4 w-4" />}
+              value={best ? euro(best.revenue) : '–'}
+              sub={best ? `${new Date(best.date + 'T12:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} · ${best.orders} Bestellung${best.orders === 1 ? '' : 'en'}` : 'Noch keine Verkäufe'}
+            />
+            <StatTile
+              label="Stornos"
+              icon={<Ban className="h-4 w-4" />}
+              value={int(s.current.cancelled ?? 0)}
+              trend={s.previous.cancelled !== undefined && <Trend cur={s.current.cancelled ?? 0} prev={s.previous.cancelled} invert absolute />}
+              sub={rate(s.current.cancelled ?? 0, s.current.orders)}
+            />
+            <StatTile
+              label="Erstattungen"
+              icon={<Undo2 className="h-4 w-4" />}
+              value={int(s.current.refunded ?? 0)}
+              trend={s.previous.refunded !== undefined && <Trend cur={s.current.refunded ?? 0} prev={s.previous.refunded} invert absolute />}
+              sub={rate(s.current.refunded ?? 0, s.current.orders)}
+            />
             <StatTile
               label="Zu versenden"
               icon={<Truck className="h-4 w-4" />}
@@ -162,12 +214,30 @@ export default function Statistics() {
               sub={s.toShip.oldest ? `Älteste seit ${relative(s.toShip.oldest, now)}` : 'Alles versendet'}
             />
           </div>
+          <p className="-mt-1 text-[12px] text-ink-3">
+            Prozent = Veränderung zu den {days} Tagen davor ·{' '}
+            <span className="font-semibold text-good">
+              <ArrowUpRight className="inline h-3.5 w-3.5" /> grün = besser
+            </span>{' '}
+            ·{' '}
+            <span className="font-semibold text-bad">
+              <ArrowDownRight className="inline h-3.5 w-3.5" /> rot = schlechter
+            </span>
+          </p>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="card p-5">
               <h2 className="section-title mb-4">Top-Düfte nach Umsatz</h2>
               {s.topProducts.length ? (
-                <BarList items={s.topProducts.map((p) => ({ label: p.title, value: p.revenue, display: euro(p.revenue), sub: `${int(p.qty)} Stück` }))} />
+                <BarList
+                  items={s.topProducts.map((p) => ({
+                    label: p.title,
+                    value: p.revenue,
+                    display: euro(p.revenue),
+                    sub: `${int(p.qty)} Stück`,
+                    trend: p.prevRevenue !== undefined ? <Trend cur={p.revenue} prev={p.prevRevenue} size="sm" /> : undefined,
+                  }))}
+                />
               ) : (
                 <p className="text-[13.5px] text-ink-3">Noch keine Verkäufe in diesem Zeitraum.</p>
               )}

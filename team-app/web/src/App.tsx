@@ -8,6 +8,7 @@ import { Login, Setup } from './pages/Auth';
 
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Notes = lazy(() => import('./pages/Notes'));
+const Ideas = lazy(() => import('./pages/Ideas'));
 const Inbox = lazy(() => import('./pages/Inbox'));
 const Statistics = lazy(() => import('./pages/Statistics'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -80,6 +81,7 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/planung" element={<Tasks />} />
                 <Route path="/planung/:id" element={<Tasks />} />
+                <Route path="/ideen" element={<Ideas />} />
                 <Route path="/notizen" element={<Notes />} />
                 <Route path="/notizen/:id" element={<Notes />} />
                 <Route path="/postfach" element={<Inbox />} />

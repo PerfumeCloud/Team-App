@@ -37,6 +37,9 @@ final class Stats
         $startMs = $start->getTimestamp() * 1000;
         $prevStartMs = $prevStart->getTimestamp() * 1000;
         $todayMs = $today->getTimestamp() * 1000;
+        // Gestern bis zur selben Uhrzeit – fairer Vergleich für „heute bis jetzt“
+        $yesterdayMs = $todayMs - 86400000;
+        $yesterdayNowMs = (int) round(microtime(true) * 1000) - 86400000;
 
         $rows = Db::all('SELECT * FROM orders WHERE created_at >= ? AND cancelled = 0 ORDER BY created_at', [$prevStartMs]);
 
@@ -47,7 +50,9 @@ final class Stats
         $cur = ['revenue' => 0, 'orders' => 0, 'items' => 0];
         $prev = ['revenue' => 0, 'orders' => 0, 'items' => 0];
         $todayTotals = ['revenue' => 0, 'orders' => 0];
+        $yesterdayTotals = ['revenue' => 0, 'orders' => 0];
         $products = [];
+        $prevProducts = [];
 
         foreach ($rows as $o) {
             if (in_array($o['financial_status'], self::EXCLUDED_FINANCIAL, true)) {
@@ -78,9 +83,29 @@ final class Stats
                 $prev['revenue'] += $cents;
                 $prev['orders']++;
                 $prev['items'] += (int) $o['item_count'];
+                foreach (json_decode((string) $o['items'], true) ?: [] as $it) {
+                    $t = (string) $it['t'];
+                    $prevProducts[$t] = ($prevProducts[$t] ?? 0) + (int) $it['s'];
+                }
+            }
+            if ($ts >= $yesterdayMs && $ts < $todayMs && $ts <= $yesterdayNowMs) {
+                $yesterdayTotals['revenue'] += $cents;
+                $yesterdayTotals['orders']++;
             }
         }
         usort($products, static fn ($a, $b) => $b['revenue'] <=> $a['revenue']);
+        $products = array_map(static fn ($p) => $p + ['prevRevenue' => $prevProducts[$p['title']] ?? 0], $products);
+
+        // Stornos und Erstattungen (weniger ist besser)
+        $issues = ['cancelled' => [0, 0], 'refunded' => [0, 0]];
+        foreach (Db::all('SELECT created_at, cancelled, financial_status FROM orders WHERE created_at >= ?', [$prevStartMs]) as $o) {
+            $i = (int) $o['created_at'] >= $startMs ? 0 : 1;
+            if ((int) $o['cancelled']) {
+                $issues['cancelled'][$i]++;
+            } elseif (in_array($o['financial_status'], ['REFUNDED', 'PARTIALLY_REFUNDED'], true)) {
+                $issues['refunded'][$i]++;
+            }
+        }
 
         $toShip = self::toShip();
 
@@ -103,8 +128,9 @@ final class Stats
             'configured' => Shopify::configured(),
             'lastSync' => (int) Settings::get('orders_last_sync', 0),
             'today' => $todayTotals,
-            'current' => $cur + ['aov' => $aov($cur)],
-            'previous' => $prev + ['aov' => $aov($prev)],
+            'yesterdaySameTime' => $yesterdayTotals,
+            'current' => $cur + ['aov' => $aov($cur), 'cancelled' => $issues['cancelled'][0], 'refunded' => $issues['refunded'][0]],
+            'previous' => $prev + ['aov' => $aov($prev), 'cancelled' => $issues['cancelled'][1], 'refunded' => $issues['refunded'][1]],
             'series' => array_values($series),
             'topProducts' => array_slice($products, 0, 6),
             'toShip' => [

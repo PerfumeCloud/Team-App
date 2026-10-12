@@ -9,8 +9,9 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **Übersicht:** Umsatz heute, offener Versand, wichtige Mails, eigene Aufgaben, Team-Verlauf
 - **Planung:** Aufgaben mit Zuständigkeit, Fälligkeit, Priorität, Kategorie, Checkliste und Kommentaren (Board am PC, Liste am Handy)
 - **Notizen:** gemeinsame Pläne und Ideen mit Autosave
+- **Ideen-Assistent:** Idee einfach hinschreiben oder diktieren – daraus werden Notiz und Aufgaben (mit Zuständigkeit, Datum, Priorität, Kategorie, Checkliste). Läuft ohne KI direkt in der App, kostenlos und offline
 - **Postfach:** wichtige offene Mails aus info@ und support@ (IMAP, nur lesend)
-- **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Top-Düfte, knapper Bestand (Shopify Admin API)
+- **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Artikel pro Bestellung, bester Tag, Stornos, Erstattungen, Top-Düfte, knapper Bestand – jeweils mit Veränderung in % (grün = besser, rot = schlechter) (Shopify Admin API)
 - **Push-Nachrichten:** neue wichtige Mail, neue Bestellung, zugewiesene Aufgabe, Kommentare, Erinnerung am Morgen
 - **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm)
 
@@ -49,5 +50,6 @@ Beispieldaten für eine Vorschau: `PC_CONFIG=… PC_STORAGE=… php team-app/ser
 ```bash
 node --test team-app/server/tests/backend.test.mjs   # API, Sync, Mail-Erkennung, Push-Verschlüsselung, Widget
 node --test team-app/web/tests/widget.test.mjs       # Scriptable-Widget
+node --test team-app/web/tests/assistant.test.mjs    # Ideen-Assistent (Text → Notiz/Aufgaben)
 cd team-app/web && npx tsc -b                         # Typprüfung
 ```

@@ -38,6 +38,9 @@ jobs:
       - name: Widget-Tests
         run: node --test team-app/web/tests/widget.test.mjs
 
+      - name: Ideen-Assistent-Tests
+        run: node --test team-app/web/tests/assistant.test.mjs
+
       - name: App bauen
         run: ./team-app/package.sh
 

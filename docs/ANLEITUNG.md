@@ -184,6 +184,23 @@ Wenn Claude etwas an der App ändert, landet das auf GitHub. Damit es ohne erneu
 
 ---
 
+## Teil F – Ideen-Assistent (Notizen und Aufgaben aus einem Satz)
+
+In der App auf **Ideen** (oder auf der Übersicht ins Feld **„Idee oder Aufgabe festhalten“**) einfach losschreiben oder mit dem Mikrofon der iPhone-Tastatur diktieren. Der Assistent schlägt eine Notiz und Aufgaben vor. Alles lässt sich vor dem **Übernehmen** noch ändern oder abwählen. Er läuft ohne KI direkt in der App, kostet nichts und funktioniert auch offline.
+
+| Schreibweise | Ergebnis |
+|---|---|
+| `@Ben`, „Ben macht …“, „Keanu kümmert sich um …“, „ich …“ | zuständige Person |
+| „morgen“, „Freitag“, „nächste Woche Freitag“, „15.11.“, „Ende des Monats“, „KW 47“, „Black Friday“ | Fälligkeit |
+| `!`, „dringend“, „wichtig“ · „irgendwann“, „nicht dringend“ | Priorität hoch · niedrig |
+| `#Marketing` | Kategorie (sonst wird eine passende vorgeschlagen) |
+| Zeilen mit `-`, darunter eingerückte Zeilen | einzelne Aufgaben mit Checkliste |
+| „Shooting vorbereiten: Flakons, Licht und Hintergrund“ | Aufgabe mit Checkliste |
+| kurze Überschrift über einer Liste | Notiz mit diesem Titel, Überschrift wird Kategorie der Aufgaben |
+| „Notiz:“ am Anfang | nur eine Notiz |
+
+Beispiel: *„Wir sollten im November einen Adventskalender mit 24 Proben machen, Ben kümmert sich um die Fotos bis Freitag, Keanu um die Verpackung“* → Notiz „Adventskalender …“ und zwei Aufgaben: **Fotos** (Ben, Freitag) und **Verpackung** (Keanu).
+
 ## Wenn etwas hakt
 
 | Problem | Lösung |

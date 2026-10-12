@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { ChartLine, CloudOff, House, Inbox, ListChecks, NotebookPen, Settings } from 'lucide-react';
+import { ChartLine, CloudOff, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings } from 'lucide-react';
 import { openImportantCount, useStore } from '../lib/store';
 import { relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
@@ -8,6 +8,7 @@ import { Avatar, cx, Logo } from './ui';
 
 const NAV = [
   { to: '/', label: 'Übersicht', icon: House },
+  { to: '/ideen', label: 'Ideen', icon: Lightbulb },
   { to: '/planung', label: 'Planung', icon: ListChecks },
   { to: '/notizen', label: 'Notizen', icon: NotebookPen },
   { to: '/postfach', label: 'Postfach', icon: Inbox },
@@ -134,7 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               key={to}
               onClick={() => navigate(to)}
-              className={cx('relative flex flex-1 flex-col items-center gap-1 pb-1.5 pt-2.5 text-[10.5px] font-medium', isActive(to) ? 'text-accent' : 'text-ink-3')}
+              className={cx('relative flex min-w-0 flex-1 flex-col items-center gap-1 pb-1.5 pt-2.5 text-[10px] font-medium tracking-[-0.01em]', isActive(to) ? 'text-accent' : 'text-ink-3')}
               aria-current={isActive(to) ? 'page' : undefined}
             >
               <span className="relative">

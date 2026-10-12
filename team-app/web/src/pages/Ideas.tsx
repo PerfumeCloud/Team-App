@@ -1,0 +1,546 @@
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router';
+import { ArrowUp, CalendarDays, Check, CircleHelp, Flag, Lightbulb, ListChecks, NotebookPen, Tag, Trash2, Undo2, X } from 'lucide-react';
+import { PageHeader } from '../components/AppShell';
+import { AutoTextarea, Avatar, Button, cx, IconButton, Logo, Segmented } from '../components/ui';
+import { useStore } from '../lib/store';
+import { uuid } from '../lib/api';
+import { dueInfo, firstName, todayISO } from '../lib/format';
+import { toast } from '../lib/toast';
+import { parseIdea, summary, type Context, type Draft, type DraftNote, type DraftTask, type Mode, type Priority } from '../lib/assistant';
+import type { User } from '../lib/types';
+
+interface Message {
+  id: string;
+  at: number;
+  text: string;
+  mode: Mode;
+  draft: Draft;
+  useNote: boolean;
+  /** Abgewählte Aufgaben (keys). */
+  skip: string[];
+  state: 'open' | 'saved' | 'discarded';
+  saved?: { noteId: string | null; taskIds: string[] };
+}
+
+const EXAMPLES = [
+  'Adventskalender mit 24 Proben, Ben kümmert sich um die Fotos bis Freitag, Keanu um die Verpackung',
+  'Black Friday\n- Newsletter schreiben @ich bis 20.11.\n- Rabattcode im Shop anlegen !\n- Reel drehen @Ben\n  - Flakons\n  - Geschenkbox',
+  'Neuer Duft: Vanille, Tonka und Sandelholz – eher süß, für den Winter',
+];
+
+const HELP: [ReactNode, string][] = [
+  [<><code>@Ben</code>, „Ben macht …“, „ich …“</>, 'wer zuständig ist'],
+  [<>„morgen“, „Freitag“, „15.11.“, „Ende des Monats“, „KW 47“</>, 'bis wann'],
+  [<><code>!</code> oder „dringend“ · „irgendwann“</>, 'wichtig · unwichtig'],
+  [<><code>#Marketing</code></>, 'Kategorie'],
+  [<>Zeilen mit <code>-</code>, eingerückt darunter</>, 'einzelne Aufgaben · Checkliste'],
+  [<>„Notiz:“ am Anfang</>, 'nur als Notiz speichern'],
+];
+
+const storageKey = (userId: string) => `pc-ideas-${userId}`;
+
+function loadMessages(userId: string): Message[] {
+  try {
+    const raw = localStorage.getItem(storageKey(userId));
+    return raw ? (JSON.parse(raw) as Message[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export default function Ideas() {
+  const me = useStore((s) => s.me);
+  const usersMap = useStore((s) => s.users);
+  const tasksMap = useStore((s) => s.tasks);
+  const saveNote = useStore((s) => s.saveNote);
+  const saveTask = useStore((s) => s.saveTask);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [messages, setMessages] = useState<Message[]>(() => (me ? loadMessages(me.id) : []));
+  const [input, setInput] = useState('');
+  const [help, setHelp] = useState(false);
+  const lastRef = useRef<HTMLDivElement>(null);
+  const handledState = useRef(false);
+
+  const users = useMemo(() => Object.values(usersMap).filter((u) => !u.deleted).sort((a, b) => a.name.localeCompare(b.name)), [usersMap]);
+  const categories = useMemo(() => [...new Set(Object.values(tasksMap).map((t) => t.category).filter(Boolean))] as string[], [tasksMap]);
+  const ctx: Context = useMemo(
+    () => ({ people: users.map((u) => ({ id: u.id, name: u.name })), meId: me?.id ?? null, today: todayISO(), categories }),
+    [users, me?.id, categories],
+  );
+
+  useEffect(() => {
+    if (!me) return;
+    try {
+      localStorage.setItem(storageKey(me.id), JSON.stringify(messages.slice(-30)));
+    } catch {
+      /* privater Modus – Verlauf bleibt nur bis zum Schließen */
+    }
+  }, [messages, me]);
+
+  function send(text: string) {
+    const t = text.trim();
+    if (!t) return;
+    const msg: Message = { id: uuid(), at: Date.now(), text: t, mode: 'auto', draft: parseIdea(t, ctx, 'auto'), useNote: true, skip: [], state: 'open' };
+    setMessages((list) => [...list, msg]);
+    setInput('');
+    setHelp(false);
+    requestAnimationFrame(() => lastRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  // Schnelleingabe von der Übersicht
+  useEffect(() => {
+    const text = (location.state as { text?: string } | null)?.text;
+    if (text && !handledState.current) {
+      handledState.current = true;
+      send(text);
+      navigate('.', { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  const update = (id: string, patch: Partial<Message> | ((m: Message) => Partial<Message>)) =>
+    setMessages((list) => list.map((m) => (m.id === id ? { ...m, ...(typeof patch === 'function' ? patch(m) : patch) } : m)));
+
+  function commit(m: Message) {
+    const tasks = m.draft.tasks.filter((t) => !m.skip.includes(t.key) && t.title.trim());
+    const note = m.useNote && m.draft.note && (m.draft.note.title.trim() || m.draft.note.body.trim()) ? m.draft.note : null;
+    let noteId: string | null = null;
+    if (note) {
+      const lines = tasks.map((t) => {
+        const who = t.assigneeId ? usersMap[t.assigneeId] : null;
+        const due = dueInfo(t.due);
+        return `• ${t.title.trim()}${who ? ` – ${firstName(who.name)}` : ''}${due ? `, bis ${due.label}` : ''}`;
+      });
+      const body = [note.body.trim(), lines.length ? `Aufgaben:\n${lines.join('\n')}` : ''].filter(Boolean).join('\n\n');
+      noteId = saveNote({ title: note.title.trim() || 'Idee', body }).id;
+    }
+    const taskIds = tasks.map(
+      (t) =>
+        saveTask({
+          title: t.title.trim(),
+          assignee_id: t.assigneeId,
+          due_date: t.due,
+          priority: t.priority,
+          category: t.category?.trim() || null,
+          checklist: t.checklist.filter((c) => c.trim()).map((text) => ({ id: uuid(), text: text.trim(), done: false })),
+          description: note ? `Aus der Notiz „${note.title.trim() || 'Idee'}“` : null,
+        }).id,
+    );
+    update(m.id, { state: 'saved', saved: { noteId, taskIds } });
+    const parts = [noteId ? '1 Notiz' : '', taskIds.length ? `${taskIds.length} Aufgabe${taskIds.length === 1 ? '' : 'n'}` : ''].filter(Boolean);
+    toast(`Angelegt: ${parts.join(' und ')}`, 'success');
+  }
+
+  function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Am Rechner sendet Enter, Shift+Enter macht eine neue Zeile. Am Handy bleibt Enter ein Zeilenumbruch.
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(pointer: fine)').matches) {
+      e.preventDefault();
+      send(input);
+    }
+  }
+
+  return (
+    <div className="flex min-h-[calc(100dvh-220px)] flex-col">
+      <PageHeader
+        title="Ideen"
+        subtitle="Schreib einfach drauflos – daraus werden Notizen und Aufgaben."
+        actions={
+          <>
+            {messages.length > 0 && (
+              <IconButton label="So verstehe ich dich" onClick={() => setHelp((v) => !v)}>
+                <CircleHelp className="h-[18px] w-[18px]" />
+              </IconButton>
+            )}
+            {messages.length > 0 && (
+              <IconButton
+                label="Verlauf leeren"
+                onClick={() => {
+                  if (confirm('Verlauf leeren? Angelegte Notizen und Aufgaben bleiben erhalten.')) setMessages([]);
+                }}
+              >
+                <Trash2 className="h-[18px] w-[18px]" />
+              </IconButton>
+            )}
+          </>
+        }
+      />
+
+      <div className="mx-auto w-full max-w-[760px] flex-1 space-y-5 pb-6">
+        {(messages.length === 0 || help) && <Intro onExample={(t) => setInput(t)} compact={messages.length > 0} />}
+
+        {messages.map((m, i) => (
+          <div key={m.id} ref={i === messages.length - 1 ? lastRef : undefined} className="scroll-mt-20 space-y-3">
+            <div className="flex justify-end">
+              <div className="max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[15px] leading-relaxed text-accent-ink">{m.text}</div>
+            </div>
+            <Reply
+              m={m}
+              users={users}
+              categories={categories}
+              onMode={(mode) => update(m.id, { mode, draft: parseIdea(m.text, ctx, mode), skip: [], useNote: true })}
+              onNote={(patch) => update(m.id, (x) => ({ draft: { ...x.draft, note: x.draft.note ? { ...x.draft.note, ...patch } : null } }))}
+              onUseNote={(v) => update(m.id, { useNote: v })}
+              onTask={(key, patch) => update(m.id, (x) => ({ draft: { ...x.draft, tasks: x.draft.tasks.map((t) => (t.key === key ? { ...t, ...patch } : t)) } }))}
+              onSkip={(key, skip) => update(m.id, (x) => ({ skip: skip ? [...x.skip, key] : x.skip.filter((k) => k !== key) }))}
+              onCommit={() => commit(m)}
+              onDiscard={() => update(m.id, { state: 'discarded' })}
+              onReopen={() => update(m.id, { state: 'open' })}
+              onOpenNote={(id) => navigate(`/notizen/${id}`)}
+              onOpenTasks={() => navigate('/planung')}
+            />
+          </div>
+        ))}
+      </div>
+
+      <form
+        className="sticky bottom-[calc(70px+var(--safe-bottom))] z-20 mx-auto w-full max-w-[760px] lg:bottom-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(input);
+        }}
+      >
+        <div className="card flex items-end gap-2 p-2 shadow-lift">
+          <AutoTextarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKey}
+            placeholder="Idee, Plan oder To-do …"
+            aria-label="Idee eingeben"
+            enterKeyHint="enter"
+            className="max-h-48 min-h-[40px] flex-1 !overflow-y-auto bg-transparent px-2 py-2 text-[15px] leading-snug text-ink placeholder:text-ink-3 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!input.trim()}
+            aria-label="Senden"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-ink transition-opacity active:scale-95 disabled:opacity-35"
+          >
+            <ArrowUp className="h-5 w-5" strokeWidth={2.4} />
+          </button>
+        </div>
+        <p className="mt-1.5 hidden px-2 text-[11.5px] text-ink-3 lg:block">Enter sendet · Shift + Enter für eine neue Zeile</p>
+      </form>
+    </div>
+  );
+}
+
+function Intro({ onExample, compact }: { onExample: (t: string) => void; compact: boolean }) {
+  return (
+    <div className="card p-5">
+      {!compact && (
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+            <Lightbulb className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-display text-[22px] font-semibold leading-tight text-ink">Was hast du im Kopf?</p>
+            <p className="mt-1 text-[14px] leading-relaxed text-ink-2">
+              Tipp oder diktiere eine Idee – mit dem Mikrofon auf der iPhone-Tastatur geht das am schnellsten. Ich schlage dir eine Notiz und Aufgaben vor, du prüfst kurz und übernimmst.
+            </p>
+          </div>
+        </div>
+      )}
+      <p className="eyebrow mb-2">So verstehe ich dich</p>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-[13.5px] sm:grid-cols-[auto_1fr]">
+        {HELP.map(([k, v], i) => (
+          <div key={i} className="contents">
+            <dt className="text-ink [&_code]:rounded [&_code]:bg-surface-2 [&_code]:px-1 [&_code]:font-mono [&_code]:text-[12.5px]">{k}</dt>
+            <dd className="mb-1.5 text-ink-3 sm:mb-0">→ {v}</dd>
+          </div>
+        ))}
+      </dl>
+      {!compact && (
+        <>
+          <p className="eyebrow mb-2 mt-5">Zum Ausprobieren</p>
+          <div className="flex flex-col gap-2">
+            {EXAMPLES.map((e) => (
+              <button
+                key={e}
+                onClick={() => onExample(e)}
+                className="whitespace-pre-wrap rounded-xl border border-line/80 px-3.5 py-2.5 text-left text-[13.5px] leading-snug text-ink-2 transition-colors hover:bg-surface-2"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Reply({
+  m,
+  users,
+  categories,
+  onMode,
+  onNote,
+  onUseNote,
+  onTask,
+  onSkip,
+  onCommit,
+  onDiscard,
+  onReopen,
+  onOpenNote,
+  onOpenTasks,
+}: {
+  m: Message;
+  users: User[];
+  categories: string[];
+  onMode: (m: Mode) => void;
+  onNote: (patch: Partial<DraftNote>) => void;
+  onUseNote: (v: boolean) => void;
+  onTask: (key: string, patch: Partial<DraftTask>) => void;
+  onSkip: (key: string, skip: boolean) => void;
+  onCommit: () => void;
+  onDiscard: () => void;
+  onReopen: () => void;
+  onOpenNote: (id: string) => void;
+  onOpenTasks: () => void;
+}) {
+  const chosenTasks = m.draft.tasks.filter((t) => !m.skip.includes(t.key) && t.title.trim()).length;
+  const chosenNote = !!m.draft.note && m.useNote;
+  const nothing = !chosenTasks && !chosenNote;
+  const listId = `cats-${m.id}`;
+
+  return (
+    <div className="flex gap-2.5">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line/70 bg-surface">
+        <Logo className="h-5 w-5" />
+      </div>
+      <div className="card min-w-0 flex-1 space-y-3 p-3.5 sm:p-4">
+        {m.state === 'saved' && m.saved ? (
+          <div className="space-y-3">
+            <p className="flex items-center gap-2 text-[14.5px] text-ink">
+              <Check className="h-4 w-4 text-good" />
+              Angelegt{m.saved.noteId ? ' – 1 Notiz' : ''}
+              {m.saved.taskIds.length ? `${m.saved.noteId ? ' und' : ' –'} ${m.saved.taskIds.length} Aufgabe${m.saved.taskIds.length === 1 ? '' : 'n'}` : ''}.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {m.saved.noteId && (
+                <Button size="sm" variant="soft" icon={<NotebookPen className="h-3.5 w-3.5" />} onClick={() => onOpenNote(m.saved!.noteId!)}>
+                  Notiz öffnen
+                </Button>
+              )}
+              {m.saved.taskIds.length > 0 && (
+                <Button size="sm" variant="soft" icon={<ListChecks className="h-3.5 w-3.5" />} onClick={onOpenTasks}>
+                  Zur Planung
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : m.state === 'discarded' ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[14px] text-ink-3">Verworfen.</p>
+            <Button size="sm" variant="ghost" icon={<Undo2 className="h-3.5 w-3.5" />} onClick={onReopen}>
+              Doch übernehmen
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[14.5px] text-ink">{summary(m.draft)}</p>
+              <Segmented
+                size="sm"
+                value={m.mode}
+                onChange={onMode}
+                options={[
+                  { value: 'auto', label: 'Automatisch' },
+                  { value: 'note', label: 'Notiz' },
+                  { value: 'tasks', label: 'Aufgaben' },
+                ]}
+              />
+            </div>
+
+            {m.draft.note && (
+              <div className={cx('rounded-xl border border-line/70 p-3', !m.useNote && 'opacity-50')}>
+                <div className="flex items-start gap-2.5">
+                  <Tick checked={m.useNote} onChange={onUseNote} label="Notiz anlegen" />
+                  <NotebookPen className="mt-1 h-4 w-4 shrink-0 text-ink-3" />
+                  <div className="min-w-0 flex-1">
+                    <AutoTextarea
+                      value={m.draft.note.title}
+                      onChange={(e) => onNote({ title: e.target.value.replace(/\n/g, ' ') })}
+                      placeholder="Titel der Notiz"
+                      aria-label="Titel der Notiz"
+                      className="w-full bg-transparent font-display text-[19px] font-semibold leading-tight text-ink placeholder:text-ink-3 focus:outline-none"
+                    />
+                    <AutoTextarea
+                      value={m.draft.note.body}
+                      onChange={(e) => onNote({ body: e.target.value })}
+                      placeholder="Text der Notiz (optional)"
+                      aria-label="Text der Notiz"
+                      className="mt-1 w-full bg-transparent text-[14px] leading-relaxed text-ink-2 placeholder:text-ink-3 focus:outline-none"
+                    />
+                    {chosenTasks > 0 && <p className="mt-1 text-[12px] text-ink-3">Die Aufgaben werden unten in der Notiz aufgelistet.</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {m.draft.tasks.map((t) => (
+              <TaskDraft
+                key={t.key}
+                t={t}
+                skipped={m.skip.includes(t.key)}
+                users={users}
+                listId={listId}
+                onChange={(patch) => onTask(t.key, patch)}
+                onSkip={(v) => onSkip(t.key, v)}
+              />
+            ))}
+            <datalist id={listId}>
+              {categories.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button icon={<Check className="h-4 w-4" />} disabled={nothing} onClick={onCommit}>
+                Übernehmen
+              </Button>
+              <Button variant="ghost" onClick={onDiscard}>
+                Verwerfen
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Tick({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        'mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-colors',
+        checked ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface',
+      )}
+    >
+      {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+    </button>
+  );
+}
+
+const PRIORITY: Record<Priority, string> = { low: 'Niedrig', normal: 'Normal', high: 'Hoch' };
+
+function TaskDraft({
+  t,
+  skipped,
+  users,
+  listId,
+  onChange,
+  onSkip,
+}: {
+  t: DraftTask;
+  skipped: boolean;
+  users: User[];
+  listId: string;
+  onChange: (patch: Partial<DraftTask>) => void;
+  onSkip: (v: boolean) => void;
+}) {
+  const who = users.find((u) => u.id === t.assigneeId) ?? null;
+  const due = dueInfo(t.due);
+  const pill = 'relative inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors';
+  return (
+    <div className={cx('rounded-xl border border-line/70 p-3', skipped && 'opacity-50')}>
+      <div className="flex items-start gap-2.5">
+        <Tick checked={!skipped} onChange={(v) => onSkip(!v)} label="Aufgabe anlegen" />
+        <AutoTextarea
+          value={t.title}
+          onChange={(e) => onChange({ title: e.target.value.replace(/\n/g, ' ') })}
+          aria-label="Titel der Aufgabe"
+          className="min-w-0 flex-1 bg-transparent text-[15px] font-medium leading-snug text-ink focus:outline-none"
+        />
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 sm:pl-8">
+        {/* Zuständig */}
+        <label className={cx(pill, who ? 'border-accent/30 bg-accent-soft text-accent' : 'border-line text-ink-2')}>
+          {who ? <Avatar user={who} size={18} /> : null}
+          {who ? firstName(who.name) : 'Niemand'}
+          <select
+            value={t.assigneeId ?? ''}
+            onChange={(e) => onChange({ assigneeId: e.target.value || null })}
+            aria-label="Zuständig"
+            className="absolute inset-0 cursor-pointer opacity-0"
+          >
+            <option value="">Niemand</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Fällig */}
+        <label className={cx(pill, due ? (due.state === 'overdue' ? 'border-bad/30 bg-bad/10 text-bad' : 'border-line bg-surface-2 text-ink') : 'border-line text-ink-2')}>
+          <CalendarDays className="h-3.5 w-3.5" />
+          {due ? due.label : 'Kein Datum'}
+          <input
+            type="date"
+            value={t.due ?? ''}
+            onChange={(e) => onChange({ due: e.target.value || null })}
+            onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
+            aria-label="Fällig am"
+            className="absolute inset-0 cursor-pointer opacity-0"
+          />
+        </label>
+        {t.due && (
+          <button type="button" onClick={() => onChange({ due: null })} aria-label="Datum entfernen" className="-ml-1 rounded-full p-1 text-ink-3 hover:text-ink">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {/* Priorität */}
+        <label className={cx(pill, t.priority === 'high' ? 'border-bad/30 bg-bad/10 text-bad' : 'border-line text-ink-2')}>
+          <Flag className="h-3.5 w-3.5" />
+          {PRIORITY[t.priority]}
+          <select value={t.priority} onChange={(e) => onChange({ priority: e.target.value as Priority })} aria-label="Priorität" className="absolute inset-0 cursor-pointer opacity-0">
+            <option value="low">Niedrig</option>
+            <option value="normal">Normal</option>
+            <option value="high">Hoch</option>
+          </select>
+        </label>
+        {/* Kategorie */}
+        <span className={cx(pill, 'border-line text-ink-2 focus-within:border-accent')}>
+          <Tag className="h-3.5 w-3.5 shrink-0" />
+          <input
+            value={t.category ?? ''}
+            onChange={(e) => onChange({ category: e.target.value || null })}
+            list={listId}
+            placeholder="Kategorie"
+            aria-label="Kategorie"
+            style={{ width: `${Math.max(8, (t.category ?? '').length) + 1}ch` }}
+            className="bg-transparent text-[12.5px] text-ink placeholder:text-ink-3 focus:outline-none"
+          />
+        </span>
+      </div>
+      {t.checklist.length > 0 && (
+        <ul className="mt-2.5 space-y-1 sm:pl-8">
+          {t.checklist.map((c, i) => (
+            <li key={i} className="flex items-center gap-2 text-[13.5px] text-ink-2">
+              <span className="h-3.5 w-3.5 shrink-0 rounded border border-line" />
+              <input
+                value={c}
+                onChange={(e) => onChange({ checklist: t.checklist.map((x, j) => (j === i ? e.target.value : x)) })}
+                aria-label={`Checklistenpunkt ${i + 1}`}
+                className="min-w-0 flex-1 bg-transparent focus:outline-none"
+              />
+              <button type="button" onClick={() => onChange({ checklist: t.checklist.filter((_, j) => j !== i) })} aria-label="Punkt entfernen" className="rounded p-0.5 text-ink-3 hover:text-ink">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
