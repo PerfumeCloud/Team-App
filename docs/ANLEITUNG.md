@@ -32,19 +32,27 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 
 > Taucht `perfumecloud.de` in Plesk nicht auf, ist die Domain dem Webhosting noch nicht zugeordnet. Dann kurz Claude fragen.
 
-### A2 · DNS-Eintrag setzen (bei netcup)
-Damit `team.perfumecloud.de` auf euer Webhosting zeigt, während der Shop bei Shopify bleibt:
+### A2 · DNS-Eintrag für `team` setzen
+Damit `team.perfumecloud.de` auf euer Webhosting zeigt, während der Shop bei Shopify bleibt. Zuerst die **IPv4-Adresse eures Webhostings** notieren: CCP → **Produkte** → **Webhosting 1000** → **Übersicht**.
 
-1. Im **CCP** links auf **Produkte** und dann auf euer **Webhosting 1000**. Unter **Übersicht** steht die **IPv4-Adresse**: notieren.
-2. Im **CCP** links auf **Domains** und dann neben **perfumecloud.de** auf die **Lupe**. Dort den Reiter **DNS** öffnen.
-3. Zur Orientierung: Dort stehen die Einträge für den Shop (`@` → `23.227.38.65`, `www` → `shops.myshopify.com`) und für die Mails (MX). **Diese nicht verändern!**
-4. Gibt es schon einen Eintrag mit **Host `team`** oder **Host `*`**, Typ **A**, Ziel **eure IP aus Schritt 1**? Dann ist nichts zu tun, weiter mit A3.
-5. Sonst einen neuen Eintrag anlegen:
-   - **Host:** `team`
-   - **Typ:** `A`
-   - **Ziel:** die IPv4-Adresse aus Schritt 1
-6. Speichern („DNS-Records speichern“) und die Sicherheitsabfrage bestätigen.
-7. **Warten:** Meist dauert es 15–30 Minuten, manchmal bis zu 2 Stunden, bis der Eintrag überall bekannt ist. In der Zeit kannst du mit A4 und A5 weitermachen.
+**Solange die Domain noch bei Shopify verwaltet wird** (Stand jetzt):
+1. Shopify-Admin → **Einstellungen** → **Domains** → **perfumecloud.de** → **DNS-Einstellungen**.
+2. **Benutzerdefinierten Eintrag hinzufügen** → **A-Eintrag**: Name `team`, verweist auf die IPv4-Adresse eures Webhostings → speichern.
+3. Die übrigen Einträge (A/AAAA `@`, CNAME `www`, MX, TXT) **nicht verändern**.
+
+**Wenn die Domain zu netcup umgezogen ist** (nach dem Transfer), müssen im CCP unter **Domains** → Lupe/🔗 bei perfumecloud.de → **DNS** genau diese Einträge stehen:
+
+| Host | Typ | Ziel | Priorität | Wofür |
+|---|---|---|---|---|
+| `@` | A | `23.227.38.65` | | Shop (Shopify) |
+| `www` | CNAME | `shops.myshopify.com` | | Shop (Shopify) |
+| `@` | MX | `mxf938.netcup.net` | 10 | Mails |
+| `@` | TXT | `v=spf1 mx ~all` | | Mails (Spamschutz) |
+| `team` | A | IPv4 des Webhostings | | Team-App |
+
+Andere Einträge für `@` oder `www` (z. B. ein A- oder **AAAA-Eintrag mit netcup-IP**) **löschen**, sonst landen Besucher statt im Shop auf dem Webhosting. Danach in Shopify unter **Domains** prüfen, dass perfumecloud.de als verbunden angezeigt wird.
+
+**Warten:** Neue DNS-Einträge brauchen meist 15–30 Minuten, manchmal bis zu 2 Stunden. In der Zeit kannst du mit A4 und A5 weitermachen.
 
 ### A3 · SSL-Zertifikat und PHP-Version
 1. In Plesk unter **Websites & Domains** bei **team.perfumecloud.de** auf **SSL/TLS-Zertifikate** und dann **Let's Encrypt** wählen. **Kostenloses Zertifikat installieren** und bestätigen.
@@ -81,7 +89,7 @@ Damit `team.perfumecloud.de` auf euer Webhosting zeigt, während der Shop bei Sh
 4. Beiden E-Mail und Startpasswort **persönlich** geben. Das Passwort ändern sie später selbst unter **Einstellungen**.
 
 ### A8 · Postfächer info@ und support@ verbinden
-1. Den IMAP-Server nachsehen: In Plesk auf **E-Mail**, eine Adresse anklicken und dann die Einstellungen für E-Mail-Programme öffnen. Der Servername sieht bei netcup etwa so aus: `mxXXXXXX.netcup.net`.
+1. Den IMAP-Server nachsehen: In Plesk auf **E-Mail**, eine Adresse anklicken und dann die Einstellungen für E-Mail-Programme öffnen. Bei euch ist das **`mxf938.netcup.net`** (steht auch im MX-Eintrag der Domain).
 2. In der App auf **Einstellungen**, dann **Integrationen** und zu **Postfächer**. Beide Adressen sind schon eingetragen.
 3. Bei beiden den **IMAP-Server**, Port **993** und das **Passwort** des Postfachs eintragen.
 4. Auf **Speichern & testen** klicken. Erscheint ein grüner Haken, holt die App ab jetzt die wichtigen Mails.
