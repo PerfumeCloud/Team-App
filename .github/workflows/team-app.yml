@@ -1,0 +1,72 @@
+name: Team-App
+
+on:
+  push:
+    branches: [main]
+    paths: ['team-app/**', '.github/workflows/team-app.yml']
+  pull_request:
+    paths: ['team-app/**', '.github/workflows/team-app.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-und-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, pdo_mysql, mbstring, openssl, curl
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: team-app/web/package-lock.json
+
+      - name: PHP-Syntax prüfen
+        run: find team-app/server -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Backend-Tests
+        run: node --test team-app/server/tests/backend.test.mjs
+
+      - name: Widget-Tests
+        run: node --test team-app/web/tests/widget.test.mjs
+
+      - name: App bauen
+        run: ./team-app/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: team-app-upload
+          path: team-app/build
+          include-hidden-files: true
+          retention-days: 14
+
+  deploy:
+    # Läuft erst, wenn in GitHub unter Settings → Secrets and variables → Actions
+    # die Variable DEPLOY_ENABLED=true und die FTP-Secrets eingetragen sind.
+    needs: test-und-build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    concurrency: deploy-team-app
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: team-app-upload
+          path: build
+
+      - name: Zu netcup hochladen (FTPS)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: build/
+          server-dir: ${{ vars.FTP_DIR }}

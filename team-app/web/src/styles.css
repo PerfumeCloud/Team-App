@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: 246 242 235;
+  --surface: 255 253 249;
+  --surface-2: 240 235 226;
+  --line: 230 222 209;
+  --ink: 30 32 36;
+  --ink-2: 86 90 97;
+  --ink-3: 110 113 119;
+  --accent: 47 78 133;
+  --accent-ink: 255 255 255;
+  --accent-soft: 230 236 246;
+  --good: 46 125 79;
+  --warn: 168 102 26;
+  --bad: 180 68 58;
+  --chart: #2f5fa8;
+  --chart-wash: rgb(47 95 168 / 0.1);
+  --grid: #ebe4d8;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 18 19 21;
+  --surface: 27 29 33;
+  --surface-2: 35 38 43;
+  --line: 47 51 58;
+  --ink: 241 237 230;
+  --ink-2: 186 182 174;
+  --ink-3: 143 140 134;
+  --accent: 157 181 232;
+  --accent-ink: 15 20 32;
+  --accent-soft: 34 45 66;
+  --good: 92 184 131;
+  --warn: 224 160 80;
+  --bad: 229 122 110;
+  --chart: #6a93e0;
+  --chart-wash: rgb(106 147 224 / 0.12);
+  --grid: #2a2d33;
+}
+
+/* Personenfarben */
+.u-blue { --u-bg: #dce5f4; --u-fg: #2f4e85; }
+.u-sage { --u-bg: #dde8df; --u-fg: #3f6b4e; }
+.u-rose { --u-bg: #f3dedc; --u-fg: #8e3b36; }
+.u-amber { --u-bg: #f3e6cf; --u-fg: #855a12; }
+.u-plum { --u-bg: #e9deee; --u-fg: #6b3f7e; }
+.u-slate { --u-bg: #e0e3e7; --u-fg: #3f4752; }
+[data-theme='dark'] .u-blue { --u-bg: #2a3956; --u-fg: #b9cbf0; }
+[data-theme='dark'] .u-sage { --u-bg: #29402f; --u-fg: #a9d1b4; }
+[data-theme='dark'] .u-rose { --u-bg: #4a2a28; --u-fg: #edb4ad; }
+[data-theme='dark'] .u-amber { --u-bg: #4a3a1e; --u-fg: #ebc88b; }
+[data-theme='dark'] .u-plum { --u-bg: #3d2b45; --u-fg: #d3b2e0; }
+[data-theme='dark'] .u-slate { --u-bg: #2e333a; --u-fg: #c3cad3; }
+
+/* Notizfarben */
+.n-none { --n-bg: rgb(var(--surface)); }
+.n-cream { --n-bg: #f8efdc; }
+.n-blue { --n-bg: #e7eef9; }
+.n-sage { --n-bg: #e6efe7; }
+.n-rose { --n-bg: #f7e6e3; }
+.n-sand { --n-bg: #efe7da; }
+[data-theme='dark'] .n-cream { --n-bg: #2e2a20; }
+[data-theme='dark'] .n-blue { --n-bg: #1f2838; }
+[data-theme='dark'] .n-sage { --n-bg: #1f2a22; }
+[data-theme='dark'] .n-rose { --n-bg: #33221f; }
+[data-theme='dark'] .n-sand { --n-bg: #2b2620; }
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    background: rgb(var(--bg));
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    overscroll-behavior-y: none;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.2);
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    opacity: 0.5;
+  }
+  [data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line/70 bg-surface shadow-card;
+  }
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-3 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink-2;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3;
+  }
+  .page-title {
+    @apply font-display text-[34px] font-semibold leading-[1.05] tracking-[-0.01em] text-ink md:text-[40px];
+  }
+  .section-title {
+    @apply text-[15px] font-semibold text-ink;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.safe-top { padding-top: var(--safe-top); }
+.safe-bottom { padding-bottom: var(--safe-bottom); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

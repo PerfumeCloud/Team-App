@@ -1,0 +1,9 @@
+node_modules/
+dist/
+team-app/build/
+team-app/server/config.php
+team-app/server/storage/
+team-app/server/public/index.html
+*.log
+.DS_Store
+.env
