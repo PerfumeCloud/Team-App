@@ -31,6 +31,8 @@ function ErrorBox({ text }: { text: string }) {
 
 export function Login() {
   const setSession = useStore((s) => s.setSession);
+  const bootError = useStore((s) => s.bootError);
+  const boot = useStore((s) => s.boot);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -52,6 +54,14 @@ export function Login() {
 
   return (
     <AuthFrame>
+      {bootError && (
+        <div className="mb-4 space-y-3">
+          <ErrorBox text={bootError} />
+          <Button variant="secondary" className="w-full" onClick={() => void boot()}>
+            Erneut versuchen
+          </Button>
+        </div>
+      )}
       <form onSubmit={submit} className="card space-y-4 p-6">
         <div>
           <label className="label" htmlFor="email">
@@ -79,7 +89,7 @@ export function Setup() {
   const status = useStore((s) => s.status);
   const setSession = useStore((s) => s.setSession);
   const [driver, setDriver] = useState<'mysql' | 'sqlite'>('mysql');
-  const [db, setDb] = useState({ host: 'localhost', port: '3306', name: '', user: '', pass: '' });
+  const [db, setDb] = useState({ host: 'mysqlf937.netcup.net', port: '3306', name: '', user: '', pass: '' });
   const [admin, setAdmin] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

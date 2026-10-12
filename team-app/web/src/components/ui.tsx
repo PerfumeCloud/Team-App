@@ -257,5 +257,5 @@ export function Toasts() {
 }
 
 export function Logo({ className }: { className?: string }) {
-  return <img src="/icons/monogram.png" alt="" className={cx('select-none dark:invert', className)} draggable={false} />;
+  return <img src="/brand/monogram.png" alt="" className={cx('select-none dark:invert', className)} draggable={false} />;
 }

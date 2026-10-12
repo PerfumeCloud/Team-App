@@ -35,8 +35,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title ?? 'Perfume Cloud', {
       body: data.body ?? '',
       tag: data.tag,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/badge-96.png',
+      icon: '/brand/icon-192.png',
+      badge: '/brand/badge-96.png',
       data: { url: data.url ?? '/' },
     }),
     self.clients.matchAll({ type: 'window' }).then((list) => list.forEach((c) => c.postMessage({ type: 'sync' }))),

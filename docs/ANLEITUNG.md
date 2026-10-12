@@ -190,6 +190,7 @@ Wenn Claude etwas an der App ändert, landet das auf GitHub. Damit es ohne erneu
 |---|---|
 | `team.perfumecloud.de` öffnet den Shop oder gar nichts | Der DNS-Eintrag (A2) fehlt oder ist noch nicht aktiv. Etwas warten. |
 | „Hier entsteht eine neue Webseite“, „Forbidden“ oder eine Ordnerliste | Der Dokumentenstamm muss `team.perfumecloud.de/httpdocs/public` sein (A1). Ändern lässt er sich in Plesk unter **Hosting-Einstellungen**. |
+| Anmeldeseite mit „Der Server meldet einen Fehler“ statt Einrichtung | PHP erreicht die App nicht. **open_basedir** prüfen (A3), dann **Erneut versuchen**. |
 | Weiße Seite oder „Interner Fehler“ ohne `app.log` | In den **PHP-Einstellungen** bei **open_basedir** die Option mit `{WEBSPACEROOT}` wählen (A3). |
 | Let's Encrypt schlägt fehl | Der DNS-Eintrag ist noch nicht aktiv. 30 Minuten warten. |
 | „Interner Fehler“ | Die Details stehen in `team.perfumecloud.de/httpdocs/storage/app.log` (Plesk-Dateimanager). Den Inhalt Claude zeigen. |

@@ -42,6 +42,8 @@ interface Data {
 interface State extends Data {
   phase: Phase;
   status: StatusResponse | null;
+  /** Warum der Server beim Start nicht erreichbar war (nur ohne Zwischenspeicher). */
+  bootError: string | null;
   online: boolean;
   syncing: boolean;
   boot: () => Promise<void>;
@@ -154,6 +156,7 @@ export const useStore = create<State>((set, get) => ({
   ...empty,
   phase: 'boot',
   status: null,
+  bootError: null,
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   syncing: false,
 
@@ -165,8 +168,11 @@ export const useStore = create<State>((set, get) => ({
       return;
     }
     try {
-      const status = await api<StatusResponse>('GET', '/status');
-      set({ status });
+      const status = await api<StatusResponse | null>('GET', '/status');
+      if (!status || typeof status !== 'object' || !('installed' in status)) {
+        throw new ApiError(0, 'Die Server-Schnittstelle antwortet nicht. Fehlt public/.htaccess?');
+      }
+      set({ status, bootError: null });
       if (!status.installed) {
         set({ phase: 'setup' });
         return;
@@ -175,9 +181,11 @@ export const useStore = create<State>((set, get) => ({
       set({ ...empty, me: me.user, prefs: me.prefs, phase: 'ready' });
       await get().sync({ full: true });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) set({ phase: 'login' });
-      else {
-        set({ phase: 'login', online: false });
+      if (e instanceof ApiError && e.status === 401) set({ phase: 'login', bootError: null });
+      else if (e instanceof ApiError) {
+        set({ phase: 'login', bootError: e.status === 0 ? e.message : `Der Server meldet einen Fehler (${e.status}). Bitte die Einrichtung prüfen.` });
+      } else {
+        set({ phase: 'login', online: false, bootError: 'Keine Verbindung zum Server.' });
       }
     }
   },
