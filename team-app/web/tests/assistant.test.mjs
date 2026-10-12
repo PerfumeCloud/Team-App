@@ -1,7 +1,7 @@
 // Prüft den Ideen-Assistenten (ohne KI). Aufruf: node --test team-app/web/tests/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIdea, findDate } from '../src/lib/assistant.ts';
+import { parseIdea, findDate, findTime, summary } from '../src/lib/assistant.ts';
 
 // Montag, 12. Oktober 2026
 const ctx = {
@@ -175,5 +175,74 @@ test('Weitere Alltagsfälle', () => {
 });
 
 test('Leere Eingabe', () => {
-  assert.deepEqual(parseIdea('   ', ctx), { note: null, tasks: [] });
+  assert.deepEqual(parseIdea('   ', ctx), { note: null, tasks: [], events: [] });
+});
+
+const ev = (e) => [e.title, e.kind, e.date, e.endDate, e.start, e.end, e.location, e.attendees];
+
+test('Uhrzeiten', () => {
+  const t = (s) => {
+    const h = findTime(s);
+    return h && (h.to ? `${h.from}-${h.to}` : h.from);
+  };
+  assert.equal(t('um 14 Uhr'), '14:00');
+  assert.equal(t('14:30'), '14:30');
+  assert.equal(t('um 9.30 Uhr'), '09:30');
+  assert.equal(t('um 3'), '15:00');
+  assert.equal(t('um 8 abends'), '20:00');
+  assert.equal(t('von 10 bis 12 Uhr'), '10:00-12:00');
+  assert.equal(t('10–11:30'), '10:00-11:30');
+  assert.equal(t('zwischen 10 und 12'), '10:00-12:00');
+  assert.equal(t('um halb drei'), '14:30');
+  assert.equal(t('viertel nach 10'), '10:15');
+  assert.equal(t('am 15.11.'), null);
+  assert.equal(t('um 10 Prozent'), null);
+  assert.equal(t('von 10 bis 20 Prozent'), null);
+  assert.equal(t('Preis 15,90 €'), null);
+});
+
+test('Termine erkennen', () => {
+  assert.deepEqual(parseIdea('Meeting mit Ben am Freitag um 14 Uhr im Büro', ctx).events.map(ev), [
+    ['Meeting mit Ben', 'meeting', '2026-10-16', null, '14:00', '15:00', 'Büro', ['u-ben', 'u-marius']],
+  ]);
+  assert.deepEqual(parseIdea('Messe Beauty in Düsseldorf vom 20. bis 24.11.', ctx).events.map(ev), [
+    ['Messe Beauty', 'event', '2026-11-20', '2026-11-24', null, null, 'Düsseldorf', []],
+  ]);
+  assert.deepEqual(parseIdea('Ben: Urlaub vom 2.11. bis 6.11.', ctx).events.map(ev), [['Urlaub', 'termin', '2026-11-02', '2026-11-06', null, null, null, ['u-ben']]]);
+  assert.deepEqual(parseIdea('Call mit Flakon-Manufaktur übermorgen von 15 bis 16 Uhr per Zoom', ctx).events.map(ev), [
+    ['Call mit Flakon-Manufaktur', 'meeting', '2026-10-14', null, '15:00', '16:00', 'Zoom', []],
+  ]);
+  assert.deepEqual(parseIdea('Termin beim Steuerberater am 15.11. um halb drei', ctx).events.map(ev), [
+    ['Termin beim Steuerberater', 'termin', '2026-11-15', null, '14:30', '15:30', null, []],
+  ]);
+  assert.deepEqual(parseIdea('Frist Steuererklärung 31.7.', ctx).events.map(ev), [['Frist Steuererklärung', 'frist', '2027-07-31', null, null, null, null, []]]);
+  assert.deepEqual(parseIdea('Ich habe morgen um 8 einen Arzttermin', ctx).events.map(ev), [['Arzttermin', 'termin', '2026-10-13', null, '08:00', '09:00', null, ['u-marius']]]);
+  assert.deepEqual(parseIdea('Workshop 20.–22. Oktober in Köln', ctx).events.map(ev), [['Workshop', 'event', '2026-10-20', '2026-10-22', null, null, 'Köln', []]]);
+  assert.deepEqual(parseIdea('Weihnachtsfeier am 18.12. ab 18 Uhr in der Brauerei Schumacher', ctx).events.map(ev), [
+    ['Weihnachtsfeier', 'event', '2026-12-18', null, '18:00', '19:00', 'Brauerei Schumacher', []],
+  ]);
+});
+
+test('Termin oder Aufgabe', () => {
+  // Aufgaben rund um einen Termin bleiben Aufgaben
+  const prep = parseIdea('Meeting am Freitag vorbereiten', ctx);
+  assert.equal(prep.events.length, 0);
+  assert.deepEqual(prep.tasks.map(brief), [{ title: 'Meeting vorbereiten', who: null, due: '2026-10-16', prio: 'normal' }]);
+  assert.equal(parseIdea('Angebot bis 12 Uhr schicken', ctx).events.length, 0);
+  assert.equal(parseIdea('Termine bis Freitag abstimmen', ctx).events.length, 0);
+  assert.equal(parseIdea('Rabatt von 10 bis 20 Prozent testen', ctx).events.length, 0);
+  // Gemischt: Termin, Aufgabe und Notiz aus einer Nachricht
+  const mixed = parseIdea('Kundentermin Mittwoch 11 Uhr, danach Pakete packen', ctx);
+  assert.deepEqual(mixed.events.map((e) => [e.title, e.date, e.start]), [['Kundentermin', '2026-10-14', '11:00']]);
+  assert.deepEqual(mixed.tasks.map((t) => t.title), ['Pakete packen']);
+  assert.equal(summary(mixed), 'Daraus mache ich eine Aufgabe und einen Termin:');
+  // „mit Ben, Keanu …“ wird nicht in Aufgaben zerlegt; alle drei = ganzes Team
+  const all = parseIdea('Meeting mit Ben und Keanu morgen um 10', ctx);
+  assert.equal(all.tasks.length, 0);
+  assert.deepEqual(all.events.map(ev), [['Meeting mit Ben und Keanu', 'meeting', '2026-10-13', null, '10:00', '11:00', null, []]]);
+  assert.equal(summary(all), 'Das trage ich in den Kalender ein:');
+  // Modus „Termin“ erzwingt einen Termin – ohne Datum heute
+  const forced = parseIdea('Inventur im Lager', ctx, 'event');
+  assert.deepEqual(forced.events.map(ev), [['Inventur', 'termin', '2026-10-12', null, null, null, 'Lager', []]]);
+  assert.equal(parseIdea('Meeting mit Ben morgen um 10', ctx, 'tasks').events.length, 0);
 });

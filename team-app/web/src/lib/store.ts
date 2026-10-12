@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, ApiError, isOffline, uuid } from './api';
-import type { ActivityItem, Comment, Email, ID, Meta, Note, Prefs, StatusResponse, SyncResponse, Task, User } from './types';
+import type { ActivityItem, CalEvent, Comment, Email, ID, Meta, Note, Prefs, StatusResponse, SyncResponse, Task, User } from './types';
 import { toast } from './toast';
 
 /*
@@ -11,7 +11,7 @@ import { toast } from './toast';
  * - Alles wird lokal zwischengespeichert, damit die App sofort startet und offline lesbar ist.
  */
 
-type Table = 'tasks' | 'notes' | 'comments' | 'emails';
+type Table = 'tasks' | 'notes' | 'comments' | 'emails' | 'events';
 
 interface OutboxOp {
   key: string;
@@ -31,6 +31,7 @@ interface Data {
   tasks: Record<ID, Task>;
   notes: Record<ID, Note>;
   comments: Record<ID, Comment>;
+  events: Record<ID, CalEvent>;
   emails: Record<string, Email>;
   activity: ActivityItem[];
   meta: Meta | null;
@@ -54,6 +55,8 @@ interface State extends Data {
   deleteTask: (id: ID) => void;
   saveNote: (patch: Partial<Note> & { id?: ID }) => Note;
   deleteNote: (id: ID) => void;
+  saveEvent: (patch: Partial<CalEvent> & { id?: ID }) => CalEvent;
+  deleteEvent: (id: ID) => void;
   addComment: (taskId: ID, body: string) => void;
   deleteComment: (id: ID) => void;
   updateEmail: (id: string, patch: { status?: 'open' | 'done'; assignee_id?: ID | null }) => void;
@@ -69,6 +72,7 @@ const empty: Data = {
   tasks: {},
   notes: {},
   comments: {},
+  events: {},
   emails: {},
   activity: [],
   meta: null,
@@ -100,6 +104,7 @@ function persist(state: State) {
       tasks: state.tasks,
       notes: state.notes,
       comments: state.comments,
+      events: state.events,
       emails: state.emails,
       activity: state.activity,
       meta: state.meta,
@@ -140,6 +145,18 @@ function mergeRows<T extends { id: string; deleted: number }>(
   return next;
 }
 
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function visibleOnly(emails: Record<string, Email>, mailboxes: string[]): Record<string, Email> {
+  const allowed = new Set(mailboxes);
+  const out: Record<string, Email> = {};
+  for (const [id, m] of Object.entries(emails)) if (allowed.has(m.mailbox)) out[id] = m;
+  return out;
+}
+
 function enqueue(outbox: OutboxOp[], op: OutboxOp): OutboxOp[] {
   const rest = outbox.filter((o) => !(o.table === op.table && o.id === op.id && (o.method === op.method || op.method === 'DELETE')));
   if (op.method === 'PATCH') {
@@ -150,7 +167,7 @@ function enqueue(outbox: OutboxOp[], op: OutboxOp): OutboxOp[] {
 }
 
 let flushing = false;
-let syncQueued = false;
+let syncQueued: boolean | 'full' = false;
 
 export const useStore = create<State>((set, get) => ({
   ...empty,
@@ -216,7 +233,7 @@ export const useStore = create<State>((set, get) => ({
   async sync(opts = {}) {
     if (!get().me) return;
     if (get().syncing) {
-      syncQueued = true;
+      if (syncQueued !== 'full') syncQueued = opts.full ? 'full' : true;
       return;
     }
     set({ syncing: true });
@@ -238,7 +255,9 @@ export const useStore = create<State>((set, get) => ({
         tasks: mergeRows(s.tasks, res.tasks, pending, res.full),
         notes: mergeRows(s.notes, res.notes, pending, res.full),
         comments: mergeRows(s.comments, res.comments, pending, res.full),
-        emails: mergeRows(s.emails, res.emails, pending, res.full),
+        events: mergeRows(s.events, res.events ?? [], pending, res.full),
+        // Nur Mails aus Postfächern, die man (noch) sehen darf – „Sichtbar für“ kann sich ändern
+        emails: visibleOnly(mergeRows(s.emails, res.emails, pending, res.full), res.meta.mailboxes),
         activity,
         meta: res.meta,
         cursor: res.serverTime,
@@ -246,6 +265,8 @@ export const useStore = create<State>((set, get) => ({
         online: true,
       });
       updateBadge();
+      // „Datenbank aktualisieren“ wurde ausgeführt → einmal komplett neu laden
+      if (!res.full && s.meta?.syncEpoch !== undefined && res.meta.syncEpoch !== s.meta.syncEpoch) syncQueued = 'full';
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         localStorage.removeItem(CACHE_KEY);
@@ -256,8 +277,9 @@ export const useStore = create<State>((set, get) => ({
     } finally {
       set({ syncing: false });
       if (syncQueued) {
+        const full = syncQueued === 'full';
         syncQueued = false;
-        void get().sync();
+        void get().sync({ full });
       }
     }
   },
@@ -361,6 +383,64 @@ export const useStore = create<State>((set, get) => ({
     const notes = { ...s.notes };
     delete notes[id];
     set({ notes, outbox: enqueue(s.outbox, { key: `DELETE:notes:${id}`, table: 'notes', id, method: 'DELETE', path: `/notes/${id}` }) });
+    kick();
+  },
+
+  saveEvent(patch) {
+    const s = get();
+    const id = patch.id ?? uuid();
+    const old: CalEvent | undefined = s.events[id];
+    const now = Date.now();
+    const base: CalEvent = {
+      id,
+      title: '',
+      kind: 'termin',
+      start_date: localToday(),
+      start_time: null,
+      end_date: null,
+      end_time: null,
+      location: null,
+      notes: null,
+      attendees: [],
+      remind_minutes: null,
+      created_by: s.me?.id ?? null,
+      created_at: now,
+      updated_by: null,
+      updated_at: now,
+      deleted: 0,
+    };
+    const ev: CalEvent = { ...base, ...old, ...patch, updated_by: s.me?.id ?? null, updated_at: now };
+    set({
+      events: { ...s.events, [id]: ev },
+      outbox: enqueue(s.outbox, {
+        key: `PUT:events:${id}`,
+        table: 'events',
+        id,
+        method: 'PUT',
+        path: `/events/${id}`,
+        body: {
+          title: ev.title,
+          kind: ev.kind,
+          start_date: ev.start_date,
+          start_time: ev.start_time,
+          end_date: ev.end_date,
+          end_time: ev.end_time,
+          location: ev.location,
+          notes: ev.notes,
+          attendees: ev.attendees,
+          remind_minutes: ev.remind_minutes,
+        },
+      }),
+    });
+    kick();
+    return ev;
+  },
+
+  deleteEvent(id) {
+    const s = get();
+    const events = { ...s.events };
+    delete events[id];
+    set({ events, outbox: enqueue(s.outbox, { key: `DELETE:events:${id}`, table: 'events', id, method: 'DELETE', path: `/events/${id}` }) });
     kick();
   },
 

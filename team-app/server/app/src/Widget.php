@@ -63,22 +63,24 @@ final class Widget
             }
             return ($a['priority'] === 'high' ? 0 : 1) <=> ($b['priority'] === 'high' ? 0 : 1);
         });
-        $mails = Db::all(
+        $boxes = MailJob::visibleAddresses($user['id']);
+        $mails = $boxes ? Db::all(
             "SELECT from_name, from_email, subject, mailbox, received_at FROM emails
-             WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND (owner_id IS NULL OR owner_id = ?)
-             ORDER BY score DESC, received_at DESC",
-            [$user['id']]
-        );
+             WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND mailbox IN (" . implode(',', array_fill(0, count($boxes), '?')) . ')
+             ORDER BY score DESC, received_at DESC',
+            $boxes
+        ) : [];
         $shopify = Shopify::configured() || (int) Db::value('SELECT COUNT(*) FROM orders') > 0;
 
         return [
             'name' => explode(' ', trim($user['name']))[0],
             'serverTime' => Util::now(),
             'shopify' => $shopify,
-            'mail' => count(MailJob::mailboxes()) > 0 || MailJob::personal($user['id']) !== null,
+            'mail' => count($boxes) > 0,
             'today' => $shopify ? Stats::today() : null,
             'toShip' => $shopify ? count(Stats::toShip()) : null,
             'importantMails' => count($mails),
+            'events' => Calendar::upcoming($user),
             'mails' => array_map(static fn ($m) => [
                 'from' => (string) ($m['from_name'] ?: $m['from_email']),
                 'subject' => (string) $m['subject'],

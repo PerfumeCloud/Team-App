@@ -272,6 +272,7 @@ final class Db
                 done_at BIGINT NULL,
                 notified SMALLINT NOT NULL DEFAULT 0,
                 owner_id VARCHAR(36) NULL,
+                auto SMALLINT NOT NULL DEFAULT 0,
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL,
                 deleted SMALLINT NOT NULL DEFAULT 0",
@@ -287,6 +288,23 @@ final class Db
                 item_count INTEGER NOT NULL DEFAULT 0,
                 items TEXT NULL,
                 synced_at BIGINT NOT NULL",
+            'events' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
+                title VARCHAR(300) NOT NULL DEFAULT '',
+                kind VARCHAR(20) NOT NULL DEFAULT 'termin',
+                start_date VARCHAR(10) NOT NULL,
+                start_time VARCHAR(5) NULL,
+                end_date VARCHAR(10) NULL,
+                end_time VARCHAR(5) NULL,
+                location VARCHAR(300) NULL,
+                notes TEXT NULL,
+                attendees TEXT NULL,
+                remind_minutes INTEGER NULL,
+                reminded_at BIGINT NULL,
+                created_by VARCHAR(36) NULL,
+                updated_by VARCHAR(36) NULL,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL,
+                deleted SMALLINT NOT NULL DEFAULT 0",
             'activity' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
                 user_id VARCHAR(36) NULL,
                 type VARCHAR(40) NOT NULL,
@@ -320,6 +338,12 @@ final class Db
             $pdo->exec('ALTER TABLE emails ADD COLUMN owner_id VARCHAR(36) NULL');
             $pdo->exec('UPDATE emails SET notified = 2 WHERE notified = 0');
         }
+        // 1.2: Newsletter/automatische Mails werden mitgespeichert (für „Push bei wirklich allen Mails“),
+        // Postfächer haben „Sichtbar für“
+        if (!self::hasColumn('emails', 'auto')) {
+            $pdo->exec('ALTER TABLE emails ADD COLUMN auto SMALLINT NOT NULL DEFAULT 0');
+        }
+        MailJob::migrateLegacy();
 
         $indexes = [
             ['users_email', 'users', 'email', true],
@@ -330,6 +354,9 @@ final class Db
             ['emails_updated', 'emails', 'updated_at', false],
             ['emails_received', 'emails', 'received_at', false],
             ['emails_owner', 'emails', 'owner_id', false],
+            ['emails_mailbox', 'emails', 'mailbox', false],
+            ['events_updated', 'events', 'updated_at', false],
+            ['events_start', 'events', 'start_date', false],
             ['orders_created', 'orders', 'created_at', false],
             ['activity_updated', 'activity', 'updated_at', false],
             ['sessions_user', 'sessions', 'user_id', false],

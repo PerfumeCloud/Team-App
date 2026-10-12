@@ -23,19 +23,27 @@ switch ($cmd) {
         break;
 
     case 'personal-run':
-        // Persönliche Postfächer auf den Test-IMAP-Server (unverschlüsselt) umbiegen und abrufen
-        foreach (Db::all('SELECT id FROM users WHERE deleted = 0') as $u) {
-            $mb = Settings::get('mailbox_user_' . $u['id']);
-            if (is_array($mb)) {
-                Settings::set('mailbox_user_' . $u['id'], ['host' => '127.0.0.1', 'port' => (int) $arg, 'security' => 'none'] + $mb);
-            }
+        // Alle Postfächer auf den Test-IMAP-Server (unverschlüsselt) umbiegen und abrufen
+        $list = Settings::get('mailboxes', []);
+        foreach ($list as &$mb) {
+            $mb = ['host' => '127.0.0.1', 'port' => (int) $arg, 'security' => 'none'] + $mb;
         }
+        unset($mb);
+        Settings::set('mailboxes', $list);
         $summary = MailJob::run();
         $rows = Db::all('SELECT * FROM emails WHERE deleted = 0');
         $users = Db::all('SELECT * FROM users WHERE deleted = 0');
         // Push-Plan so berechnen, als wären alle Mails gerade neu angekommen
-        $plan = array_map(static fn ($list) => array_map(static fn ($m) => ['id' => $m['id'], 'owner_id' => $m['owner_id'], 'mailbox' => $m['mailbox']], $list), MailJob::pushPlan($rows, $users, Util::now()));
+        $plan = array_map(static fn ($list) => array_map(static fn ($m) => ['id' => $m['id'], 'mailbox' => $m['mailbox'], 'auto' => (int) $m['auto'], 'seen' => (int) $m['seen']], $list), MailJob::pushPlan($rows, $users, Util::now()));
         echo Util::json(['summary' => $summary, 'emails' => array_map([Sync::class, 'email'], $rows), 'plan' => (object) $plan]);
+        break;
+
+    case 'event-remind':
+        // argv: Event-ID, Minuten relativ zum Start
+        $e = Db::one('SELECT * FROM events WHERE id = ?', [$arg]);
+        $start = \PC\Calendar::ts($e['start_date'], $e['start_time']);
+        $out = \PC\Calendar::remind($start + (int) $argv[3] * 60000);
+        echo Util::json(['out' => $out, 'reminded' => Db::value('SELECT reminded_at FROM events WHERE id = ?', [$arg]) !== null]);
         break;
 
     case 'push-encrypt':

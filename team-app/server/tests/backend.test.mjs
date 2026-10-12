@@ -182,9 +182,12 @@ test('Mail-Abruf erkennt wichtige offene Mails', async () => {
   const out = helper('mail', String(IMAP_PORT));
   assert.equal(out.status.ok, true, JSON.stringify(out));
   const bySubject = Object.fromEntries(out.emails.map((e) => [e.subject, e]));
-  // ignoriert: Newsletter + Shopify
-  assert.equal(bySubject['Unsere Herbst-Angebote'], undefined);
-  assert.equal(Object.keys(bySubject).some((s) => s.includes('#1043')), false);
+  // Newsletter + Shopify: gespeichert, aber als automatisch markiert und nie wichtig
+  assert.equal(bySubject['Unsere Herbst-Angebote'].auto, 1);
+  assert.equal(bySubject['Unsere Herbst-Angebote'].important, 0);
+  const shop = out.emails.find((e) => (e.subject ?? '').includes('#1043'));
+  assert.ok(!shop || (shop.auto === 1 && shop.important === 0));
+  assert.ok(out.emails.filter((e) => !e.auto).every((e) => e.subject !== 'Unsere Herbst-Angebote'));
   // Kundin mit kodiertem Betreff + Absender
   const j = bySubject['Wo bleibt meine Bestellung #1042?'];
   assert.ok(j, 'Betreff dekodiert: ' + Object.keys(bySubject).join(' | '));
@@ -222,12 +225,12 @@ test('Falsches Mail-Passwort wird gemeldet', () => {
   assert.match(out.status.message, /Anmeldung am Postfach fehlgeschlagen/);
 });
 
-test('Persönliche Postfächer: nur der Besitzer sieht Mails und bekommt Push', async () => {
+test('Persönliche Postfächer: nur wer darf, sieht Mails und bekommt Push', async () => {
   const me = (await admin.req('GET', '/me')).data.user;
   const empty = await kim.req('GET', '/me/mailbox');
   assert.equal(empty.data.mailbox, null);
 
-  // Speichern (der Verbindungstest darf hier scheitern – der Test-Server spricht kein SSL)
+  // Selbst eintragen (der Verbindungstest darf hier scheitern – der Test-Server spricht kein SSL)
   const noPw = await kim.req('PUT', '/me/mailbox', { email: 'kim@perfumecloud.de', host: '127.0.0.1', port: IMAP_PORT });
   assert.equal(noPw.status, 422);
   const k = await kim.req('PUT', '/me/mailbox', { email: 'Kim@PerfumeCloud.de', host: '127.0.0.1', port: IMAP_PORT, password: 'secret' });
@@ -240,27 +243,33 @@ test('Persönliche Postfächer: nur der Besitzer sieht Mails und bekommt Push', 
   // Fremdes oder Team-Postfach geht nicht
   assert.equal((await admin.req('PUT', '/me/mailbox', { email: 'kim@perfumecloud.de', host: 'x', password: 'y' })).status, 422);
   assert.equal((await admin.req('PUT', '/me/mailbox', { email: 'support@perfumecloud.de', host: 'x', password: 'y' })).status, 422);
-  // Admin sieht in den Integrationen nur Team-Postfächer
+  // Admin sieht alle Konten mit „Sichtbar für“ – aber keine Passwörter
   const integ = await admin.req('GET', '/admin/integrations');
-  assert.deepEqual(integ.data.mailboxes.map((x) => x.email), ['support@perfumecloud.de']);
+  assert.deepEqual(
+    integ.data.mailboxes.map((x) => [x.email, x.visible_to]),
+    [['support@perfumecloud.de', []], ['kim@perfumecloud.de', [kimId]], ['marius.heub@perfumecloud.de', [me.id]]],
+  );
+  assert.ok(integ.data.mailboxes.every((x) => x.password === undefined && x.hasPassword === true));
 
   const out = helper('personal-run', String(IMAP_PORT));
-  const kimMails = out.emails.filter((e) => e.owner_id === kimId);
-  const myMails = out.emails.filter((e) => e.owner_id === me.id);
+  const kimMails = out.emails.filter((e) => e.mailbox === 'kim@perfumecloud.de');
+  const myMails = out.emails.filter((e) => e.mailbox === 'marius.heub@perfumecloud.de');
   assert.ok(kimMails.length > 0 && myMails.length > 0, JSON.stringify(out.summary));
-  assert.ok(kimMails.every((e) => e.mailbox === 'kim@perfumecloud.de'));
+  // Newsletter werden jetzt mitgespeichert, aber als automatisch markiert und nie wichtig
+  const news = out.emails.filter((e) => e.subject === 'Unsere Herbst-Angebote');
+  assert.ok(news.length > 0 && news.every((e) => e.auto === 1 && e.important === 0));
 
   // Sync: jeder sieht Team-Mails + nur die eigenen
   const ks = await kim.req('GET', '/sync?since=0');
-  assert.ok(ks.data.emails.some((e) => e.owner_id === kimId));
-  assert.ok(ks.data.emails.some((e) => e.owner_id === null));
-  assert.equal(ks.data.emails.filter((e) => e.owner_id === me.id).length, 0);
+  assert.ok(ks.data.emails.some((e) => e.mailbox === 'kim@perfumecloud.de'));
+  assert.ok(ks.data.emails.some((e) => e.mailbox === 'support@perfumecloud.de' && e.visible_to.length === 0));
+  assert.equal(ks.data.emails.filter((e) => e.mailbox === 'marius.heub@perfumecloud.de').length, 0);
   assert.deepEqual(ks.data.meta.mailboxes, ['support@perfumecloud.de', 'kim@perfumecloud.de']);
   assert.equal(ks.data.meta.myMailbox, 'kim@perfumecloud.de');
   const ms = await admin.req('GET', '/sync?since=0');
-  assert.equal(ms.data.emails.filter((e) => e.owner_id === kimId).length, 0);
+  assert.equal(ms.data.emails.filter((e) => e.mailbox === 'kim@perfumecloud.de').length, 0);
 
-  // Fremde private Mail: nicht änderbar; eigene private Mail: nicht weitergeben
+  // Fremde private Mail: nicht änderbar; eigene private Mail: nicht an Unberechtigte weitergeben
   assert.equal((await kim.req('PATCH', `/emails/${myMails[0].id}`, { status: 'done' })).status, 404);
   assert.equal((await admin.req('PATCH', `/emails/${myMails[0].id}`, { assignee_id: kimId })).status, 422);
   const done = await admin.req('PATCH', `/emails/${myMails[0].id}`, { status: 'done' });
@@ -268,12 +277,22 @@ test('Persönliche Postfächer: nur der Besitzer sieht Mails und bekommt Push', 
   const activity = (await kim.req('GET', '/sync?since=0')).data.activity;
   assert.equal(activity.some((a) => a.entity_id === myMails[0].id), false, 'private Mail taucht nicht im Team-Verlauf auf');
 
-  // Push: persönliche Mails nur an den Besitzer
+  // Push: nur Mails aus sichtbaren Postfächern, ohne Newsletter (Standard)
   const plan = out.plan;
-  assert.ok((plan[kimId] ?? []).length > 0);
-  assert.ok((plan[me.id] ?? []).length > 0);
-  assert.ok(plan[kimId].every((x) => x.owner_id === null || x.owner_id === kimId));
-  assert.ok(plan[me.id].every((x) => x.owner_id === null || x.owner_id === me.id));
+  assert.ok((plan[kimId] ?? []).length > 0 && (plan[me.id] ?? []).length > 0);
+  assert.ok(plan[kimId].every((x) => ['support@perfumecloud.de', 'kim@perfumecloud.de'].includes(x.mailbox)));
+  assert.ok(plan[me.id].every((x) => ['support@perfumecloud.de', 'marius.heub@perfumecloud.de'].includes(x.mailbox)));
+  assert.ok(plan[kimId].every((x) => x.auto === 0 && x.seen === 0));
+
+  // „Wirklich alle“: auch Newsletter und gelesene Mails
+  await kim.req('PUT', '/me', { prefs: { mailScope: 'everything' } });
+  const all = helper('personal-run', String(IMAP_PORT)).plan[kimId];
+  assert.ok(all.some((x) => x.auto === 1), 'Newsletter dabei');
+  assert.ok(all.some((x) => x.seen === 1), 'gelesene dabei');
+  assert.ok(all.length > plan[kimId].length);
+  const pref = await kim.req('PUT', '/me', { prefs: { mailScope: 'important' } });
+  assert.equal(pref.data.prefs.mailScope, 'important');
+  assert.ok(helper('personal-run', String(IMAP_PORT)).plan[kimId].every((x) => x.auto === 0));
 
   // Widget zeigt keine fremden privaten Mails
   const { data: tok } = await kim.req('POST', '/widget/token');
@@ -281,16 +300,105 @@ test('Persönliche Postfächer: nur der Besitzer sieht Mails und bekommt Push', 
   assert.equal(w.data.mails.some((x) => x.mailbox === 'marius.heub@'), false);
   await kim.req('DELETE', '/widget/token');
 
-  // Einstellung „Nur wichtige“ wird gespeichert
-  const pref = await kim.req('PUT', '/me', { prefs: { mailScope: 'important' } });
-  assert.equal(pref.data.prefs.mailScope, 'important');
+  // Admin gibt sein Postfach zusätzlich für Kim frei → Kim bekommt die Mails beim nächsten Abgleich
+  const cursor = (await kim.req('GET', '/sync?since=0')).data.serverTime;
+  const boxes = integ.data.mailboxes.map(({ status, hasPassword, ...b }) => b);
+  boxes[2].visible_to = [me.id, kimId];
+  const saved = await admin.req('PUT', '/admin/mailboxes', { mailboxes: boxes });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const inc = await kim.req('GET', `/sync?since=${cursor}`);
+  assert.ok(inc.data.emails.some((e) => e.mailbox === 'marius.heub@perfumecloud.de'));
+  assert.ok(inc.data.meta.mailboxes.includes('marius.heub@perfumecloud.de'));
+  // … und jetzt darf die Mail Kim auch zugewiesen werden
+  assert.equal((await admin.req('PATCH', `/emails/${myMails[1].id}`, { assignee_id: kimId })).status, 200);
 
   // Entfernen: Postfach weg, Mails ausgeblendet
   const del = await kim.req('DELETE', '/me/mailbox');
   assert.equal(del.data.mailbox, null);
   const after = await kim.req('GET', '/sync?since=0');
-  assert.equal(after.data.emails.filter((e) => e.owner_id === kimId).length, 0);
+  assert.equal(after.data.emails.filter((e) => e.mailbox === 'kim@perfumecloud.de').length, 0);
   assert.equal(after.data.meta.myMailbox, null);
+});
+
+test('Kalender: Termine, Einladung, Erinnerung, Abo-Link, Widget', async () => {
+  const me = (await admin.req('GET', '/me')).data.user;
+  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  const id = crypto.randomUUID();
+  assert.equal((await kim.req('PUT', `/events/${id}`, { title: '', start_date: tomorrow })).status, 422);
+  assert.equal((await kim.req('PUT', `/events/${id}`, { title: 'X', start_date: '2026-02-30' })).status, 422);
+  const r = await kim.req('PUT', `/events/${id}`, {
+    title: 'Meeting Lieferant', kind: 'meeting', start_date: tomorrow, start_time: '14:00', end_time: '15:00',
+    location: 'Düsseldorf, Halle 3', attendees: [me.id, 'gibtsnicht'], remind_minutes: 60, notes: 'Preise; Flakons',
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.attendees, [me.id]);
+  assert.equal(r.data.end_time, '15:00');
+  // Endzeit vor Start wird verworfen
+  const id2 = crypto.randomUUID();
+  const bad = await admin.req('PUT', `/events/${id2}`, { title: 'Messe', start_date: tomorrow, end_date: tomorrow, start_time: '10:00', end_time: '09:00' });
+  assert.equal(bad.data.end_time, null);
+  const allday = await admin.req('PUT', `/events/${id2}`, { title: 'Messe Beauty', kind: 'event', start_date: tomorrow, end_date: tomorrow, start_time: null });
+  assert.equal(allday.data.start_time, null);
+  assert.equal(allday.data.end_date, null);
+
+  const s = await admin.req('GET', '/sync?since=0');
+  assert.ok(s.data.events.some((e) => e.id === id && e.title === 'Meeting Lieferant'));
+  assert.ok(s.data.activity.some((a) => a.entity_id === id));
+
+  // Erinnerung: 2 Std. vorher noch nicht, 59 Min. vorher ja
+  assert.equal(helper('event-remind', id, '-120').reminded, false);
+  assert.equal(helper('event-remind', id, '-59').reminded, true);
+
+  // Abo-Link (iCalendar)
+  assert.equal((await kim.req('GET', '/kalender/abo')).data.active, false);
+  const abo = await kim.req('POST', '/kalender/abo');
+  assert.match(abo.data.webcal, /^webcal:\/\/.+\/api\/kalender\/feed\?token=pck_/);
+  const feed = await fetch(`${base}/kalender/feed?token=${abo.data.token}`);
+  assert.equal(feed.status, 200);
+  assert.match(feed.headers.get('content-type'), /text\/calendar/);
+  const ics = await feed.text();
+  assert.match(ics, /BEGIN:VCALENDAR\r\n/);
+  assert.match(ics, /SUMMARY:Meeting Lieferant\r\n/);
+  assert.match(ics, /LOCATION:Düsseldorf\\, Halle 3\r\n/);
+  assert.match(ics, /DTSTART:\d{8}T\d{6}Z\r\n/);
+  assert.match(ics, /DTSTART;VALUE=DATE:\d{8}\r\n/);
+  assert.match(ics, /TRIGGER:-PT60M/);
+  // Aktionstage fürs nächste Jahr stehen automatisch im Abo (Feiertage hat jedes Handy selbst)
+  assert.match(ics, /SUMMARY:🛍 Black Friday\r\n/);
+  assert.doesNotMatch(ics, /SUMMARY:Neujahr/);
+  assert.equal((await fetch(`${base}/kalender/feed?token=pck_falsch`)).status, 401);
+  await kim.req('DELETE', '/kalender/abo');
+  assert.equal((await fetch(`${base}/kalender/feed?token=${abo.data.token}`)).status, 401);
+
+  // Widget: nur Termine, bei denen man dabei ist (oder fürs ganze Team)
+  const { data: wa } = await admin.req('POST', '/widget/token');
+  const wAdmin = await new Client().req('GET', `/widget?token=${encodeURIComponent(wa.token)}`);
+  assert.ok(wAdmin.data.events.some((e) => e.title === 'Meeting Lieferant' && e.start === '14:00'));
+  const { data: wk } = await kim.req('POST', '/widget/token');
+  const wKim = await new Client().req('GET', `/widget?token=${encodeURIComponent(wk.token)}`);
+  assert.equal(wKim.data.events.some((e) => e.title === 'Meeting Lieferant'), false);
+  assert.ok(wKim.data.events.some((e) => e.title === 'Messe Beauty'));
+  await admin.req('DELETE', '/widget/token');
+  await kim.req('DELETE', '/widget/token');
+
+  // Feiertage: Bundesland und Schalter (nur Admin)
+  assert.equal((await kim.req('PUT', '/admin/settings', { holiday_state: 'NW' })).status, 403);
+  let integ = await admin.req('PUT', '/admin/settings', { holiday_state: 'NW', shop_days_on: false });
+  assert.equal(integ.data.settings.holiday_state, 'NW');
+  assert.equal(integ.data.settings.holidays_on, true);
+  assert.equal(integ.data.settings.shop_days_on, false);
+  const m = (await kim.req('GET', '/sync?since=0')).data.meta;
+  assert.equal(m.holidayState, 'NW');
+  assert.equal(m.shopDays, false);
+  integ = await admin.req('PUT', '/admin/settings', { holiday_state: 'XX', shop_days_on: true });
+  assert.equal(integ.data.settings.holiday_state, '');
+  assert.equal(integ.data.settings.shop_days_on, true);
+
+  // Löschen wird synchronisiert
+  const cursor = s.data.serverTime;
+  await kim.req('DELETE', `/events/${id}`);
+  const inc = await admin.req('GET', `/sync?since=${cursor}`);
+  assert.equal(inc.data.events.find((e) => e.id === id)?.deleted, 1);
 });
 
 test('Statistik aus Bestellungen', () => {
@@ -384,6 +492,64 @@ test('Shopify-Domain wird geprüft', async () => {
   const r = await admin.req('PUT', '/admin/shopify', { shop: 'www.perfumecloud.de', client_id: 'abc', client_secret: 'x' });
   assert.equal(r.status, 422);
   assert.match(r.data.error, /myshopify/);
+});
+
+test('Team: Einladung per Link, löschen und wieder anlegen, Wartung', async () => {
+  // Anlegen ohne Passwort nur mit Einladung
+  assert.equal((await admin.req('POST', '/admin/users', { name: 'Ben', email: 'ben@example.de' })).status, 422);
+  const r = await admin.req('POST', '/admin/users', { name: 'Ben', email: 'Ben@Example.de', invite: true });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.restored, false);
+  // Kein echter Mailserver im Test → nicht verschickt, aber Link zum Weitergeben
+  assert.equal(r.data.invite.sent, false);
+  const token = new URL(r.data.invite.link).searchParams.get('einladung');
+  assert.match(token, /^pci_/);
+  const benId = r.data.user.id;
+
+  // Doppelt anlegen geht nicht, solange die Person aktiv ist
+  const dup = await admin.req('POST', '/admin/users', { name: 'Ben', email: 'ben@example.de', password: 'irgendwas1' });
+  assert.equal(dup.status, 422);
+  assert.match(dup.data.error, /gehört schon zu Ben/);
+
+  // Einladung annehmen
+  const ben = new Client();
+  assert.equal((await ben.req('GET', '/auth/invite?token=pci_falsch')).status, 404);
+  const info = await ben.req('GET', `/auth/invite?token=${token}`);
+  assert.deepEqual(info.data, { name: 'Ben', email: 'ben@example.de' });
+  assert.equal((await ben.req('POST', '/auth/invite', { token, password: 'kurz' })).status, 422);
+  const acc = await ben.req('POST', '/auth/invite', { token, password: 'benspasswort1' });
+  assert.equal(acc.status, 200);
+  assert.equal((await ben.req('GET', '/me')).data.user.name, 'Ben');
+  assert.equal((await new Client().req('GET', `/auth/invite?token=${token}`)).status, 404, 'Link nur einmal gültig');
+
+  // Neue Einladung erzeugt neuen Link
+  const again = await admin.req('POST', `/admin/users/${benId}/invite`);
+  assert.equal(again.status, 200);
+  assert.notEqual(new URL(again.data.link).searchParams.get('einladung'), token);
+
+  // Löschen und mit derselben E-Mail wieder anlegen → wiederhergestellt statt Fehler
+  await admin.req('DELETE', `/admin/users/${benId}`);
+  assert.equal((await ben.req('GET', '/me')).status, 401, 'Abgemeldet nach dem Entfernen');
+  const back = await admin.req('POST', '/admin/users', { name: 'Ben B.', email: 'ben@example.de', password: 'neuesstart1' });
+  assert.equal(back.status, 200, JSON.stringify(back.data));
+  assert.equal(back.data.restored, true);
+  assert.equal(back.data.user.id, benId);
+  assert.equal((await new Client().req('POST', '/auth/login', { email: 'ben@example.de', password: 'neuesstart1' })).status, 200);
+
+  // Wartung: Diagnose, Datenbank aktualisieren, Wiederherstellen
+  const diag = await admin.req('GET', '/admin/maintenance');
+  assert.equal(diag.status, 200);
+  assert.ok(diag.data.people.some((p) => p.name === 'Ben B.' && p.deleted === 0));
+  assert.equal((await kim.req('GET', '/admin/maintenance')).status, 403);
+  const epoch0 = (await admin.req('GET', '/sync?since=0')).data.meta.syncEpoch;
+  const fix = await admin.req('POST', '/admin/maintenance');
+  assert.equal(fix.status, 200, JSON.stringify(fix.data));
+  assert.ok(fix.data.log.length >= 2);
+  const epoch1 = (await admin.req('GET', '/sync?since=0')).data.meta.syncEpoch;
+  assert.ok(epoch1 > epoch0);
+  await admin.req('DELETE', `/admin/users/${benId}`);
+  const res = await admin.req('POST', `/admin/users/${benId}/restore`);
+  assert.equal(res.data.user.name, 'Ben B.');
 });
 
 test('Login-Sperre nach zu vielen Versuchen', async () => {

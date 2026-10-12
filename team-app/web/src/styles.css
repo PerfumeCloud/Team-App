@@ -52,6 +52,7 @@
 .u-amber { --u-bg: #f3e6cf; --u-fg: #855a12; }
 .u-plum { --u-bg: #e9deee; --u-fg: #6b3f7e; }
 .u-slate { --u-bg: #e0e3e7; --u-fg: #3f4752; }
+.u-holiday { --u-bg: rgb(var(--bad) / 0.12); --u-fg: rgb(var(--bad)); }
 [data-theme='dark'] .u-blue { --u-bg: #2a3956; --u-fg: #b9cbf0; }
 [data-theme='dark'] .u-sage { --u-bg: #29402f; --u-fg: #a9d1b4; }
 [data-theme='dark'] .u-rose { --u-bg: #4a2a28; --u-fg: #edb4ad; }

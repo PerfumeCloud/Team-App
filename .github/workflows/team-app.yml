@@ -41,6 +41,9 @@ jobs:
       - name: Ideen-Assistent-Tests
         run: node --test team-app/web/tests/assistant.test.mjs
 
+      - name: Feiertage-Tests (App und PHP gleich)
+        run: node --test team-app/web/tests/holidays.test.mjs
+
       - name: App bauen
         run: ./team-app/package.sh
 

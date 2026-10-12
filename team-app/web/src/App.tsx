@@ -4,11 +4,12 @@ import { AppShell } from './components/AppShell';
 import { Logo, Spinner, Toasts } from './components/ui';
 import { useStore } from './lib/store';
 import Home from './pages/Home';
-import { Login, Setup } from './pages/Auth';
+import { Invite, Login, Setup } from './pages/Auth';
 
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Notes = lazy(() => import('./pages/Notes'));
 const Ideas = lazy(() => import('./pages/Ideas'));
+const Calendar = lazy(() => import('./pages/Calendar'));
 const Inbox = lazy(() => import('./pages/Inbox'));
 const Statistics = lazy(() => import('./pages/Statistics'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -62,6 +63,9 @@ export default function App() {
   }, [boot]);
 
   if (phase === 'boot') return <Splash />;
+  // Einladungslink aus der Mail: /?einladung=pci_…
+  const invite = new URLSearchParams(window.location.search).get('einladung');
+  if (invite) return <Invite token={invite} />;
   return (
     <BrowserRouter>
       {phase === 'setup' && <Setup />}
@@ -82,6 +86,7 @@ export default function App() {
                 <Route path="/planung" element={<Tasks />} />
                 <Route path="/planung/:id" element={<Tasks />} />
                 <Route path="/ideen" element={<Ideas />} />
+                <Route path="/kalender" element={<Calendar />} />
                 <Route path="/notizen" element={<Notes />} />
                 <Route path="/notizen/:id" element={<Notes />} />
                 <Route path="/postfach" element={<Inbox />} />

@@ -8,7 +8,7 @@ final class Notify
 {
     /**
      * @param string[]|null $userIds null = alle
-     * @param string $kind mail | orders | tasks | comments | reminders
+     * @param string $kind mail | orders | tasks | comments | reminders | events
      * @param array{title:string,body:string,url?:string,tag?:string} $payload
      */
     public static function users(?array $userIds, string $kind, array $payload): int
@@ -63,9 +63,13 @@ final class Notify
     /** Zahl auf dem App-Icon: wichtige offene Mails, die diese Person sehen darf (Team + eigenes Postfach). */
     public static function badgeCount(string $userId): int
     {
+        $boxes = MailJob::visibleAddresses($userId);
+        if (!$boxes) {
+            return 0;
+        }
         return (int) Db::value(
-            "SELECT COUNT(*) FROM emails WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND (owner_id IS NULL OR owner_id = ?)",
-            [$userId]
+            "SELECT COUNT(*) FROM emails WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND mailbox IN (" . implode(',', array_fill(0, count($boxes), '?')) . ')',
+            $boxes
         );
     }
 

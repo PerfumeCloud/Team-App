@@ -3,7 +3,8 @@
 // damit die Tests ihn direkt mit Node laden können.
 
 export type Priority = 'low' | 'normal' | 'high';
-export type Mode = 'auto' | 'note' | 'tasks';
+export type Mode = 'auto' | 'note' | 'tasks' | 'event';
+export type EventKind = 'termin' | 'meeting' | 'event' | 'frist';
 
 export interface Person {
   id: string;
@@ -34,9 +35,26 @@ export interface DraftNote {
   body: string;
 }
 
+export interface DraftEvent {
+  key: string;
+  title: string;
+  kind: EventKind;
+  date: string;
+  /** Letzter Tag bei mehrtägigen Terminen */
+  endDate: string | null;
+  /** HH:MM; null = ganztägig */
+  start: string | null;
+  end: string | null;
+  location: string | null;
+  /** Teilnehmer; leer = ganzes Team */
+  attendees: string[];
+}
+
 export interface Draft {
   note: DraftNote | null;
   tasks: DraftTask[];
+  /** Fehlt in älteren gespeicherten Verläufen */
+  events?: DraftEvent[];
 }
 
 /* ───────────────────────── Hilfen ───────────────────────── */
@@ -126,9 +144,8 @@ function upcomingMonth(today: Date, m0: number): number {
   return m0 < today.getMonth() ? today.getFullYear() + 1 : today.getFullYear();
 }
 
-/** Sucht die (längste) Datumsangabe im Text. */
-export function findDate(text: string, todayIso: string): DateHit | null {
-  const today = parseIso(todayIso);
+/** Alle Datumsangaben im Text (auch überlappende). */
+function dateHits(text: string, today: Date): DateHit[] {
   const hits: DateHit[] = [];
   const add = (re: RegExp, make: (m: RegExpExecArray) => Date | null) => {
     const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
@@ -203,7 +220,12 @@ export function findDate(text: string, todayIso: string): DateHit | null {
   add(word('muttertag'), yearly((yr) => nthWeekday(yr, 4, 0, 2)));
   add(word('black\\s+friday'), yearly((yr) => plus(nthWeekday(yr, 10, 4, 4), 1)));
   add(word('cyber\\s+monday'), yearly((yr) => plus(nthWeekday(yr, 10, 4, 4), 4)));
+  return hits;
+}
 
+/** Sucht die (längste) Datumsangabe im Text. */
+export function findDate(text: string, todayIso: string): DateHit | null {
+  const hits = dateHits(text, parseIso(todayIso));
   if (!hits.length) return null;
   hits.sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);
   const hit = hits[0];
@@ -218,6 +240,153 @@ export function findDate(text: string, todayIso: string): DateHit | null {
   // „bis KW 47“ = Freitag dieser Woche
   if (hit.deadline && /kw\s?\d/i.test(text.slice(hit.start, hit.end))) hit.date = plus(hit.date, 4);
   return hit;
+}
+
+/* ───────────────────────── Uhrzeit, Zeitraum, Ort ───────────────────────── */
+
+interface Span {
+  start: number;
+  end: number;
+}
+export interface TimeHit extends Span {
+  from: string;
+  to: string | null;
+}
+
+const HOUR_WORDS: Record<string, number> = { ...NUMBERS, eins: 1 };
+const DAYPART = '(?:\\s+(?:uhr\\s+)?(morgens|früh|vormittags|mittags|nachmittags|abends|nachts))?';
+// Zahl danach ist eine Menge, keine Uhrzeit („von 10 bis 20 Stück“)
+const NO_UNIT = '(?!\\s*(?:%|prozent|euro|eur|€|stück|stk|tage?n?|wochen?|monate?n?|jahre?n?|minuten|min|sekunden|cent|kg|g|ml|l|x|mal|leute|personen|flakons?|proben?)(?![\\p{L}]))';
+const T = '(\\d{1,2})(?:([:.])(\\d{2}))?(?!\\d)';
+const B = '(^|[^\\p{L}\\p{N}.:])';
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** Stunde anpassen: „um 3“ und „abends um 8“ meinen den Nachmittag bzw. Abend. */
+function hour(h: number, part: string | undefined, hasMinutes: boolean): number {
+  const p = part?.toLowerCase();
+  if (p && /nachmittags|abends/.test(p) && h < 12) return h + 12;
+  if (p === 'nachts' && h === 12) return 0;
+  if (!p && !hasMinutes && h >= 1 && h <= 6) return h + 12;
+  return h;
+}
+function hhmm(h: number, m: number): string | null {
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59 ? `${pad2(h)}:${pad2(m)}` : null;
+}
+
+/** Sucht eine Uhrzeit („um 14 Uhr“, „14:30“, „von 10 bis 12“, „halb drei“). */
+export function findTime(text: string): TimeHit | null {
+  const flags = 'iu';
+  // von 10 bis 12 Uhr · 10–12 Uhr · 10:00-11:30 · zwischen 10 und 12
+  const range = new RegExp(`${B}(?:(von|zwischen)\\s+)?${T}\\s*(?:uhr\\s*)?(-|–|bis|und)\\s*${T}\\s*(uhr)?${DAYPART}${NO_UNIT}`, flags).exec(text);
+  if (range) {
+    const [, pre, von, h1, s1, m1, sep, h2, s2, m2, uhr, part] = range;
+    const dotted = s1 === '.' || s2 === '.';
+    const ok = (von || uhr || s1 === ':' || s2 === ':') && (sep.toLowerCase() !== 'und' || von?.toLowerCase() === 'zwischen') && (!dotted || uhr);
+    if (ok) {
+      const a = hour(+h1, part, !!m1);
+      let b = hour(+h2, part, !!m2);
+      if (b < a && b + 12 <= 23) b += 12;
+      const from = hhmm(a, +(m1 ?? 0));
+      const to = hhmm(b, +(m2 ?? 0));
+      if (from && to && to > from) return { start: range.index + pre.length, end: range.index + range[0].length, from, to };
+    }
+  }
+  // halb drei · viertel nach 10 · viertel vor 3
+  const quarter = new RegExp(`${B}(?:um\\s+)?(halb|viertel\\s+nach|viertel\\s+vor|dreiviertel)\\s+(\\d{1,2}|${Object.keys(HOUR_WORDS).join('|')})(?:\\s+uhr)?${DAYPART}(?![\\p{L}])`, flags).exec(text);
+  if (quarter) {
+    const [, pre, kind, n, part] = quarter;
+    const base = /^\d+$/.test(n) ? +n : HOUR_WORDS[n.toLowerCase()];
+    const k = kind.toLowerCase().replace(/\s+/g, ' ');
+    const [h, m] = k === 'halb' ? [base - 1, 30] : k === 'viertel nach' ? [base, 15] : [base - 1, 45];
+    const t = hhmm(hour(h, part, false), m);
+    if (t) return { start: quarter.index + pre.length, end: quarter.index + quarter[0].length, from: t, to: null };
+  }
+  // um 14 Uhr · ab 10 · gegen 9:30 · 14 Uhr · 14:30
+  const single = new RegExp(`${B}(?:(um|ab|gegen|so\\s+um|ca\\.?\\s+um)\\s+)?${T}(\\s*uhr)?${DAYPART}${NO_UNIT}(?![\\p{L}\\p{N}]|[.:]\\d)`, flags);
+  const g = new RegExp(single.source, 'giu');
+  let m: RegExpExecArray | null;
+  while ((m = g.exec(text))) {
+    const [, pre, um, h, sep, min, uhr, part] = m;
+    if (g.lastIndex === m.index) g.lastIndex++;
+    if (!(um || uhr || sep === ':')) continue;
+    if (sep === '.' && !uhr) continue;
+    const t = hhmm(hour(+h, part, !!min), +(min ?? 0));
+    if (t) return { start: m.index + pre.length, end: m.index + m[0].length, from: t, to: null };
+  }
+  return null;
+}
+
+export interface RangeHit extends Span {
+  from: Date;
+  to: Date;
+}
+
+const RANGE_TAIL = '\\s*(?:-|–|bis(?:\\s+(?:zum|zur|einschließlich))?)\\s*';
+const RANGE_FROM = '(?:vom|von|ab)\\s+(?:dem\\s+)?';
+const RANGE_HEAD = `(?:${RANGE_FROM})?`;
+
+/** Zeitraum über mehrere Tage („vom 20. bis 24.10.“, „20.–24. Oktober“, „Montag bis Mittwoch“). */
+export function findRange(text: string, todayIso: string): RangeHit | null {
+  const today = parseIso(todayIso);
+  const make = (index: number, pre: string, len: number, from: Date | null, to: Date | null): RangeHit | null => {
+    if (!from || !to) return null;
+    if (to < from) to = from.getTime() - to.getTime() <= 7 * 864e5 ? plus(to, 7) : new Date(to.getFullYear() + 1, to.getMonth(), to.getDate());
+    if (to.getTime() - from.getTime() > 62 * 864e5 || to.getTime() === from.getTime()) return null;
+    return { start: index + pre.length, end: index + len, from, to };
+  };
+  const sameMonth = (d1: number, d2: number, m0: number, year?: number) => {
+    const to = upcoming(today, m0, d2, year);
+    if (!to) return [null, null];
+    const from = d1 <= d2 ? new Date(to.getFullYear(), m0, d1) : new Date(to.getFullYear(), m0 - 1, d1);
+    return [from, to];
+  };
+  // vom 20. bis 24.10.(2026)
+  let m = new RegExp(`(^|[^\\p{L}\\p{N}.])${RANGE_HEAD}(\\d{1,2})\\.?${RANGE_TAIL}(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4}|\\d{2})?(?!\\d)`, 'iu').exec(text);
+  if (m) {
+    const [from, to] = sameMonth(+m[2], +m[3], +m[4] - 1, m[5] ? +m[5] : undefined);
+    const hit = make(m.index, m[1], m[0].length, from, to);
+    if (hit) return hit;
+  }
+  // 20. bis 24. Oktober
+  m = new RegExp(`(^|[^\\p{L}\\p{N}.])${RANGE_HEAD}(\\d{1,2})\\.?${RANGE_TAIL}(\\d{1,2})\\.?\\s*(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?(?![\\p{L}])`, 'iu').exec(text);
+  if (m) {
+    const [from, to] = sameMonth(+m[2], +m[3], MONTHS[m[4].toLowerCase()] - 1, m[5] ? +m[5] : undefined);
+    const hit = make(m.index, m[1], m[0].length, from, to);
+    if (hit) return hit;
+  }
+  // Zwei Datumsangaben mit „bis“ dazwischen
+  const all = dateHits(text, today).sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);
+  const picked: DateHit[] = [];
+  for (const h of all) if (!picked.some((p) => h.start < p.end && p.start < h.end)) picked.push(h);
+  picked.sort((a, b) => a.start - b.start);
+  for (let i = 0; i + 1 < picked.length; i++) {
+    const [a, b] = [picked[i], picked[i + 1]];
+    if (!new RegExp(`^${RANGE_TAIL}$`, 'iu').test(text.slice(a.end, b.start))) continue;
+    const head = new RegExp(`(^|\\s)${RANGE_FROM}$`, 'iu').exec(text.slice(0, a.start));
+    const start = head ? head.index + head[1].length : a.start;
+    const hit = make(start, '', b.end - start, a.date, b.date);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+const ONLINE: Record<string, string> = { zoom: 'Zoom', teams: 'Teams', 'google meet': 'Google Meet', meet: 'Google Meet', skype: 'Skype', facetime: 'FaceTime', whatsapp: 'WhatsApp', telefon: 'Telefon', video: 'Videocall' };
+
+/** Ort: „in Düsseldorf“, „im Büro“, „bei Flakon & Co“, „in der Halle 3“, „per Zoom“. */
+export function findLocation(text: string, ctx: Context): (Span & { location: string; bei: boolean }) | null {
+  const online = /(^|[\s,(])(?:per|über|via|im|auf|in)\s+(google\s+meet|zoom|teams|meet|skype|facetime|whatsapp|telefon|video)(?![\p{L}])/iu.exec(text);
+  if (online) return { start: online.index + online[1].length, end: online.index + online[0].length, location: ONLINE[online[2].toLowerCase().replace(/\s+/g, ' ')], bei: false };
+  const re = /(^|[\s,(])(in|im|bei|beim|auf\s+der|auf\s+dem|ort:)\s+(?:der\s+|dem\s+|den\s+)?((?:[A-ZÄÖÜ][\p{L}\d.&'’-]*)(?:\s+(?:&\s+)?(?:[A-ZÄÖÜ\d][\p{L}\d.&'’-]*))*)/gu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const place = m[3].replace(/[.,]+$/, '');
+    const first = place.split(/\s+/)[0];
+    if (!isPersonName(first, ctx) && !eventKind(first.toLowerCase()) && !/^(?:KW|Ruhe|Zukunft|Kürze|Gold|Silber|Schwarz|Weiß)$/u.test(place)) {
+      return { start: m.index + m[1].length, end: m.index + m[0].length - (m[3].length - place.length), location: place, bei: /^bei/i.test(m[2]) };
+    }
+  }
+  return null;
 }
 
 /* ───────────────────────── Priorität, Kategorie ───────────────────────── */
@@ -504,6 +673,123 @@ function analyze(raw: string, ctx: Context, opts: { bullet: boolean; children: s
   };
 }
 
+/* ───────────────────────── Termine ───────────────────────── */
+
+const KIND_LABEL: Record<EventKind, string> = { termin: 'Termin', meeting: 'Meeting', event: 'Event', frist: 'Frist' };
+
+/** Art des Termins aus einem Wort – auch zusammengesetzt („Teammeeting“, „Zahnarzttermin“, „Parfummesse“). */
+function eventKind(w: string): EventKind | null {
+  if (/^frist|frist$|fristende|^deadline$|stichtag|abgabeschluss|abgabetermin/.test(w)) return 'frist';
+  if (/meeting|besprechung|^call$|call$|telefonat|^telko$|^jour$|^kick-?off$|^stand-?up$|treffen$|^zoom$/.test(w)) return 'meeting';
+  if ((/^messe|messe$/.test(w) && !/^messe[nr]/.test(w)) || /workshop|webinar|konferenz|seminar|veranstaltung|^event|event$|shooting|^drehtag$|^launch$|party$|feier$|festival|^pop-?up/.test(w)) return 'event';
+  if (/termin|interview|präsentation|^(?:abend|mittag|geschäfts|arbeits)essen$|geburtstag|urlaub|besuch$|sprechstunde/.test(w)) return 'termin';
+  return null;
+}
+
+/** Verben, die den Termin selbst beschreiben – „Ben treffen“ ist ein Termin, „Meeting vorbereiten“ eine Aufgabe. */
+const MEET_VERBS = new Set(['treffen', 'telefonieren', 'sprechen', 'besprechen', 'essen', 'feiern', 'zoomen', 'callen', 'reden', 'sehen', 'kommen', 'vorbeikommen', 'fahren', 'fliegen']);
+const EVENT_PREFIX = /^(termin|meeting|event|frist|deadline|kalender)\s*:\s*/iu;
+
+function plusHour(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  return h >= 23 ? '23:59' : `${pad2(h + 1)}:${pad2(m)}`;
+}
+
+/** Teilnehmer: genannte Personen; „mit Ben“ oder „wir“ heißt: ich bin auch dabei. Leer = ganzes Team. */
+function findAttendees(text: string, ctx: Context): { ids: string[]; text: string } {
+  let s = text;
+  const ids = new Set<string>();
+  let withMe = /(^|[^\p{L}])(?:wir|uns)(?=$|[^\p{L}])/iu.test(s);
+  const self = /(^|[^\p{L}])(?:ich|mir|mich)(?=$|[^\p{L}])/iu.test(s);
+  for (const p of ctx.people) {
+    const names = [...new Set([p.name, p.name.split(/\s+/)[0]])].filter((n) => n.length >= 2).sort((a, b) => b.length - a.length);
+    for (const n of names) {
+      const m = word(`@?${escape(n)}`).exec(s);
+      if (!m) continue;
+      ids.add(p.id);
+      const start = m.index + m[1].length;
+      const end = m.index + m[0].length;
+      if (/(?:^|\s)mit\s+(?:@?[\p{L}]+(?:,\s*|\s+und\s+))*$/iu.test(s.slice(0, start))) withMe = true;
+      // „Ben: Zahnarzt“ → Titel ohne Namen
+      if (!s.slice(0, start).trim() && /^\s*:/.test(s.slice(end))) s = s.slice(end).replace(/^\s*:\s*/, '');
+      else if (m[2].startsWith('@')) s = s.slice(0, start) + m[2].slice(1) + s.slice(end);
+      break;
+    }
+  }
+  if (/(^|[^\p{L}])(?:team|alle|allen)(?=$|[^\p{L}])/iu.test(s)) return { ids: [], text: s };
+  if (!ids.size) return { ids: self && !withMe && ctx.meId ? [ctx.meId] : [], text: s };
+  if ((withMe || self) && ctx.meId) ids.add(ctx.meId);
+  if (ctx.people.length > 1 && ctx.people.every((p) => ids.has(p.id))) return { ids: [], text: s };
+  return { ids: [...ids], text: s };
+}
+
+/**
+ * Ein Abschnitt als Termin – oder null, wenn es keiner ist.
+ * Termin = Uhrzeit („um 14 Uhr“) oder Termin-Wort mit Datum („Messe vom 20. bis 24.10.“).
+ * „bis Freitag“ und „Meeting vorbereiten“ bleiben Aufgaben.
+ */
+function eventFrom(raw: string, ctx: Context, forced: boolean): Omit<DraftEvent, 'key'> | null {
+  let s = squash(raw).replace(/(^|\s)#(?=[\p{L}])/gu, '$1');
+  if (!forced && IDEA_OPENER.test(s.replace(FILLER_START, ''))) return null;
+  let kind: EventKind | null = null;
+  const prefix = EVENT_PREFIX.exec(s);
+  if (prefix) {
+    const p = prefix[1].toLowerCase();
+    kind = p === 'deadline' ? 'frist' : p === 'kalender' ? null : (p as EventKind);
+    s = s.slice(prefix[0].length);
+    forced = true;
+  }
+  const allDay = word('ganztägig|ganztags|den\\s+ganzen\\s+tag').exec(s);
+  if (allDay) s = removeSpan(s, allDay.index + allDay[1].length, allDay.index + allDay[0].length);
+  const time = allDay ? null : findTime(s);
+  // „bis 12 Uhr“ ist eine Frist für eine Aufgabe
+  const timeDeadline = !!time && /(?:^|\s)(?:bis|spätestens|vor)\s+(?:um\s+)?$/iu.test(s.slice(0, time.start));
+  if (time) s = removeSpan(s, time.start, time.end);
+  const range = findRange(s, ctx.today);
+  const date = range ? null : findDate(s, ctx.today);
+  if (range) s = removeSpan(s, range.start, range.end);
+  else if (date) s = removeSpan(s, date.start, date.end);
+
+  const found = s.toLowerCase().split(/[^\p{L}-]+/u).map(eventKind).find(Boolean) ?? null;
+  kind ??= found;
+  let loc = findLocation(s, ctx);
+  if (loc) {
+    // „Termin beim Steuerberater“: ohne den Zusatz bliebe nur „Termin“ – dann gehört er in den Titel
+    const rest = removeSpan(s, loc.start, loc.end);
+    if (loc.bei && (!trimPunct(rest) || eventKind(trimPunct(rest).toLowerCase()))) loc = null;
+    else s = rest;
+  }
+
+  if (!forced) {
+    const last = lastWord(trimPunct(s));
+    const taskVerb = looksLikeInfinitive(last) && !MEET_VERBS.has(last.toLowerCase());
+    const timed = !!time && !timeDeadline && !date?.deadline;
+    const keyword = !!found && !!(range || date) && (!date?.deadline || found === 'frist') && !taskVerb;
+    if (!timed && !keyword) return null;
+  }
+
+  const who = findAttendees(s, ctx);
+  let title = who.text
+    .replace(/^wir\s+treffen\s+uns\b/iu, 'Treffen')
+    .replace(/^(?:ich|wir)\s+(?:habe|hab|haben)\s+(?:noch\s+)?(?:(?:einen|ein|eine)\s+)?/iu, '')
+    .replace(/^(?:da\s+)?(?:ist|gibt\s+es)\s+(?:noch\s+)?(?:(?:einen|ein|eine)\s+)?/iu, '');
+  title = cleanTitle(title)
+    .replace(/(?:^|\s)(?:am|um|ab|vom|von|bis|im|in|zum|zur|an|für|mit|jeden|jede|jedes|immer)$/iu, '')
+    .replace(/^(?:am|um|ab|vom|von|im|in|zum|zur)\s+/iu, '');
+  const k = kind ?? 'termin';
+  const from = time?.from ?? null;
+  return {
+    title: capitalize(trimPunct(title)) || KIND_LABEL[k],
+    kind: k,
+    date: iso(range ? range.from : date ? date.date : parseIso(ctx.today)),
+    endDate: range ? iso(range.to) : null,
+    start: from,
+    end: from ? (time?.to ?? (k === 'frist' ? null : plusHour(from))) : null,
+    location: loc?.location ?? null,
+    attendees: who.ids,
+  };
+}
+
 /* ───────────────────────── Zerlegen in Abschnitte ───────────────────────── */
 
 interface Segment {
@@ -546,9 +832,11 @@ function isPersonName(s: string, ctx: Context): boolean {
   return t === 'ich' || ctx.people.some((p) => p.name.toLowerCase() === t || p.name.split(/\s+/)[0].toLowerCase() === t);
 }
 
-/** Nur Priorität oder Datum („nicht dringend“, „bis Freitag“) – gehört zum Satzteil davor. */
+/** Nur Priorität, Datum oder Uhrzeit („nicht dringend“, „bis Freitag“, „14 Uhr“) – gehört zum Satzteil davor. */
 function onlyModifier(text: string, ctx: Context): boolean {
   let s = findPriority(text).text;
+  const time = findTime(s);
+  if (time) s = removeSpan(s, time.start, time.end);
   const date = findDate(s, ctx.today);
   if (date) s = removeSpan(s, date.start, date.end);
   return !trimPunct(s);
@@ -566,7 +854,10 @@ function clauses(sentence: string, ctx: Context): { text: string; glue: string }
   let last = 0;
   let glue = '';
   let m: RegExpExecArray | null;
+  const nextPerson = new RegExp(`^@?(?:${ahead})(?:$|[^\\p{L}])`, 'iu');
   while ((m = re.exec(sentence))) {
+    // „Meeting mit Ben, Keanu und …“: Aufzählung der Teilnehmer bleibt zusammen
+    if (/(?:^|\s)mit\s+@?[\p{L}]+(?:,\s*@?[\p{L}]+)*$/iu.test(sentence.slice(last, m.index)) && nextPerson.test(sentence.slice(m.index + m[0].length))) continue;
     out.push({ text: sentence.slice(last, m.index), glue });
     glue = m[0];
     last = m.index + m[0].length;
@@ -641,27 +932,35 @@ const key = () => `d${Date.now().toString(36)}${(counter++).toString(36)}`;
 
 export function parseIdea(input: string, ctx: Context, mode: Mode = 'auto'): Draft {
   let text = input.replace(/\r/g, '').replace(/[ \t]+$/gm, '').trim();
-  if (!text) return { note: null, tasks: [] };
+  if (!text) return { note: null, tasks: [], events: [] };
 
   if (mode === 'auto' && /^\s*notiz\s*:/iu.test(text)) mode = 'note';
   if (mode === 'auto' && /^\s*(?:aufgaben|to-?dos)\s*:\s*\n/iu.test(text)) {
     mode = 'tasks';
     text = text.replace(/^\s*(?:aufgaben|to-?dos)\s*:\s*\n/iu, '');
   }
-  if (mode === 'note') return { note: noteFrom(text), tasks: [] };
-
-  const segs = segments(text, ctx);
-  const analyzed = segs.map((s) => ({ seg: s, a: analyze(s.text, ctx, s) }));
-
-  if (mode === 'tasks') {
-    return { note: null, tasks: analyzed.map(({ a }) => ({ key: key(), ...a.task })) };
+  if (mode === 'note') return { note: noteFrom(text), tasks: [], events: [] };
+  if (mode === 'event') {
+    return { note: null, tasks: [], events: [{ key: key(), ...eventFrom(text.replace(/\s*\n\s*/g, ' '), ctx, true)! }] };
   }
 
-  const tasks = analyzed.filter((x) => x.a.isTask);
-  if (!tasks.length) return { note: noteFrom(text), tasks: [] };
+  const segs = segments(text, ctx);
+  const analyzed = segs.map((s) => ({
+    seg: s,
+    a: analyze(s.text, ctx, s),
+    ev: mode === 'auto' && !s.children.length ? eventFrom(s.text, ctx, false) : null,
+  }));
+
+  if (mode === 'tasks') {
+    return { note: null, tasks: analyzed.map(({ a }) => ({ key: key(), ...a.task })), events: [] };
+  }
+
+  const events = analyzed.filter((x) => x.ev).map((x) => ({ key: key(), ...x.ev! }));
+  const tasks = analyzed.filter((x) => !x.ev && x.a.isTask);
+  if (!tasks.length && !events.length) return { note: noteFrom(text), tasks: [], events: [] };
 
   const narrative = analyzed
-    .filter((x) => !x.a.isTask)
+    .filter((x) => !x.ev && !x.a.isTask)
     .map((x, i) => (i ? x.seg.glue.replace(/^\s*[,;]\s*$/, ', ') : '') + x.seg.text.trim())
     .join('')
     .replace(/[ \t]*\n[ \t]*/g, '\n')
@@ -670,7 +969,7 @@ export function parseIdea(input: string, ctx: Context, mode: Mode = 'auto'): Dra
   // Kurze Überschrift über einer Liste („Adventskalender:“) wird zur Kategorie der Aufgaben
   const firstLine = narrative.split('\n')[0];
   const heading =
-    !analyzed[0].a.isTask && !analyzed[0].seg.bullet && firstLine === analyzed[0].seg.text.trim() && firstLine.split(/\s+/).length <= 4 && !/[!?.]$/.test(firstLine)
+    !analyzed[0].a.isTask && !analyzed[0].ev && !analyzed[0].seg.bullet && firstLine === analyzed[0].seg.text.trim() && firstLine.split(/\s+/).length <= 4 && !/[!?.]$/.test(firstLine)
       ? trimPunct(firstLine)
       : null;
 
@@ -681,13 +980,20 @@ export function parseIdea(input: string, ctx: Context, mode: Mode = 'auto'): Dra
       ...a.task,
       category: heading && !/(^|\s)#/.test(text) ? canonicalCategory(heading, ctx.categories) : a.task.category,
     })),
+    events,
   };
 }
 
 /** Kurze, menschliche Zusammenfassung für die Antwort im Chat. */
 export function summary(d: Draft): string {
   const n = d.tasks.length;
+  const e = d.events?.length ?? 0;
   const t = n === 1 ? 'eine Aufgabe' : `${n} Aufgaben`;
+  if (e && !n && !d.note) return e === 1 ? 'Das trage ich in den Kalender ein:' : `${e} Termine für den Kalender:`;
+  if (e) {
+    const parts = [d.note ? 'eine Notiz' : '', n ? t : '', e === 1 ? 'einen Termin' : `${e} Termine`].filter(Boolean);
+    return `Daraus mache ich ${parts.slice(0, -1).join(', ')} und ${parts[parts.length - 1]}:`;
+  }
   if (d.note && n) return `Daraus mache ich eine Notiz und ${t}:`;
   if (d.note) return 'Das klingt nach einer Idee – ich lege eine Notiz an:';
   if (n) return `Ich habe ${t} erkannt:`;

@@ -9,12 +9,14 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **Übersicht:** Umsatz heute, offener Versand, wichtige Mails, eigene Aufgaben, Team-Verlauf
 - **Planung:** Aufgaben mit Zuständigkeit, Fälligkeit, Priorität, Kategorie, Checkliste und Kommentaren (Board am PC, Liste am Handy)
 - **Notizen:** gemeinsame Pläne und Ideen mit Autosave
-- **Ideen-Assistent:** Idee einfach hinschreiben oder diktieren – daraus werden Notiz und Aufgaben (mit Zuständigkeit, Datum, Priorität, Kategorie, Checkliste). Läuft ohne KI direkt in der App, kostenlos und offline
-- **Postfach:** offene Mails aus info@ und support@ (für alle) plus das eigene persönliche Postfach jeder Person (nur für sie sichtbar), IMAP, nur lesend
-- **Push bei jeder neuen Mail:** Team-Mails an alle, persönliche Mails nur an den Besitzer
+- **Ideen-Assistent:** Idee einfach hinschreiben oder diktieren – daraus werden Notiz, Aufgaben (mit Zuständigkeit, Datum, Priorität, Kategorie, Checkliste) und Termine (Uhrzeit, Zeitraum, Ort, Teilnehmer). Läuft ohne KI direkt in der App, kostenlos und offline
+- **Kalender:** Termine, Meetings, Events und Fristen mit Erinnerung und Einladung per Push, Abo für die iPhone-/Outlook-Kalender-App, Feiertage je Bundesland und Shop-Aktionstage (Black Friday, Muttertag …) automatisch für jedes Jahr
+- **Postfach:** beliebige Postfächer (info@, support@, persönliche) mit „Sichtbar für“ je Postfach, IMAP, nur lesend
+- **Push bei Mails:** wählbar „Jede neue“, „Wirklich alle“ oder „Nur wichtige“ – immer nur an die Personen, die das Postfach sehen
+- **Team:** Einladung per Mail mit Link zum Passwort-Festlegen, gelöschte Personen wiederherstellen, Wartung mit „Datenbank aktualisieren“ und Geräte-Status
 - **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Artikel pro Bestellung, bester Tag, Stornos, Erstattungen, Top-Düfte, knapper Bestand – jeweils mit Veränderung in % (grün = besser, rot = schlechter) (Shopify Admin API)
 - **Push-Nachrichten:** neue wichtige Mail, neue Bestellung, zugewiesene Aufgabe, Kommentare, Erinnerung am Morgen
-- **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm)
+- **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm), auch als Kalender-Widget
 
 **Kosten:** keine. Die App läuft auf dem vorhandenen netcup-Webhosting (PHP + MySQL + Cronjob) und nutzt den Shopify-Zugang aus dem bestehenden Abo.
 
@@ -51,6 +53,7 @@ Beispieldaten für eine Vorschau: `PC_CONFIG=… PC_STORAGE=… php team-app/ser
 ```bash
 node --test team-app/server/tests/backend.test.mjs   # API, Sync, Mail-Erkennung, Push-Verschlüsselung, Widget
 node --test team-app/web/tests/widget.test.mjs       # Scriptable-Widget
-node --test team-app/web/tests/assistant.test.mjs    # Ideen-Assistent (Text → Notiz/Aufgaben)
+node --test team-app/web/tests/assistant.test.mjs    # Ideen-Assistent (Text → Notiz/Aufgaben/Termine)
+node --test team-app/web/tests/holidays.test.mjs     # Feiertage/Aktionstage, gleich in App und PHP
 cd team-app/web && npx tsc -b                         # Typprüfung
 ```

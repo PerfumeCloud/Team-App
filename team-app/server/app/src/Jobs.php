@@ -20,10 +20,11 @@ final class Jobs
             if (Shopify::configured()) {
                 $summary['shopify'] = self::safe(static fn () => OrdersJob::run(), 'shopify_status');
             }
-            if (MailJob::allMailboxes()) {
+            if (MailJob::mailboxes()) {
                 $summary['mail'] = MailJob::run();
             }
             $summary['reminders'] = self::safe(static fn () => self::reminders(), null);
+            $summary['events'] = self::safe(static fn () => Calendar::remind(), null);
             $summary['cleanup'] = self::safe(static fn () => self::cleanup(), null);
             Settings::set('jobs_last_run', Util::now());
             if ($trigger === 'cron') {

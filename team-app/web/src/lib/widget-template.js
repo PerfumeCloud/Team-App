@@ -2,9 +2,12 @@
 // Persönlicher, nur lesender Zugang für __NAME__ – bitte nicht weitergeben.
 // Neu erzeugen oder sperren: Team-App → Einstellungen → iPhone-Widget.
 // Größe: klein, mittel oder groß – einfach das Widget in der gewünschten Größe hinzufügen.
+// Kalender-Widget: Widget lange drücken → „Widget bearbeiten“ → bei Parameter „kalender“ eintragen.
 
 const BASE_URL = '__URL__';
 const TOKEN = '__TOKEN__';
+const PARAM = typeof args !== 'undefined' && args && args.widgetParameter ? String(args.widgetParameter).toLowerCase() : '';
+const CALENDAR = PARAM.includes('kalender') || PARAM.includes('termin');
 
 const C = {
   bg: Color.dynamic(new Color('#F6F2EB'), new Color('#121315')),
@@ -16,6 +19,19 @@ const C = {
   bad: Color.dynamic(new Color('#B4443A'), new Color('#E57A6E')),
   warn: Color.dynamic(new Color('#A8661A'), new Color('#E0A050')),
 };
+// Farben je Art des Termins – wie in der App
+const KIND = {
+  termin: Color.dynamic(new Color('#2F4E85'), new Color('#B9CBF0')),
+  meeting: Color.dynamic(new Color('#3F6B4E'), new Color('#A9D1B4')),
+  event: Color.dynamic(new Color('#6B3F7E'), new Color('#D3B2E0')),
+  frist: Color.dynamic(new Color('#8E3B36'), new Color('#EDB4AD')),
+  // automatisch eingetragen
+  feiertag: C.bad,
+  aktion: C.warn,
+};
+const SPECIAL = { feiertag: 'Feiertag', aktion: 'Aktionstag' };
+// Eingetragene Termine – Feiertage und Aktionstage nur, wo eine Liste Platz hat
+const own = (d) => (d.events || []).filter((e) => !SPECIAL[e.kind]);
 
 const euro = (cents) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format((cents || 0) / 100);
 const fm = FileManager.local();
@@ -140,6 +156,109 @@ function mailList(stack, mails, max) {
   }
 }
 
+// ---------- Kalender ----------
+
+function dayName(iso) {
+  if (iso === isoToday(0)) return 'Heute';
+  if (iso === isoToday(1)) return 'Morgen';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
+}
+
+function eventTime(e) {
+  if (SPECIAL[e.kind]) return SPECIAL[e.kind];
+  if (!e.start) return e.endDate && e.endDate !== e.date ? 'ganztägig, bis ' + dayName(e.endDate) : 'ganztägig';
+  return e.end ? e.start + '–' + e.end : e.start + ' Uhr';
+}
+
+function eventLine(stack, e, opts) {
+  const row = stack.addStack();
+  row.spacing = 7;
+  const bar = row.addStack();
+  bar.size = new Size(3, opts.tall ? 30 : 24);
+  bar.cornerRadius = 1.5;
+  bar.backgroundColor = KIND[e.kind] || C.accent;
+  const col = row.addStack();
+  col.layoutVertically();
+  const top = col.addStack();
+  text(top, (opts.withDay ? dayName(e.date) + ' · ' : '') + eventTime(e), Font.mediumSystemFont(10), C.ink3);
+  text(col, e.title, Font.semiboldSystemFont(opts.big ? 14 : 12), C.ink, opts.big ? 2 : 1);
+  if (opts.tall && e.location) text(col, e.location, Font.systemFont(10), C.ink2);
+  row.addSpacer();
+  stack.addSpacer(opts.gap || 6);
+}
+
+function calSmall(widget, d) {
+  const events = d.events || [];
+  const row = widget.addStack();
+  row.centerAlignContent();
+  symbol(row, 'calendar', 12, C.accent);
+  row.addSpacer(5);
+  text(row, 'Termine', new Font('Georgia-Bold', 13), C.ink);
+  widget.addSpacer(8);
+  if (!events.length) {
+    text(widget, 'Nichts geplant', Font.semiboldSystemFont(14), C.ink);
+    text(widget, 'in den nächsten 14 Tagen', Font.systemFont(11), C.ink2, 2);
+    widget.addSpacer();
+    return;
+  }
+  const e = own(d)[0] || events[0];
+  text(widget, dayName(e.date).toUpperCase(), Font.semiboldSystemFont(10), KIND[e.kind] || C.accent);
+  text(widget, eventTime(e), Font.mediumSystemFont(11), C.ink2);
+  widget.addSpacer(2);
+  text(widget, e.title, Font.boldSystemFont(15), C.ink, 3);
+  if (e.location) text(widget, e.location, Font.systemFont(10), C.ink2);
+  widget.addSpacer();
+  if (events.length > 1) text(widget, '+ ' + (events.length - 1) + ' weitere', Font.systemFont(10), C.ink3);
+}
+
+function calList(widget, d, max) {
+  header(widget, d.name);
+  widget.addSpacer(8);
+  const events = (d.events || []).slice(0, max);
+  if (!events.length) {
+    text(widget, 'Keine Termine in den nächsten 14 Tagen.', Font.systemFont(12), C.ink2, 2);
+    return;
+  }
+  let lastDay = null;
+  for (const e of events) {
+    if (max > 4 && e.date !== lastDay) {
+      if (lastDay !== null) widget.addSpacer(2);
+      text(widget, dayName(e.date).toUpperCase(), Font.semiboldSystemFont(9), C.ink3);
+      widget.addSpacer(4);
+      lastDay = e.date;
+    }
+    eventLine(widget, e, { withDay: max <= 4, tall: max > 4 });
+  }
+}
+
+function calLock(widget, family, d) {
+  const events = d.events || [];
+  const today = own(d).filter((e) => e.date <= isoToday(0));
+  if (family === 'accessoryInline') {
+    const e = own(d)[0] || events[0];
+    text(widget, e ? '📅 ' + (e.date === isoToday(0) ? '' : dayName(e.date) + ' ') + (e.start || '') + ' ' + e.title : '📅 Keine Termine', Font.systemFont(12), Color.white());
+    return;
+  }
+  if (family === 'accessoryCircular') {
+    widget.addSpacer();
+    const t = text(widget, today.length, Font.boldSystemFont(22), Color.white());
+    t.centerAlignText();
+    const l = text(widget, 'heute', Font.systemFont(10), Color.white());
+    l.centerAlignText();
+    widget.addSpacer();
+    return;
+  }
+  if (!events.length) {
+    text(widget, 'Keine Termine', Font.semiboldSystemFont(12), Color.white());
+    return;
+  }
+  for (const e of events.slice(0, 2)) {
+    text(widget, (e.date === isoToday(0) ? '' : dayName(e.date) + ' ') + (e.start || SPECIAL[e.kind] || 'ganztägig'), Font.systemFont(11), Color.white());
+    text(widget, e.title, Font.semiboldSystemFont(12), Color.white());
+  }
+}
+
 function footer(widget, res) {
   const row = widget.addStack();
   row.addSpacer();
@@ -204,6 +323,13 @@ function large(widget, d) {
   text(widget, 'FÜR DICH', Font.semiboldSystemFont(9), C.ink3);
   widget.addSpacer(6);
   taskList(widget, d.tasks, 4);
+  const next = own(d)[0];
+  if (next) {
+    widget.addSpacer(4);
+    text(widget, 'NÄCHSTER TERMIN', Font.semiboldSystemFont(9), C.ink3);
+    widget.addSpacer(6);
+    eventLine(widget, next, { withDay: true });
+  }
   if (d.mail && d.mails && d.mails.length) {
     widget.addSpacer(6);
     text(widget, 'WICHTIGE MAILS', Font.semiboldSystemFont(9), C.ink3);
@@ -239,10 +365,11 @@ async function build() {
   const res = await load();
   const widget = new ListWidget();
   const family = config.widgetFamily || 'medium';
-  widget.url = BASE_URL + '/';
+  widget.url = BASE_URL + (CALENDAR ? '/kalender' : '/');
   widget.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
   if (family.startsWith('accessory')) {
-    if (res.data) lockscreen(widget, family, res.data);
+    if (res.data && CALENDAR) calLock(widget, family, res.data);
+    else if (res.data) lockscreen(widget, family, res.data);
     else text(widget, 'Perfume Cloud: offline', Font.systemFont(12), Color.white());
     return widget;
   }
@@ -257,7 +384,10 @@ async function build() {
     widget.addSpacer();
     return widget;
   }
-  if (family === 'small') small(widget, res.data);
+  if (CALENDAR) {
+    if (family === 'small') calSmall(widget, res.data);
+    else calList(widget, res.data, family === 'large' || family === 'extraLarge' ? 7 : 3);
+  } else if (family === 'small') small(widget, res.data);
   else if (family === 'large' || family === 'extraLarge') large(widget, res.data);
   else medium(widget, res.data);
   if (family !== 'small') {

@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { ArrowUp, CalendarDays, Check, CircleHelp, Flag, Lightbulb, ListChecks, NotebookPen, Tag, Trash2, Undo2, X } from 'lucide-react';
+import { ArrowUp, CalendarDays, Check, CircleHelp, Clock, Flag, Lightbulb, ListChecks, MapPin, NotebookPen, Tag, Trash2, Undo2, X } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { AutoTextarea, Avatar, Button, cx, IconButton, Logo, Segmented } from '../components/ui';
 import { useStore } from '../lib/store';
 import { uuid } from '../lib/api';
 import { dueInfo, firstName, todayISO } from '../lib/format';
 import { toast } from '../lib/toast';
-import { parseIdea, summary, type Context, type Draft, type DraftNote, type DraftTask, type Mode, type Priority } from '../lib/assistant';
+import { parseIdea, summary, type Context, type Draft, type DraftEvent, type DraftNote, type DraftTask, type Mode, type Priority } from '../lib/assistant';
+import { KindDot } from '../components/events';
+import { dayLabel, KINDS, kindInfo, plusHour } from '../lib/calendar';
 import type { User } from '../lib/types';
 
 interface Message {
@@ -17,15 +19,16 @@ interface Message {
   mode: Mode;
   draft: Draft;
   useNote: boolean;
-  /** Abgewählte Aufgaben (keys). */
+  /** Abgewählte Aufgaben und Termine (keys). */
   skip: string[];
   state: 'open' | 'saved' | 'discarded';
-  saved?: { noteId: string | null; taskIds: string[] };
+  saved?: { noteId: string | null; taskIds: string[]; eventIds?: string[]; firstDate?: string };
 }
 
 const EXAMPLES = [
   'Adventskalender mit 24 Proben, Ben kümmert sich um die Fotos bis Freitag, Keanu um die Verpackung',
   'Black Friday\n- Newsletter schreiben @ich bis 20.11.\n- Rabattcode im Shop anlegen !\n- Reel drehen @Ben\n  - Flakons\n  - Geschenkbox',
+  'Meeting mit Keanu am Donnerstag um 14 Uhr im Büro, danach Pakete packen',
   'Neuer Duft: Vanille, Tonka und Sandelholz – eher süß, für den Winter',
 ];
 
@@ -34,6 +37,7 @@ const HELP: [ReactNode, string][] = [
   [<>„morgen“, „Freitag“, „15.11.“, „Ende des Monats“, „KW 47“</>, 'bis wann'],
   [<><code>!</code> oder „dringend“ · „irgendwann“</>, 'wichtig · unwichtig'],
   [<><code>#Marketing</code></>, 'Kategorie'],
+  [<>„Meeting mit Ben Freitag 14 Uhr im Büro“, „Messe vom 20. bis 24.10. in Köln“</>, 'Termin im Kalender'],
   [<>Zeilen mit <code>-</code>, eingerückt darunter</>, 'einzelne Aufgaben · Checkliste'],
   [<>„Notiz:“ am Anfang</>, 'nur als Notiz speichern'],
 ];
@@ -55,6 +59,7 @@ export default function Ideas() {
   const tasksMap = useStore((s) => s.tasks);
   const saveNote = useStore((s) => s.saveNote);
   const saveTask = useStore((s) => s.saveTask);
+  const saveEvent = useStore((s) => s.saveEvent);
   const navigate = useNavigate();
   const location = useLocation();
   const [messages, setMessages] = useState<Message[]>(() => (me ? loadMessages(me.id) : []));
@@ -105,7 +110,9 @@ export default function Ideas() {
 
   function commit(m: Message) {
     const tasks = m.draft.tasks.filter((t) => !m.skip.includes(t.key) && t.title.trim());
+    const events = (m.draft.events ?? []).filter((e) => !m.skip.includes(e.key) && e.title.trim());
     const note = m.useNote && m.draft.note && (m.draft.note.title.trim() || m.draft.note.body.trim()) ? m.draft.note : null;
+    const today = todayISO();
     let noteId: string | null = null;
     if (note) {
       const lines = tasks.map((t) => {
@@ -113,9 +120,28 @@ export default function Ideas() {
         const due = dueInfo(t.due);
         return `• ${t.title.trim()}${who ? ` – ${firstName(who.name)}` : ''}${due ? `, bis ${due.label}` : ''}`;
       });
-      const body = [note.body.trim(), lines.length ? `Aufgaben:\n${lines.join('\n')}` : ''].filter(Boolean).join('\n\n');
+      const dates = events.map((e) => `• ${e.title.trim()} – ${dayLabel(e.date, today)}${e.start ? `, ${e.start} Uhr` : ''}`);
+      const body = [note.body.trim(), lines.length ? `Aufgaben:\n${lines.join('\n')}` : '', dates.length ? `Termine:\n${dates.join('\n')}` : '']
+        .filter(Boolean)
+        .join('\n\n');
       noteId = saveNote({ title: note.title.trim() || 'Idee', body }).id;
     }
+    const eventIds = events.map(
+      (e) =>
+        saveEvent({
+          title: e.title.trim(),
+          kind: e.kind,
+          start_date: e.date,
+          end_date: e.endDate && e.endDate > e.date ? e.endDate : null,
+          start_time: e.start,
+          end_time: e.start ? e.end : null,
+          location: e.location?.trim() || null,
+          attendees: e.attendees,
+          // wie im Kalender: 30 Min. vorher bzw. am Tag um 8 Uhr, Fristen einen Tag vorher
+          remind_minutes: e.start ? 30 : e.kind === 'frist' ? 1440 : 0,
+          notes: note ? `Aus der Notiz „${note.title.trim() || 'Idee'}“` : null,
+        }).id,
+    );
     const taskIds = tasks.map(
       (t) =>
         saveTask({
@@ -128,9 +154,9 @@ export default function Ideas() {
           description: note ? `Aus der Notiz „${note.title.trim() || 'Idee'}“` : null,
         }).id,
     );
-    update(m.id, { state: 'saved', saved: { noteId, taskIds } });
-    const parts = [noteId ? '1 Notiz' : '', taskIds.length ? `${taskIds.length} Aufgabe${taskIds.length === 1 ? '' : 'n'}` : ''].filter(Boolean);
-    toast(`Angelegt: ${parts.join(' und ')}`, 'success');
+    const saved = { noteId, taskIds, eventIds, firstDate: events[0]?.date };
+    update(m.id, { state: 'saved', saved });
+    toast(`Angelegt: ${savedText(saved)}`, 'success');
   }
 
   function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -145,7 +171,7 @@ export default function Ideas() {
     <div className="flex min-h-[calc(100dvh-220px)] flex-col">
       <PageHeader
         title="Ideen"
-        subtitle="Schreib einfach drauflos – daraus werden Notizen und Aufgaben."
+        subtitle="Schreib einfach drauflos – daraus werden Notizen, Aufgaben und Termine."
         actions={
           <>
             {messages.length > 0 && (
@@ -183,12 +209,14 @@ export default function Ideas() {
               onNote={(patch) => update(m.id, (x) => ({ draft: { ...x.draft, note: x.draft.note ? { ...x.draft.note, ...patch } : null } }))}
               onUseNote={(v) => update(m.id, { useNote: v })}
               onTask={(key, patch) => update(m.id, (x) => ({ draft: { ...x.draft, tasks: x.draft.tasks.map((t) => (t.key === key ? { ...t, ...patch } : t)) } }))}
+              onEvent={(key, patch) => update(m.id, (x) => ({ draft: { ...x.draft, events: (x.draft.events ?? []).map((e) => (e.key === key ? { ...e, ...patch } : e)) } }))}
               onSkip={(key, skip) => update(m.id, (x) => ({ skip: skip ? [...x.skip, key] : x.skip.filter((k) => k !== key) }))}
               onCommit={() => commit(m)}
               onDiscard={() => update(m.id, { state: 'discarded' })}
               onReopen={() => update(m.id, { state: 'open' })}
               onOpenNote={(id) => navigate(`/notizen/${id}`)}
               onOpenTasks={() => navigate('/planung')}
+              onOpenCalendar={(d) => navigate(d ? `/kalender?d=${d}` : '/kalender')}
             />
           </div>
         ))}
@@ -279,12 +307,14 @@ function Reply({
   onNote,
   onUseNote,
   onTask,
+  onEvent,
   onSkip,
   onCommit,
   onDiscard,
   onReopen,
   onOpenNote,
   onOpenTasks,
+  onOpenCalendar,
 }: {
   m: Message;
   users: User[];
@@ -293,16 +323,20 @@ function Reply({
   onNote: (patch: Partial<DraftNote>) => void;
   onUseNote: (v: boolean) => void;
   onTask: (key: string, patch: Partial<DraftTask>) => void;
+  onEvent: (key: string, patch: Partial<DraftEvent>) => void;
   onSkip: (key: string, skip: boolean) => void;
   onCommit: () => void;
   onDiscard: () => void;
   onReopen: () => void;
   onOpenNote: (id: string) => void;
   onOpenTasks: () => void;
+  onOpenCalendar: (date?: string) => void;
 }) {
+  const events = m.draft.events ?? [];
   const chosenTasks = m.draft.tasks.filter((t) => !m.skip.includes(t.key) && t.title.trim()).length;
+  const chosenEvents = events.filter((e) => !m.skip.includes(e.key) && e.title.trim()).length;
   const chosenNote = !!m.draft.note && m.useNote;
-  const nothing = !chosenTasks && !chosenNote;
+  const nothing = !chosenTasks && !chosenNote && !chosenEvents;
   const listId = `cats-${m.id}`;
 
   return (
@@ -315,8 +349,7 @@ function Reply({
           <div className="space-y-3">
             <p className="flex items-center gap-2 text-[14.5px] text-ink">
               <Check className="h-4 w-4 text-good" />
-              Angelegt{m.saved.noteId ? ' – 1 Notiz' : ''}
-              {m.saved.taskIds.length ? `${m.saved.noteId ? ' und' : ' –'} ${m.saved.taskIds.length} Aufgabe${m.saved.taskIds.length === 1 ? '' : 'n'}` : ''}.
+              Angelegt – {savedText(m.saved)}.
             </p>
             <div className="flex flex-wrap gap-2">
               {m.saved.noteId && (
@@ -327,6 +360,11 @@ function Reply({
               {m.saved.taskIds.length > 0 && (
                 <Button size="sm" variant="soft" icon={<ListChecks className="h-3.5 w-3.5" />} onClick={onOpenTasks}>
                   Zur Planung
+                </Button>
+              )}
+              {(m.saved.eventIds?.length ?? 0) > 0 && (
+                <Button size="sm" variant="soft" icon={<CalendarDays className="h-3.5 w-3.5" />} onClick={() => onOpenCalendar(m.saved!.firstDate)}>
+                  Zum Kalender
                 </Button>
               )}
             </div>
@@ -350,6 +388,7 @@ function Reply({
                   { value: 'auto', label: 'Automatisch' },
                   { value: 'note', label: 'Notiz' },
                   { value: 'tasks', label: 'Aufgaben' },
+                  { value: 'event', label: 'Termin' },
                 ]}
               />
             </div>
@@ -374,7 +413,9 @@ function Reply({
                       aria-label="Text der Notiz"
                       className="mt-1 w-full bg-transparent text-[14px] leading-relaxed text-ink-2 placeholder:text-ink-3 focus:outline-none"
                     />
-                    {chosenTasks > 0 && <p className="mt-1 text-[12px] text-ink-3">Die Aufgaben werden unten in der Notiz aufgelistet.</p>}
+                    {chosenTasks + chosenEvents > 0 && (
+                      <p className="mt-1 text-[12px] text-ink-3">{chosenEvents ? 'Aufgaben und Termine' : 'Die Aufgaben'} werden unten in der Notiz aufgelistet.</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -390,6 +431,9 @@ function Reply({
                 onChange={(patch) => onTask(t.key, patch)}
                 onSkip={(v) => onSkip(t.key, v)}
               />
+            ))}
+            {events.map((e) => (
+              <EventDraftCard key={e.key} e={e} skipped={m.skip.includes(e.key)} users={users} onChange={(patch) => onEvent(e.key, patch)} onSkip={(v) => onSkip(e.key, v)} />
             ))}
             <datalist id={listId}>
               {categories.map((c) => (
@@ -412,6 +456,13 @@ function Reply({
   );
 }
 
+/** „1 Notiz, 2 Aufgaben und 1 Termin“ */
+function savedText(saved: NonNullable<Message['saved']>): string {
+  const n = (count: number, one: string, many: string) => (count ? `${count} ${count === 1 ? one : many}` : '');
+  const parts = [saved.noteId ? '1 Notiz' : '', n(saved.taskIds.length, 'Aufgabe', 'Aufgaben'), n(saved.eventIds?.length ?? 0, 'Termin', 'Termine')].filter(Boolean);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} und ${parts[parts.length - 1]}` : parts[0] ?? 'nichts';
+}
+
 function Tick({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button
@@ -432,6 +483,7 @@ function Tick({ checked, onChange, label }: { checked: boolean; onChange: (v: bo
 }
 
 const PRIORITY: Record<Priority, string> = { low: 'Niedrig', normal: 'Normal', high: 'Hoch' };
+const pill = 'relative inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors';
 
 function TaskDraft({
   t,
@@ -450,7 +502,6 @@ function TaskDraft({
 }) {
   const who = users.find((u) => u.id === t.assigneeId) ?? null;
   const due = dueInfo(t.due);
-  const pill = 'relative inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors';
   return (
     <div className={cx('rounded-xl border border-line/70 p-3', skipped && 'opacity-50')}>
       <div className="flex items-start gap-2.5">
@@ -541,6 +592,123 @@ function TaskDraft({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+const minutes = (t: string) => {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/** Vorschau eines Termins: Art, Datum, Uhrzeit, Ort und Teilnehmer direkt änderbar. */
+function EventDraftCard({
+  e,
+  skipped,
+  users,
+  onChange,
+  onSkip,
+}: {
+  e: DraftEvent;
+  skipped: boolean;
+  users: User[];
+  onChange: (patch: Partial<DraftEvent>) => void;
+  onSkip: (v: boolean) => void;
+}) {
+  const today = todayISO();
+  const kind = kindInfo(e.kind);
+  const multi = !!e.endDate && e.endDate > e.date;
+  const toggle = (id: string) => onChange({ attendees: e.attendees.includes(id) ? e.attendees.filter((x) => x !== id) : [...e.attendees, id] });
+  // Neue Startzeit: Dauer beibehalten (sonst eine Stunde), Fristen haben kein Ende
+  const setStart = (start: string) => {
+    if (!start) return onChange({ start: null, end: null });
+    if (e.kind === 'frist') return onChange({ start, end: null });
+    if (!e.start || !e.end) return onChange({ start, end: plusHour(start) });
+    const end = Math.min(minutes(start) + minutes(e.end) - minutes(e.start), 23 * 60 + 59);
+    onChange({ start, end: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}` });
+  };
+  return (
+    <div className={cx('rounded-xl border border-line/70 p-3', skipped && 'opacity-50')}>
+      <div className="flex items-start gap-2.5">
+        <Tick checked={!skipped} onChange={(v) => onSkip(!v)} label="Termin eintragen" />
+        <AutoTextarea
+          value={e.title}
+          onChange={(ev) => onChange({ title: ev.target.value.replace(/\n/g, ' ') })}
+          aria-label="Titel des Termins"
+          className="min-w-0 flex-1 bg-transparent text-[15px] font-medium leading-snug text-ink focus:outline-none"
+        />
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 sm:pl-8">
+        {/* Art */}
+        <label className={cx(pill, kind.tone, 'border-transparent')} style={{ background: 'var(--u-bg)', color: 'var(--u-fg)' }}>
+          <KindDot kind={e.kind} />
+          {kind.label}
+          <select value={e.kind} onChange={(ev) => onChange({ kind: ev.target.value as DraftEvent['kind'] })} aria-label="Art des Termins" className="absolute inset-0 cursor-pointer opacity-0">
+            {KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Datum */}
+        <label className={cx(pill, 'border-line bg-surface-2 text-ink')}>
+          <CalendarDays className="h-3.5 w-3.5" />
+          {dayLabel(e.date, today)}
+          {multi ? ` – ${dayLabel(e.endDate!, today)}` : ''}
+          <input
+            type="date"
+            value={e.date}
+            onChange={(ev) => ev.target.value && onChange({ date: ev.target.value, endDate: e.endDate && e.endDate > ev.target.value ? e.endDate : null })}
+            onClick={(ev) => (ev.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
+            aria-label="Datum"
+            className="absolute inset-0 cursor-pointer opacity-0"
+          />
+        </label>
+        {/* Uhrzeit */}
+        <label className={cx(pill, e.start ? 'border-line bg-surface-2 text-ink' : 'border-line text-ink-2')}>
+          <Clock className="h-3.5 w-3.5" />
+          {e.start ? (e.end ? `${e.start}–${e.end}` : `${e.start} Uhr`) : 'Ganztägig'}
+          <input type="time" value={e.start ?? ''} onChange={(ev) => setStart(ev.target.value)} aria-label="Uhrzeit" className="absolute inset-0 cursor-pointer opacity-0" />
+        </label>
+        {e.start && (
+          <button type="button" onClick={() => onChange({ start: null, end: null })} aria-label="Ganztägig" title="Ganztägig" className="-ml-1 rounded-full p-1 text-ink-3 hover:text-ink">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {/* Ort */}
+        <span className={cx(pill, 'border-line text-ink-2 focus-within:border-accent')}>
+          <MapPin className="h-3.5 w-3.5 shrink-0" />
+          <input
+            value={e.location ?? ''}
+            onChange={(ev) => onChange({ location: ev.target.value || null })}
+            placeholder="Ort"
+            aria-label="Ort"
+            style={{ width: `${Math.max(4, (e.location ?? '').length) + 1}ch` }}
+            className="bg-transparent text-[12.5px] text-ink placeholder:text-ink-3 focus:outline-none"
+          />
+        </span>
+      </div>
+      {/* Teilnehmer */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:pl-8">
+        <button
+          type="button"
+          onClick={() => onChange({ attendees: [] })}
+          aria-pressed={!e.attendees.length}
+          className={cx(pill, !e.attendees.length ? 'border-accent/30 bg-accent-soft text-accent' : 'border-line text-ink-2')}
+        >
+          Ganzes Team
+        </button>
+        {users.map((u) => {
+          const on = e.attendees.includes(u.id);
+          return (
+            <button key={u.id} type="button" onClick={() => toggle(u.id)} aria-pressed={on} className={cx(pill, 'pl-1', on ? 'border-accent/30 bg-accent-soft text-accent' : 'border-line text-ink-2')}>
+              <Avatar user={u} size={18} />
+              {firstName(u.name)}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

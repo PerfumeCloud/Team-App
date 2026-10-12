@@ -23,10 +23,14 @@ const SAMPLE = {
     { from: 'Carla', subject: 'Fotoshooting', mailbox: 'info@', at: Date.now() },
   ],
   tasks: { open: 3, overdue: 1, today: 0, next: [{ title: 'Retoure #1038 prüfen', due: '2020-01-01', high: true }, { title: 'Newsletter', due: null, high: false }] },
+  events: [
+    { title: 'Meeting Flakon-Manufaktur', kind: 'meeting', date: new Date().toLocaleDateString('sv-SE'), start: '15:00', end: '16:00', endDate: null, location: 'Videocall' },
+    { title: 'Messe Beauty Düsseldorf', kind: 'event', date: '2099-01-02', start: null, end: null, endDate: '2099-01-04', location: 'Halle 10' },
+  ],
 };
 
 /** Minimaler Nachbau der Scriptable-API, der mitschreibt, was gezeichnet wird. */
-function scriptable({ family, response, status = 200, fail = false }) {
+function scriptable({ family, response, status = 200, fail = false, param = null }) {
   const texts = [];
   const symbols = [];
   let finalWidget = null;
@@ -88,7 +92,7 @@ function scriptable({ family, response, status = 200, fail = false }) {
   };
   const Script = { setWidget: (w) => { finalWidget = w; }, complete: () => { completed = true; } };
   const config = { widgetFamily: family, runsInWidget: true };
-  const env = { Color, Font, Size, ListWidget, SFSymbol, Request, FileManager, Script, config };
+  const env = { Color, Font, Size, ListWidget, SFSymbol, Request, FileManager, Script, config, args: { widgetParameter: param } };
   return { env, result: () => ({ widget: finalWidget, texts, symbols, completed, files }) };
 }
 
@@ -117,6 +121,50 @@ for (const family of ['small', 'medium', 'large', 'accessoryRectangular', 'acces
     }
   });
 }
+
+for (const family of ['small', 'medium', 'large', 'accessoryRectangular', 'accessoryInline', 'accessoryCircular']) {
+  test(`Kalender-Widget ${family}`, { skip: !!process.env.WIDGET_URL }, async () => {
+    const r = await run({ family, response: SAMPLE, param: 'Kalender' });
+    const all = r.texts.join(' | ');
+    assert.ok(r.widget && r.completed);
+    if (family === 'accessoryCircular') assert.match(all, /^1 \| heute$/);
+    else assert.match(all, /Meeting Flakon-Manufaktur/);
+    if (family === 'medium' || family === 'small') assert.match(all, /15:00–16:00/);
+    if (family === 'large') assert.match(all, /HEUTE/), assert.match(all, /Halle 10/), assert.match(all, /ganztägig, bis/);
+    if (family === 'medium') assert.match(all, /Heute · 15:00–16:00/);
+  });
+}
+
+test('Kalender-Widget ohne Termine', { skip: !!process.env.WIDGET_URL }, async () => {
+  const r = await run({ family: 'medium', response: { ...SAMPLE, events: [] }, param: 'kalender' });
+  assert.match(r.texts.join(' | '), /Keine Termine/);
+});
+
+test('Kalender-Widget mit Feiertagen und Aktionstagen', { skip: !!process.env.WIDGET_URL }, async () => {
+  const today = new Date().toLocaleDateString('sv-SE');
+  const events = [
+    { title: 'Tag der Deutschen Einheit', kind: 'feiertag', date: today, start: null, end: null, endDate: null, location: null },
+    ...SAMPLE.events,
+    { title: 'Black Friday', kind: 'aktion', date: '2099-01-03', start: null, end: null, endDate: null, location: null },
+  ];
+  const medium = (await run({ family: 'medium', response: { ...SAMPLE, events }, param: 'kalender' })).texts.join(' | ');
+  assert.match(medium, /Heute · Feiertag \| Tag der Deutschen Einheit/);
+  // Einzelansichten zeigen den eingetragenen Termin, nicht den Feiertag
+  const small = (await run({ family: 'small', response: { ...SAMPLE, events }, param: 'kalender' })).texts.join(' | ');
+  assert.match(small, /Meeting Flakon-Manufaktur/);
+  assert.match(small, /\+ 3 weitere/);
+  const circ = (await run({ family: 'accessoryCircular', response: { ...SAMPLE, events }, param: 'kalender' })).texts.join(' | ');
+  assert.match(circ, /^1 \| heute$/);
+  const large = (await run({ family: 'large', response: { ...SAMPLE, events } })).texts.join(' | ');
+  assert.match(large, /NÄCHSTER TERMIN \| Heute · 15:00–16:00 \| Meeting Flakon-Manufaktur/);
+  const rect = (await run({ family: 'accessoryRectangular', response: { ...SAMPLE, events }, param: 'kalender' })).texts.join(' | ');
+  assert.match(rect, /^Feiertag \| Tag der Deutschen Einheit/);
+});
+
+test('Großes Widget zeigt nächsten Termin', { skip: !!process.env.WIDGET_URL }, async () => {
+  const r = await run({ family: 'large', response: SAMPLE });
+  assert.match(r.texts.join(' | '), /NÄCHSTER TERMIN \| Heute · 15:00–16:00 \| Meeting Flakon-Manufaktur/);
+});
 
 test('Widget ohne Shopify', { skip: !!process.env.WIDGET_URL }, async () => {
   const r = await run({ family: 'medium', response: { ...SAMPLE, shopify: false, today: null, toShip: null } });

@@ -42,6 +42,13 @@ final class Api
                 $u = Auth::login((string) ($b['email'] ?? ''), (string) ($b['password'] ?? ''));
                 return ['user' => Auth::publicUser($u)];
             }],
+            // Einladung: Link aus der Mail → eigenes Passwort festlegen
+            ['GET', '/auth/invite', static fn () => Team::inviteInfo((string) (Http::query('token') ?? ''))],
+            ['POST', '/auth/invite', static function () {
+                $b = Http::body();
+                $u = Team::acceptInvite((string) ($b['token'] ?? ''), (string) ($b['password'] ?? ''));
+                return ['user' => Auth::publicUser($u)];
+            }],
             ['POST', '/auth/logout', static function () {
                 Auth::logout();
                 return ['ok' => true];
@@ -93,6 +100,35 @@ final class Api
                 Sync::softDelete(Auth::require(), 'comments', $id);
                 return ['ok' => true];
             }],
+            ['PUT', "/events/$uuid", static fn (string $id) => Calendar::save(Auth::require(), $id, Http::body())],
+            ['DELETE', "/events/$uuid", static function (string $id) {
+                Sync::softDelete(Auth::require(), 'events', $id);
+                return ['ok' => true];
+            }],
+
+            // Kalender-Abo (iCalendar) für Apple-Kalender, Outlook, Google
+            ['GET', '/kalender/feed', static function () {
+                $user = Calendar::userForToken((string) (Http::query('token') ?? ''));
+                if (!$user) {
+                    throw new HttpError(401, 'Kalender-Link ungültig. Bitte in der App unter Einstellungen neu erstellen.');
+                }
+                header('Content-Type: text/calendar; charset=utf-8');
+                header('Content-Disposition: inline; filename="perfume-cloud.ics"');
+                header('Cache-Control: no-cache');
+                echo Calendar::ics($user);
+                return null;
+            }],
+            ['GET', '/kalender/abo', static fn () => ['active' => Calendar::hasToken(Auth::require())]],
+            ['POST', '/kalender/abo', static function () {
+                $token = Calendar::createToken(Auth::require());
+                $url = Util::baseUrl() . '/api/kalender/feed?token=' . $token;
+                return ['token' => $token, 'url' => $url, 'webcal' => preg_replace('#^https?://#', 'webcal://', $url)];
+            }],
+            ['DELETE', '/kalender/abo', static function () {
+                Calendar::revoke(Auth::require());
+                return ['ok' => true];
+            }],
+
             ['PATCH', '/emails/([0-9a-f]{40})', static fn (string $id) => Sync::updateEmail(Auth::require(), $id, Http::body())],
 
             ['GET', '/stats', static function () {
@@ -181,6 +217,15 @@ final class Api
             ['PUT', '/admin/settings', static function () {
                 Auth::requireAdmin();
                 $b = Http::body();
+                if (array_key_exists('holiday_state', $b)) {
+                    Settings::set('holiday_state', in_array($b['holiday_state'], Holidays::STATES, true) ? $b['holiday_state'] : '');
+                }
+                if (isset($b['holidays_on'])) {
+                    Settings::set('holidays_on', (bool) $b['holidays_on']);
+                }
+                if (isset($b['shop_days_on'])) {
+                    Settings::set('shop_days_on', (bool) $b['shop_days_on']);
+                }
                 if (isset($b['low_stock_threshold'])) {
                     Settings::set('low_stock_threshold', max(0, min(1000, (int) $b['low_stock_threshold'])));
                 }
@@ -191,7 +236,29 @@ final class Api
                 }
                 return self::integrations();
             }],
-            ['POST', '/admin/users', static fn () => self::createUser(Auth::requireAdmin(), Http::body())],
+            ['POST', '/admin/users', static function () {
+                $r = Team::create(Auth::requireAdmin(), Http::body());
+                return ['user' => Auth::publicUser($r['user']), 'restored' => $r['restored'], 'invite' => $r['invite']];
+            }],
+            ['POST', "/admin/users/$uuid/invite", static function (string $id) {
+                $me = Auth::requireAdmin();
+                $u = Db::one('SELECT * FROM users WHERE id = ? AND deleted = 0', [$id]);
+                if (!$u) {
+                    throw new HttpError(404, 'Person nicht gefunden.');
+                }
+                return Team::invite($me, $u);
+            }],
+            ['POST', "/admin/users/$uuid/restore", static fn (string $id) => ['user' => Auth::publicUser(Team::restore(Auth::requireAdmin(), $id))]],
+            ['GET', '/admin/maintenance', static function () {
+                Auth::requireAdmin();
+                return Team::diagnostics();
+            }],
+            ['POST', '/admin/maintenance', static function () {
+                Auth::requireAdmin();
+                $log = Team::repair();
+                Http::defer(static fn () => Jobs::run('wartung'));
+                return ['log' => $log] + Team::diagnostics();
+            }],
             ['PUT', "/admin/users/$uuid", static fn (string $id) => self::updateUser(Auth::requireAdmin(), $id, Http::body())],
             ['DELETE', "/admin/users/$uuid", static function (string $id) {
                 $me = Auth::requireAdmin();
@@ -200,6 +267,9 @@ final class Api
                 }
                 Db::update('users', ['deleted' => 1, 'updated_at' => Util::now()], ['id' => $id]);
                 MailJob::removePersonal($id);
+                $invites = (array) Settings::get('invite_tokens', []);
+                unset($invites[$id]);
+                Settings::set('invite_tokens', $invites);
                 Db::exec('DELETE FROM sessions WHERE user_id = ?', [$id]);
                 Db::exec('DELETE FROM push_subscriptions WHERE user_id = ?', [$id]);
                 return ['ok' => true];
@@ -235,7 +305,7 @@ final class Api
                 }
             }
             if (isset($b['prefs']['mailScope'])) {
-                $prefs['mailScope'] = Util::oneOf($b['prefs']['mailScope'], ['all', 'important'], $prefs['mailScope']);
+                $prefs['mailScope'] = Util::oneOf($b['prefs']['mailScope'], ['all', 'everything', 'important'], $prefs['mailScope']);
             }
             $row['prefs'] = Util::json($prefs);
         }
@@ -268,35 +338,6 @@ final class Api
             'suggestedHost' => $team[0]['host'] ?? '',
             'lastFetch' => (int) Settings::get('mail_last_fetch', 0),
         ];
-    }
-
-    private static function createUser(array $me, array $b): array
-    {
-        $name = Util::str($b['name'] ?? '', 100, false);
-        $email = mb_strtolower(trim((string) ($b['email'] ?? '')));
-        if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new HttpError(422, 'Bitte Name und gültige E-Mail-Adresse angeben.');
-        }
-        if (Db::value('SELECT 1 FROM users WHERE email = ?', [$email])) {
-            throw new HttpError(422, 'Diese E-Mail-Adresse ist schon vergeben.');
-        }
-        $count = (int) Db::value('SELECT COUNT(*) FROM users');
-        $now = Util::now();
-        $user = [
-            'id' => Util::uuid(),
-            'name' => $name,
-            'email' => $email,
-            'password_hash' => Auth::hashPassword((string) ($b['password'] ?? '')),
-            'color' => self::COLORS[$count % count(self::COLORS)],
-            'role' => Util::oneOf($b['role'] ?? 'member', ['admin', 'member'], 'member'),
-            'prefs' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
-            'deleted' => 0,
-        ];
-        Db::insert('users', $user);
-        Activity::log($me['id'], 'user_added', null, null, "hat {$name} zum Team hinzugefügt");
-        return ['user' => Auth::publicUser($user)];
     }
 
     private static function updateUser(array $me, string $id, array $b): array
@@ -372,6 +413,9 @@ final class Api
             ],
             'settings' => [
                 'low_stock_threshold' => (int) Settings::get('low_stock_threshold', 5),
+                'holiday_state' => Holidays::config()['state'],
+                'holidays_on' => Holidays::config()['holidays'],
+                'shop_days_on' => Holidays::config()['shop'],
                 'base_url' => (string) Config::get('base_url', ''),
             ],
             'pushDevices' => (int) Db::value('SELECT COUNT(*) FROM push_subscriptions'),

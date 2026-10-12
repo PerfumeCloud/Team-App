@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { ChartLine, CloudOff, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings } from 'lucide-react';
+import { CalendarDays, ChartLine, CloudOff, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings } from 'lucide-react';
 import { openImportantCount, useStore } from '../lib/store';
 import { relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
 import { Avatar, cx, Logo } from './ui';
 
+// mobile: false → am Handy nicht in der Leiste unten (Ideen gibt es dort oben rechts als Knopf)
 const NAV = [
   { to: '/', label: 'Übersicht', icon: House },
-  { to: '/ideen', label: 'Ideen', icon: Lightbulb },
+  { to: '/ideen', label: 'Ideen', icon: Lightbulb, mobile: false },
   { to: '/planung', label: 'Planung', icon: ListChecks },
+  { to: '/kalender', label: 'Kalender', icon: CalendarDays },
   { to: '/notizen', label: 'Notizen', icon: NotebookPen },
   { to: '/postfach', label: 'Postfach', icon: Inbox },
   { to: '/statistik', label: 'Statistik', icon: ChartLine },
@@ -117,8 +119,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Logo className="h-8 w-8" />
               <span className="font-display text-[19px] font-semibold text-ink">Perfume Cloud</span>
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <SyncStatus compact />
+              <button
+                onClick={() => navigate('/ideen')}
+                aria-label="Ideen – Notiz, Aufgabe oder Termin festhalten"
+                className={cx(
+                  'ml-1 flex h-9 w-9 items-center justify-center rounded-full transition-colors active:scale-95',
+                  isActive('/ideen') ? 'bg-accent text-accent-ink' : 'bg-accent-soft text-accent',
+                )}
+              >
+                <Lightbulb className="h-[18px] w-[18px]" />
+              </button>
               <button onClick={() => navigate('/einstellungen')} aria-label="Einstellungen" className="rounded-full active:scale-95">
                 <Avatar user={me} size={32} />
               </button>
@@ -131,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Tab-Leiste (Handy) */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line/60 bg-surface/85 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.filter((n) => n.mobile !== false).map(({ to, label, icon: Icon }) => (
             <button
               key={to}
               onClick={() => navigate(to)}

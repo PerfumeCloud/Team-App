@@ -25,8 +25,13 @@ final class Sync
         $tasks = array_map([self::class, 'task'], Db::all("SELECT * FROM tasks WHERE updated_at > ?$live", [$from]));
         $notes = array_map([self::class, 'note'], Db::all("SELECT * FROM notes WHERE updated_at > ?$live", [$from]));
         $comments = array_map([self::class, 'comment'], Db::all("SELECT * FROM comments WHERE updated_at > ?$live", [$from]));
-        // Persönliche Postfächer: nur die eigenen Mails
-        $emails = array_map([self::class, 'email'], Db::all("SELECT * FROM emails WHERE updated_at > ? AND (owner_id IS NULL OR owner_id = ?)$live", [$from, $me['id']]));
+        $events = array_map([Calendar::class, 'row'], Db::all("SELECT * FROM events WHERE updated_at > ?$live", [$from]));
+        // Nur Mails aus Postfächern, die diese Person sehen darf („Sichtbar für“)
+        $boxes = MailJob::visibleAddresses($me['id']);
+        $emails = $boxes ? array_map([self::class, 'email'], Db::all(
+            "SELECT * FROM emails WHERE updated_at > ? AND mailbox IN (" . implode(',', array_fill(0, count($boxes), '?')) . ")$live",
+            [$from, ...$boxes]
+        )) : [];
         $activity = array_map([self::class, 'activity'], Db::all(
             'SELECT * FROM activity WHERE updated_at > ? ORDER BY created_at DESC LIMIT 60',
             [$full ? $serverTime - 14 * 86400 * 1000 : $from]
@@ -39,6 +44,7 @@ final class Sync
             'tasks' => $tasks,
             'notes' => $notes,
             'comments' => $comments,
+            'events' => $events,
             'emails' => $emails,
             'activity' => $activity,
             'meta' => self::meta($me),
@@ -48,15 +54,18 @@ final class Sync
     public static function meta(array $me): array
     {
         $personal = MailJob::personal($me['id']);
-        $boxes = array_column(MailJob::mailboxes(), 'email');
-        if ($personal) {
-            $boxes[] = $personal['email'];
-        }
+        $boxes = MailJob::visibleAddresses($me['id']);
         return [
             'shopifyConfigured' => Shopify::configured(),
             'mailConfigured' => count($boxes) > 0,
             'mailboxes' => $boxes,
             'myMailbox' => $personal['email'] ?? null,
+            // Wird bei „Datenbank aktualisieren“ erhöht → alle Geräte laden komplett neu
+            'syncEpoch' => (int) Settings::get('sync_epoch', 0),
+            // Feiertage/Aktionstage berechnet die App selbst – hier nur die Einstellungen
+            'holidayState' => Holidays::config()['state'],
+            'holidaysOn' => Holidays::config()['holidays'],
+            'shopDays' => Holidays::config()['shop'],
             'jobsLastRun' => (int) Settings::get('jobs_last_run', 0),
             'ordersLastSync' => (int) Settings::get('orders_last_sync', 0),
             'mailLastFetch' => (int) Settings::get('mail_last_fetch', 0),
@@ -244,7 +253,8 @@ final class Sync
         if (!$mail || !MailJob::visibleTo($mail, $me['id'])) {
             throw new HttpError(404, 'Mail nicht gefunden.');
         }
-        $private = (bool) $mail['owner_id'];
+        $visible = MailJob::byAddress((string) $mail['mailbox'])['visible_to'] ?? [];
+        $private = (bool) $visible;
         $now = max(Util::now(), (int) $mail['updated_at'] + 1);
         $row = ['updated_at' => $now];
         if (array_key_exists('status', $in)) {
@@ -263,8 +273,8 @@ final class Sync
         }
         if (array_key_exists('assignee_id', $in)) {
             $assignee = $in['assignee_id'];
-            if ($private && $assignee !== null && $assignee !== $me['id']) {
-                throw new HttpError(422, 'Mails aus deinem persönlichen Postfach können nicht weitergegeben werden.');
+            if ($private && $assignee !== null && !in_array($assignee, $visible, true)) {
+                throw new HttpError(422, 'Dieses Postfach ist für die Person nicht sichtbar – die Mail kann ihr nicht zugewiesen werden.');
             }
             if ($assignee !== null && !Db::value('SELECT 1 FROM users WHERE id = ? AND deleted = 0', [$assignee])) {
                 throw new HttpError(422, 'Unbekannte Person.');
@@ -375,7 +385,9 @@ final class Sync
             'assignee_id' => $r['assignee_id'],
             'done_by' => $r['done_by'],
             'done_at' => $r['done_at'] !== null ? (int) $r['done_at'] : null,
-            'owner_id' => $r['owner_id'] ?? null,
+            'auto' => (int) ($r['auto'] ?? 0),
+            // „Sichtbar für“ des Postfachs: [] = alle
+            'visible_to' => MailJob::byAddress((string) $r['mailbox'])['visible_to'] ?? [],
             'updated_at' => (int) $r['updated_at'],
             'deleted' => (int) $r['deleted'],
         ];

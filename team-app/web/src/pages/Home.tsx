@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, ArrowUp, BellRing, CircleCheck, Inbox, Lightbulb, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus } from 'lucide-react';
+import { ArrowRight, ArrowUp, BellRing, CalendarDays, CircleCheck, Inbox, Lightbulb, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus } from 'lucide-react';
 import { Sparkline, StatTile, Trend } from '../components/charts';
 import { TaskCard } from '../components/tasks';
+import { EventRow, SpecialRow } from '../components/events';
+import { addDaysIso, agenda, dayLabel, specialsBetween } from '../lib/calendar';
 import { Avatar, Button, Chip, cx, SectionHeader } from '../components/ui';
 import { openImportantCount, sortTasks, useStore } from '../lib/store';
 import { useStats } from '../lib/stats';
@@ -47,6 +49,17 @@ export default function Home() {
     [emailsMap],
   );
   const users = Object.values(usersMap).filter((u) => !u.deleted);
+  const eventsMap = useStore((s) => s.events);
+  // Termine der nächsten 14 Tage, dazu Feiertage und Aktionstage der nächsten 7 Tage
+  const nextEvents = useMemo(
+    () =>
+      agenda(
+        Object.values(eventsMap).filter((e) => (e.end_date ?? e.start_date) >= today && e.start_date <= addDaysIso(today, 14)),
+        specialsBetween(today, addDaysIso(today, 7), meta),
+        (e) => (e.start_date < today ? today : e.start_date),
+      ).slice(0, 5),
+    [eventsMap, today, meta],
+  );
 
   const setup = me?.role === 'admin' && meta
     ? [
@@ -222,6 +235,33 @@ export default function Home() {
           )}
         </div>
 
+        <div className="space-y-8">
+        <section>
+          <SectionHeader
+            title="Nächste Termine"
+            action={
+              <Button size="sm" variant="ghost" onClick={() => navigate('/kalender')}>
+                Kalender <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            }
+          />
+          {nextEvents.length ? (
+            <div className="card p-2">
+              {nextEvents.map((it) =>
+                it.type === 'event' ? (
+                  <EventRow key={it.e.id} e={it.e} users={usersMap} showDate={dayLabel(it.date, today)} onOpen={() => navigate(`/kalender?d=${it.e.start_date}&termin=${it.e.id}`)} />
+                ) : (
+                  <SpecialRow key={it.date + it.s.title} s={it.s} showDate={dayLabel(it.date, today)} onOpen={() => navigate(`/kalender?d=${it.date}`)} />
+                ),
+              )}
+            </div>
+          ) : (
+            <button onClick={() => navigate(`/kalender?neu=${today}`)} className="card flex w-full items-center gap-3 p-4 text-left text-[14px] text-ink-2 hover:bg-surface-2/50">
+              <CalendarDays className="h-5 w-5 text-ink-3" /> Keine Termine in den nächsten Tagen – eintragen?
+            </button>
+          )}
+        </section>
+
         <section>
           <SectionHeader title="Zuletzt im Team" />
           <div className="card p-2">
@@ -254,6 +294,7 @@ export default function Home() {
             )}
           </div>
         </section>
+        </div>
       </div>
     </div>
   );

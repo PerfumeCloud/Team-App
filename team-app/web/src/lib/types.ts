@@ -3,7 +3,30 @@ export type UserColor = 'blue' | 'sage' | 'rose' | 'amber' | 'plum' | 'slate';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type Priority = 'low' | 'normal' | 'high';
 export type NoteColor = 'none' | 'cream' | 'blue' | 'sage' | 'rose' | 'sand';
-export type PushKind = 'mail' | 'orders' | 'tasks' | 'comments' | 'reminders';
+export type PushKind = 'mail' | 'orders' | 'tasks' | 'comments' | 'reminders' | 'events';
+export type EventKind = 'termin' | 'meeting' | 'event' | 'frist';
+
+/** Termin im Team-Kalender. Datum/Uhrzeit in Ortszeit; start_time null = ganztägig. */
+export interface CalEvent {
+  id: ID;
+  title: string;
+  kind: EventKind;
+  start_date: string;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
+  location: string | null;
+  notes: string | null;
+  /** Teilnehmer; leer = ganzes Team */
+  attendees: ID[];
+  /** Erinnerung so viele Minuten vorher (ganztägig: Tage × 1440, um 8 Uhr); null = keine */
+  remind_minutes: number | null;
+  created_by: ID | null;
+  updated_by: ID | null;
+  created_at: number;
+  updated_at: number;
+  deleted: number;
+}
 
 export interface User {
   id: ID;
@@ -67,8 +90,10 @@ export interface Comment {
 export interface Email {
   id: string;
   mailbox: string;
-  /** Persönliches Postfach: gehört dieser Person (nur sie bekommt die Mail zu sehen). null = Team-Postfach. */
-  owner_id?: string | null;
+  /** „Sichtbar für“ des Postfachs: leer = alle im Team, sonst nur diese Personen. */
+  visible_to?: ID[];
+  /** Newsletter oder automatische Mail */
+  auto?: number;
   from_name: string | null;
   from_email: string | null;
   subject: string | null;
@@ -104,6 +129,14 @@ export interface Meta {
   mailboxes: string[];
   /** Eigenes persönliches Postfach (z. B. marius.heub@…) oder null. */
   myMailbox?: string | null;
+  /** Ändert sich bei „Datenbank aktualisieren“ → Gerät lädt komplett neu */
+  syncEpoch?: number;
+  /** Bundesland für Feiertage (z. B. „NW“), leer = nur bundesweite */
+  holidayState?: string;
+  /** Gesetzliche Feiertage im Kalender zeigen */
+  holidaysOn?: boolean;
+  /** Aktionstage wie Black Friday im Kalender zeigen */
+  shopDays?: boolean;
   jobsLastRun: number;
   ordersLastSync: number;
   mailLastFetch: number;
@@ -116,6 +149,7 @@ export interface SyncResponse {
   tasks: Task[];
   notes: Note[];
   comments: Comment[];
+  events?: CalEvent[];
   emails: Email[];
   activity: ActivityItem[];
   meta: Meta;
@@ -123,8 +157,8 @@ export interface SyncResponse {
 
 export interface Prefs {
   push: Record<PushKind, boolean>;
-  /** Push für Mails: jede neue oder nur wichtige. */
-  mailScope?: 'all' | 'important';
+  /** Push für Mails: jede neue, wirklich alle (auch Newsletter) oder nur wichtige. */
+  mailScope?: 'all' | 'everything' | 'important';
 }
 
 export interface MyMailbox {
@@ -187,6 +221,9 @@ export interface MailboxConfig {
   password?: string;
   hasPassword?: boolean;
   status?: { ok: boolean; at: number; message: string } | null;
+  /** Sichtbar für: leer = alle, sonst nur diese Personen */
+  visible_to: string[];
+  added_by?: string | null;
 }
 
 export interface Integrations {
@@ -201,7 +238,7 @@ export interface Integrations {
   };
   mailboxes: MailboxConfig[];
   cron: { url: string; lastRun: number; jobsLastRun: number };
-  settings: { low_stock_threshold: number; base_url: string };
+  settings: { low_stock_threshold: number; base_url: string; holiday_state: string; holidays_on: boolean; shop_days_on: boolean };
   pushDevices: number;
   tests?: Record<string, { ok: boolean; message: string }>;
   test?: { ok: boolean; message: string };

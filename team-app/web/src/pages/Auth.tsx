@@ -1,9 +1,9 @@
-import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { CircleAlert, CircleCheck, Database, KeyRound } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { User } from '../lib/types';
-import { Button, cx, Logo, Segmented } from '../components/ui';
+import { Button, cx, Logo, Segmented, Spinner } from '../components/ui';
 
 function AuthFrame({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
@@ -81,6 +81,83 @@ export function Login() {
         </Button>
       </form>
       <p className="mt-6 text-center text-[13px] text-ink-3">Passwort vergessen? Ein Admin kann es unter Einstellungen → Team neu setzen.</p>
+    </AuthFrame>
+  );
+}
+
+/** Einladungslink aus der Mail: eigenes Passwort festlegen und direkt angemeldet sein. */
+export function Invite({ token }: { token: string }) {
+  const setSession = useStore((s) => s.setSession);
+  const [info, setInfo] = useState<{ name: string; email: string } | null>(null);
+  const [error, setError] = useState('');
+  const [pw, setPw] = useState({ a: '', b: '' });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<{ name: string; email: string }>('GET', `/auth/invite?token=${encodeURIComponent(token)}`)
+      .then(setInfo)
+      .catch((e) => setError(e instanceof ApiError ? e.message : 'Keine Verbindung zum Server.'));
+  }, [token]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (pw.a !== pw.b) {
+      setError('Die beiden Passwörter sind nicht gleich.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api<{ user: User }>('POST', '/auth/invite', { token, password: pw.a });
+      window.history.replaceState(null, '', '/');
+      await setSession(r.user);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Keine Verbindung zum Server.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthFrame>
+      {!info && !error && (
+        <div className="flex justify-center">
+          <Spinner />
+        </div>
+      )}
+      {!info && error && (
+        <div className="card space-y-4 p-6">
+          <ErrorBox text={error} />
+          <Button className="w-full" variant="secondary" onClick={() => (window.location.href = '/')}>
+            Zur Anmeldung
+          </Button>
+        </div>
+      )}
+      {info && (
+        <form onSubmit={submit} className="card space-y-4 p-6">
+          <div>
+            <p className="font-display text-[24px] font-semibold leading-tight text-ink">Willkommen, {info.name}!</p>
+            <p className="mt-1 text-[14px] text-ink-2">Leg dein Passwort fest – danach bist du direkt angemeldet. Deine Anmeldung: {info.email}</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="pw1">
+              Neues Passwort
+            </label>
+            <input id="pw1" className="field" type="password" autoComplete="new-password" minLength={8} required value={pw.a} onChange={(e) => setPw({ ...pw, a: e.target.value })} />
+          </div>
+          <div>
+            <label className="label" htmlFor="pw2">
+              Passwort wiederholen
+            </label>
+            <input id="pw2" className="field" type="password" autoComplete="new-password" minLength={8} required value={pw.b} onChange={(e) => setPw({ ...pw, b: e.target.value })} />
+          </div>
+          <input type="email" autoComplete="username" value={info.email} readOnly hidden />
+          {error && <ErrorBox text={error} />}
+          <Button type="submit" size="lg" className="w-full" loading={busy}>
+            Passwort speichern & loslegen
+          </Button>
+        </form>
+      )}
     </AuthFrame>
   );
 }

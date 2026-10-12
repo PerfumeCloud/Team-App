@@ -85,17 +85,24 @@ Andere Einträge für `@` oder `www` (z. B. ein A- oder **AAAA-Eintrag mit netcu
 
 > Bitte A5 und A6 direkt nacheinander erledigen: Solange noch kein Konto existiert, könnte theoretisch jemand anderes den Assistenten aufrufen.
 
-### A7 · Ben und Keanu anlegen
+### A7 · Ben und Keanu einladen
 1. In der App auf **Einstellungen**, dann **Team** und **Person hinzufügen**.
-2. Name **Ben**, seine E-Mail und ein Startpasswort (mindestens 8 Zeichen) eintragen und **Hinzufügen** klicken.
-3. Dasselbe für **Keanu**.
-4. Beiden E-Mail und Startpasswort **persönlich** geben. Das Passwort ändern sie später selbst unter **Einstellungen**.
+2. Name **Ben** und seine E-Mail eintragen. **Einladung per E-Mail schicken** bleibt an. Dann **Hinzufügen** klicken.
+3. Ben bekommt eine Mail von info@ mit einem Link. Darüber legt er sein Passwort selbst fest und ist sofort angemeldet. Der Link gilt 14 Tage und nur einmal.
+4. Dasselbe für **Keanu**.
 
-### A8 · Postfächer info@ und support@ verbinden
+Kommt die Mail nicht an (z. B. weil info@ noch nicht verbunden ist, siehe A8), zeigt die App den **Einladungslink** an. Mit **Teilen** geht er per WhatsApp oder iMessage raus. Später schickt **Einladen** neben dem Namen einen neuen Link.
+
+> Wurde eine Person gelöscht und wird mit derselben E-Mail neu angelegt, holt die App das alte Konto zurück, statt „E-Mail existiert bereits“ zu melden. Alternativ unter **Integrationen → Wartung → Gelöschte Personen** auf **Wiederherstellen** tippen.
+
+### A8 · Postfächer verbinden (info@, support@ und persönliche)
 1. Den IMAP-Server nachsehen: In Plesk auf **E-Mail**, eine Adresse anklicken und dann die Einstellungen für E-Mail-Programme öffnen. Bei euch ist das **`mxf938.netcup.net`** (steht auch im MX-Eintrag der Domain).
-2. In der App auf **Einstellungen**, dann **Integrationen** und zu **Postfächer**. Beide Adressen sind schon eingetragen.
+2. In der App auf **Einstellungen**, dann **Integrationen** und zu **Postfächer**. info@ und support@ sind schon eingetragen.
 3. Bei beiden den **IMAP-Server**, Port **993** und das **Passwort** des Postfachs eintragen.
-4. Auf **Speichern & testen** klicken. Erscheint ein grüner Haken, holt die App ab jetzt die wichtigen Mails.
+4. Persönliche Adressen wie `marius.heub@perfumecloud.de` mit **Postfach hinzufügen** ergänzen. Bei **Sichtbar für** nur die Person antippen, der das Postfach gehört. **Alle im Team** heißt: alle sehen die Mails.
+5. Auf **Speichern & testen** klicken. Erscheint ein grüner Haken, holt die App ab jetzt die Mails.
+
+Über **info@** verschickt die App auch die Einladungs-Mails (A7). Dafür muss das Passwort von info@ hier eingetragen sein.
 
 ### A9 · Shopify verbinden
 1. <https://dev.shopify.com> öffnen und mit deinem Shopify-Konto (Shop-Inhaber) anmelden.
@@ -162,6 +169,7 @@ Voraussetzung: **iOS 16.4 oder neuer**. Die Version steht unter Einstellungen �
 3. **Scriptable** öffnen, oben rechts auf **+** tippen und den Text einfügen. Oben als Namen **Perfume Cloud** eintragen und **Fertig** tippen.
 4. Auf dem Home-Bildschirm auf eine freie Stelle lange drücken. Dann **Bearbeiten**, **Widget hinzufügen**, **Scriptable** wählen, eine Größe (klein, mittel oder groß) auswählen und **Widget hinzufügen** tippen.
 5. Das neue Widget lange drücken, **Widget bearbeiten** wählen und bei **Script** **Perfume Cloud** auswählen.
+6. **Kalender-Widget:** ein zweites Widget hinzufügen, ebenfalls **Perfume Cloud** wählen und bei **Parameter** `kalender` eintragen. Es zeigt die nächsten Termine, Feiertage und Aktionstage.
 
 Das geht genauso auf dem **Sperrbildschirm**: Sperrbildschirm lange drücken, **Anpassen** und dort Widgets hinzufügen.
 
@@ -184,9 +192,9 @@ Wenn Claude etwas an der App ändert, landet das auf GitHub. Damit es ohne erneu
 
 ---
 
-## Teil F – Ideen-Assistent (Notizen und Aufgaben aus einem Satz)
+## Teil F – Ideen-Assistent (Notizen, Aufgaben und Termine aus einem Satz)
 
-In der App auf **Ideen** (oder auf der Übersicht ins Feld **„Idee oder Aufgabe festhalten“**) einfach losschreiben oder mit dem Mikrofon der iPhone-Tastatur diktieren. Der Assistent schlägt eine Notiz und Aufgaben vor. Alles lässt sich vor dem **Übernehmen** noch ändern oder abwählen. Er läuft ohne KI direkt in der App, kostet nichts und funktioniert auch offline.
+In der App auf **Ideen** (oder auf der Übersicht ins Feld **„Idee oder Aufgabe festhalten“**) einfach losschreiben oder mit dem Mikrofon der iPhone-Tastatur diktieren. Der Assistent schlägt eine Notiz, Aufgaben und Termine vor. Alles lässt sich vor dem **Übernehmen** noch ändern oder abwählen. Er läuft ohne KI direkt in der App, kostet nichts und funktioniert auch offline.
 
 | Schreibweise | Ergebnis |
 |---|---|
@@ -197,22 +205,51 @@ In der App auf **Ideen** (oder auf der Übersicht ins Feld **„Idee oder Aufgab
 | Zeilen mit `-`, darunter eingerückte Zeilen | einzelne Aufgaben mit Checkliste |
 | „Shooting vorbereiten: Flakons, Licht und Hintergrund“ | Aufgabe mit Checkliste |
 | kurze Überschrift über einer Liste | Notiz mit diesem Titel, Überschrift wird Kategorie der Aufgaben |
+| „Meeting mit Ben Freitag 14 Uhr im Büro“, „Messe vom 20. bis 24.10. in Köln“, „Zahnarzt Donnerstag 9:30“ | Termin im Kalender (Uhrzeit, Ort, Teilnehmer) |
+| „Meeting am Freitag vorbereiten“, „Angebot bis 12 Uhr schicken“ | bleibt eine Aufgabe |
 | „Notiz:“ am Anfang | nur eine Notiz |
 
 Beispiel: *„Wir sollten im November einen Adventskalender mit 24 Proben machen, Ben kümmert sich um die Fotos bis Freitag, Keanu um die Verpackung“* → Notiz „Adventskalender …“ und zwei Aufgaben: **Fotos** (Ben, Freitag) und **Verpackung** (Keanu).
 
-## Teil G – Eigenes Postfach (jede:r für sich)
+Beispiel: *„Kundentermin Mittwoch 11 Uhr, danach Pakete packen“* → Termin **Kundentermin** (Mittwoch, 11–12 Uhr) und Aufgabe **Pakete packen**. Oben lässt sich mit **Termin** auch alles als Termin erzwingen.
 
-Neben info@ und support@ kann jede Person ihr **persönliches Firmen-Postfach** verbinden, z. B. `marius.heub@perfumecloud.de`. **Nur der Besitzer** sieht diese Mails in der App und bekommt die Push-Nachrichten dazu. Ben und Keanu sehen davon nichts, auch nicht als Admin.
+## Teil G – Persönliche Postfächer und Push für Mails
 
-1. Bei netcup in Plesk unter **E-Mail** → die eigene Adresse → **Passwort** setzen bzw. nachsehen. Das Häkchen bei **E-Mail-Postfach** muss gesetzt sein.
-2. In der Team-App: **Einstellungen** → **Mein Postfach**.
-   - **E-Mail-Adresse**, z. B. `marius.heub@perfumecloud.de`
-   - **Passwort des Postfachs**
-   - **IMAP-Server** ist schon eingetragen (`mxf938.netcup.net`), **Port** `993`, **Benutzername** leer lassen
-3. **Speichern & testen** tippen. Nach ein paar Minuten erscheinen die Mails unter **Postfach** → **🔒 Mein Postfach**.
+Neben info@ und support@ lassen sich **persönliche Firmen-Postfächer** verbinden, z. B. `marius.heub@perfumecloud.de`. Ein persönliches Postfach sieht **nur die Person**, für die es freigegeben ist. Nur sie bekommt auch die Push-Nachrichten dazu.
 
-**Push für Mails:** Jede neue Mail löst eine Push-Nachricht aus. Mails an info@ und support@ gehen an alle, Mails ins persönliche Postfach nur an den Besitzer. Unter **Einstellungen → Benachrichtigungen → Bei welchen Mails?** lässt sich das auf **Nur wichtige** umstellen. Keinen Push lösen Newsletter, automatische Mails und Mails aus, die schon gelesen wurden. Zwischen 22 und 7 Uhr ist Ruhe, dann kommt morgens eine Zusammenfassung.
+- **Marius (Admin)** trägt alle Postfächer unter **Einstellungen → Integrationen → Postfächer** ein und legt bei **Sichtbar für** fest, wer sie sieht (siehe A8).
+- Alternativ verbindet jede Person ihr eigenes Postfach selbst unter **Einstellungen → Mein Postfach**: E-Mail-Adresse und Passwort des Postfachs eintragen (IMAP-Server `mxf938.netcup.net`, Port `993`, Benutzername leer lassen), dann **Speichern & testen**.
+
+Die Mails stehen danach unter **Postfach**. Persönliche Postfächer tragen ein 🔒.
+
+**Push für Mails:** Unter **Einstellungen → Benachrichtigungen → Bei welchen Mails?** wählt jede Person selbst:
+
+| Einstellung | Push bei … |
+|---|---|
+| **Jede neue** (Standard) | jeder neuen ungelesenen Mail, ohne Newsletter und automatische Mails |
+| **Wirklich alle** | wirklich jeder Mail, auch Newsletter, automatische und schon gelesene |
+| **Nur wichtige** | nur Mails, die die App als wichtig erkennt |
+
+Immer gilt: nur aus Postfächern, die für diese Person sichtbar sind. Zwischen 22 und 7 Uhr ist Ruhe, morgens kommt eine Zusammenfassung.
+
+## Teil H – Kalender
+
+Unter **Kalender** stehen Termine, Meetings, Events und Fristen fürs Team.
+
+- **Neuer Termin** (oder Doppelklick auf einen Tag): Titel, Art, Datum, Uhrzeit oder ganztägig, Ort, Teilnehmer und Erinnerung. Ohne Teilnehmer gilt der Termin fürs ganze Team.
+- Wer eingetragen wird, bekommt eine **Push-Nachricht**. Vor dem Termin kommt die **Erinnerung**. Ein- und ausschalten lässt sich das unter **Einstellungen → Benachrichtigungen → Termine**.
+- **Feiertage und Aktionstage** stehen automatisch drin und werden jedes Jahr neu berechnet: alle gesetzlichen Feiertage (rot) und Shop-Tage wie Valentinstag, Muttertag, Singles' Day, Black Week, Black Friday, Cyber Monday, Advent und Silvester (gelb). Marius wählt unter **Einstellungen → Integrationen → Kalender: Feiertage & Aktionstage** das **Bundesland**, damit auch regionale Feiertage wie Fronleichnam oder Allerheiligen dabei sind. Dort lassen sich beide Gruppen auch ausschalten. Im Kalender blendet der Schalter **Feiertage & Aktionstage** sie nur für dich aus.
+- **In der iPhone-Kalender-App:** **Einstellungen → Kalender abonnieren → Abo-Link erstellen → Im Kalender abonnieren**. Dann erscheinen die Team-Termine samt Aktionstagen in der Kalender-App und ihren Widgets. Feiertage zeigt das iPhone dort schon selbst.
+- **Widget:** siehe Teil D, Schritt 6.
+- **Per Ideen-Chat:** siehe Teil F.
+
+## Teil I – Wartung („Datenbank aktualisieren“)
+
+Bekommt jemand keine Mails oder Push-Nachrichten oder sieht veraltete Daten, geht Marius auf **Einstellungen → Integrationen → Wartung**.
+
+- Die Liste zeigt für jede Person: zuletzt online, Geräte mit Push, letzte erfolgreiche Push-Nachricht und sichtbare Postfächer. Dort steht auch, ob eine Einladung noch offen ist.
+- **Datenbank aktualisieren** bringt die Datenbank auf den neuesten Stand und löst hängende Abgleiche. Außerdem entfernt es kaputte Push-Anmeldungen und lädt auf allen Geräten die Daten komplett neu. Es geht nichts verloren.
+- Fehlen bei einer Person die Push-Geräte, muss sie auf ihrem iPhone unter **Einstellungen → Benachrichtigungen** einmal **Aktivieren** tippen (App vom Home-Bildschirm aus öffnen).
 
 ## Wenn etwas hakt
 
@@ -229,3 +266,6 @@ Neben info@ und support@ kann jede Person ihr **persönliches Firmen-Postfach** 
 | Passwort vergessen | Marius setzt unter **Einstellungen**, **Team**, **Passwort** ein neues. |
 | Mail-Test rot | IMAP-Server und Postfach-Passwort prüfen, Port 993. |
 | Shopify-Test rot | Client-ID und Secret neu kopieren. Prüfen, ob die drei Scopes angehakt sind und die App im Shop installiert ist. |
+| „E-Mail existiert bereits“ beim Anlegen | Mit dieser Adresse gab es schon ein Konto. Neu anlegen holt es zurück. Oder **Integrationen → Wartung → Wiederherstellen**. |
+| Einladungs-Mail kommt nicht an | Den angezeigten **Einladungslink** per WhatsApp schicken. Prüfen, ob info@ unter **Postfächer** mit Passwort verbunden ist. Auch im Spam-Ordner nachsehen. |
+| Jemand bekommt keine Push-Nachrichten oder Mails | **Integrationen → Wartung**: Geräte-Status prüfen, dann **Datenbank aktualisieren** (Teil I). |

@@ -7,8 +7,9 @@ namespace PC;
  * Holt Mails aus den Team-Postfächern (info@, support@) und den persönlichen Postfächern
  * (z. B. marius.heub@) und markiert die wichtigen offenen.
  *
- * Persönliche Postfächer gehören genau einer Person (owner_id): Nur sie sieht die Mails
- * und bekommt die Push-Nachrichten dazu.
+ * Jedes Postfach hat „Sichtbar für“: alle oder nur bestimmte Personen. Nur wer ein Postfach
+ * sehen darf, bekommt seine Mails in der App und die Push-Nachrichten dazu.
+ * Newsletter und automatische Mails werden gespeichert, aber markiert (auto = 1) und nie als wichtig gezählt.
  *
  * Offen   = nicht beantwortet (\Answered oder Antwort im Gesendet-Ordner) und in der App nicht erledigt.
  * Wichtig = offen UND (ungelesen ODER markiert ODER Kundenanliegen ODER > 24 h ohne Antwort).
@@ -26,11 +27,66 @@ final class MailJob
 
     // ---------- Konfiguration ----------
 
-    /** @return array<int, array{id:string,email:string,label:string,host:string,port:int,security:string,user:string}> */
+    /**
+     * Alle eingerichteten Postfächer (Team und persönliche).
+     * visible_to = [] → für alle sichtbar, sonst nur für diese Personen (User-IDs).
+     *
+     * @return array<int, array{id:string,email:string,label:string,host:string,port:int,security:string,user:string,visible_to:string[]}>
+     */
     public static function mailboxes(): array
     {
         $list = Settings::get('mailboxes', []);
-        return is_array($list) ? array_values(array_filter($list, static fn ($m) => !empty($m['host']) && !empty($m['email']))) : [];
+        if (!is_array($list)) {
+            return [];
+        }
+        $out = [];
+        foreach ($list as $m) {
+            if (!is_array($m) || empty($m['host']) || empty($m['email'])) {
+                continue;
+            }
+            $m['visible_to'] = array_values(array_unique(array_filter((array) ($m['visible_to'] ?? []), 'is_string')));
+            $out[] = $m;
+        }
+        return $out;
+    }
+
+    /** Postfächer, die diese Person sehen darf. */
+    public static function visibleMailboxes(string $userId): array
+    {
+        return array_values(array_filter(self::mailboxes(), static fn ($m) => !$m['visible_to'] || in_array($userId, $m['visible_to'], true)));
+    }
+
+    /** @return string[] Adressen der Postfächer, die diese Person sehen darf. */
+    public static function visibleAddresses(string $userId): array
+    {
+        return array_column(self::visibleMailboxes($userId), 'email');
+    }
+
+    public static function byAddress(string $address): ?array
+    {
+        foreach (self::mailboxes() as $m) {
+            if ($m['email'] === $address) {
+                return $m;
+            }
+        }
+        return null;
+    }
+
+    /** Darf diese Person die Mail sehen? Entscheidet die Einstellung „Sichtbar für“ des Postfachs. */
+    public static function visibleTo(array $mail, string $userId): bool
+    {
+        return in_array($mail['mailbox'], self::visibleAddresses($userId), true);
+    }
+
+    /** Persönliches Postfach = nur für diese eine Person sichtbar. */
+    public static function personal(string $userId): ?array
+    {
+        foreach (self::mailboxes() as $m) {
+            if ($m['visible_to'] === [$userId]) {
+                return $m;
+            }
+        }
+        return null;
     }
 
     public static function password(string $id): ?string
@@ -38,99 +94,20 @@ final class MailJob
         return Settings::getSecret('mailbox_pw_' . $id);
     }
 
-    /** Persönliches Postfach einer Person oder null. */
-    public static function personal(string $userId): ?array
-    {
-        $m = Settings::get('mailbox_user_' . $userId);
-        return is_array($m) && !empty($m['email']) && !empty($m['host']) ? $m + ['owner_id' => $userId] : null;
-    }
-
-    /** Team- und persönliche Postfächer aller aktiven Personen (mit owner_id). */
-    public static function allMailboxes(): array
-    {
-        $list = array_map(static fn ($m) => $m + ['owner_id' => null], self::mailboxes());
-        foreach (Db::all('SELECT id FROM users WHERE deleted = 0') as $u) {
-            if ($mb = self::personal($u['id'])) {
-                $list[] = $mb;
-            }
-        }
-        return $list;
-    }
-
-    /** Speichert das persönliche Postfach von $me; leeres Passwort = unverändert. */
-    public static function savePersonal(array $me, array $m): array
-    {
-        $email = mb_strtolower(trim((string) ($m['email'] ?? '')));
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new HttpError(422, 'Bitte eine gültige E-Mail-Adresse angeben.');
-        }
-        if (in_array($email, array_column(self::mailboxes(), 'email'), true)) {
-            throw new HttpError(422, $email . ' ist ein Team-Postfach und wird schon für alle abgerufen.');
-        }
-        foreach (Db::all('SELECT id FROM users WHERE deleted = 0 AND id <> ?', [$me['id']]) as $u) {
-            if ((self::personal($u['id'])['email'] ?? null) === $email) {
-                throw new HttpError(422, 'Dieses Postfach ist schon bei jemand anderem eingetragen.');
-            }
-        }
-        $old = self::personal($me['id']);
-        $host = Util::str($m['host'] ?? '', 190, false) ?: (self::mailboxes()[0]['host'] ?? '');
-        if ($host === '') {
-            throw new HttpError(422, 'Bitte den IMAP-Server angeben.');
-        }
-        $sameBox = $old && $old['email'] === $email;
-        $entry = [
-            'id' => $sameBox ? $old['id'] : substr(sha1($me['id'] . $email . random_bytes(4)), 0, 12),
-            'email' => $email,
-            'label' => explode('@', $email)[0],
-            'host' => $host,
-            'port' => (int) ($m['port'] ?? 993) ?: 993,
-            'security' => Util::oneOf($m['security'] ?? 'ssl', ['ssl', 'starttls'], 'ssl'),
-            'user' => Util::str($m['user'] ?? '', 190, false) ?: $email,
-        ];
-        if ($old && !$sameBox) {
-            self::removePersonal($me['id']);
-        }
-        if (!empty($m['password'])) {
-            Settings::setSecret('mailbox_pw_' . $entry['id'], (string) $m['password']);
-        } elseif (!self::password($entry['id'])) {
-            throw new HttpError(422, 'Bitte das Passwort des Postfachs eingeben.');
-        }
-        Settings::set('mailbox_user_' . $me['id'], $entry);
-        return $entry + ['owner_id' => $me['id']];
-    }
-
-    /** Entfernt das persönliche Postfach samt Passwort und blendet seine Mails aus. */
-    public static function removePersonal(string $userId): void
-    {
-        $mb = self::personal($userId);
-        if (!$mb) {
-            return;
-        }
-        foreach (['mailbox_pw_', 'mail_status_', 'mail_init_'] as $prefix) {
-            Settings::delete($prefix . $mb['id']);
-        }
-        Settings::delete('mailbox_user_' . $userId);
-        Db::exec(
-            'UPDATE emails SET deleted = 1, subject = NULL, snippet = NULL, from_name = NULL, from_email = NULL, updated_at = ? WHERE owner_id = ?',
-            [Util::now(), $userId]
-        );
-    }
-
-    /** Darf $user diese Mail sehen? Team-Mails ja, persönliche nur die eigenen. */
-    public static function visibleTo(array $mail, string $userId): bool
-    {
-        return $mail['owner_id'] === null || $mail['owner_id'] === '' || $mail['owner_id'] === $userId;
-    }
-
-    /** Speichert die Postfächer; leeres Passwort bedeutet „unverändert lassen“. */
+    /**
+     * Speichert die Postfächer (Admin); leeres Passwort bedeutet „unverändert lassen“.
+     * Wird ein Postfach für weitere Personen sichtbar, bekommen sie seine Mails beim nächsten Abgleich.
+     */
     public static function save(array $input): array
     {
         $existing = [];
         foreach (self::mailboxes() as $m) {
             $existing[$m['id']] = $m;
         }
+        $userIds = array_column(Db::all('SELECT id FROM users WHERE deleted = 0'), 'id');
         $list = [];
-        foreach (array_slice($input, 0, 6) as $m) {
+        $seen = [];
+        foreach (array_slice($input, 0, 12) as $m) {
             if (!is_array($m)) {
                 continue;
             }
@@ -138,7 +115,12 @@ final class MailJob
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new HttpError(422, 'Ungültige E-Mail-Adresse: ' . $email);
             }
+            if (isset($seen[$email])) {
+                throw new HttpError(422, $email . ' ist doppelt eingetragen.');
+            }
+            $seen[$email] = true;
             $id = isset($m['id']) && isset($existing[$m['id']]) ? $m['id'] : substr(sha1($email . random_bytes(4)), 0, 12);
+            $visible = array_values(array_unique(array_intersect(array_filter((array) ($m['visible_to'] ?? []), 'is_string'), $userIds)));
             $entry = [
                 'id' => $id,
                 'email' => $email,
@@ -147,22 +129,132 @@ final class MailJob
                 'port' => (int) ($m['port'] ?? 993) ?: 993,
                 'security' => Util::oneOf($m['security'] ?? 'ssl', ['ssl', 'starttls'], 'ssl'),
                 'user' => Util::str($m['user'] ?? $email, 190, false) ?: $email,
+                'visible_to' => $visible,
+                'added_by' => $existing[$id]['added_by'] ?? null,
             ];
             if ($entry['host'] === '') {
                 throw new HttpError(422, 'Bitte den IMAP-Server für ' . $email . ' angeben.');
             }
-            $list[] = $entry;
             if (!empty($m['password'])) {
                 Settings::setSecret('mailbox_pw_' . $id, (string) $m['password']);
+            } elseif (!self::password($id)) {
+                throw new HttpError(422, 'Bitte das Passwort für ' . $email . ' eingeben.');
             }
+            $old = $existing[$id] ?? null;
+            if ($old && $old['email'] !== $email) {
+                self::hideMails($old['email']);
+            } elseif ($old && $old['visible_to'] !== $visible) {
+                // Neu berechtigte Personen sollen die vorhandenen Mails beim nächsten Abgleich bekommen
+                Db::exec('UPDATE emails SET updated_at = ? WHERE mailbox = ? AND deleted = 0', [Util::now(), $email]);
+            }
+            $list[] = $entry;
         }
-        foreach (array_keys($existing) as $id) {
+        foreach ($existing as $id => $old) {
             if (!in_array($id, array_column($list, 'id'), true)) {
-                Settings::delete('mailbox_pw_' . $id);
+                self::forget($old);
             }
         }
         Settings::set('mailboxes', $list);
-        return $list;
+        return self::mailboxes();
+    }
+
+    /** Eigenes Postfach anlegen oder ändern (jede Person für sich, nur für sie sichtbar). */
+    public static function savePersonal(array $me, array $m): array
+    {
+        $email = mb_strtolower(trim((string) ($m['email'] ?? '')));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new HttpError(422, 'Bitte eine gültige E-Mail-Adresse angeben.');
+        }
+        $old = self::personal($me['id']);
+        $taken = self::byAddress($email);
+        if ($taken && (!$old || $taken['id'] !== $old['id'])) {
+            throw new HttpError(422, $taken['visible_to']
+                ? 'Dieses Postfach ist schon eingetragen.'
+                : $email . ' ist ein Team-Postfach und wird schon für alle abgerufen.');
+        }
+        $host = Util::str($m['host'] ?? '', 190, false) ?: ($old['host'] ?? (self::mailboxes()[0]['host'] ?? ''));
+        if ($host === '') {
+            throw new HttpError(422, 'Bitte den IMAP-Server angeben.');
+        }
+        $entry = [
+            'id' => $old['id'] ?? substr(sha1($me['id'] . $email . random_bytes(4)), 0, 12),
+            'email' => $email,
+            'label' => explode('@', $email)[0],
+            'host' => $host,
+            'port' => (int) ($m['port'] ?? 993) ?: 993,
+            'security' => Util::oneOf($m['security'] ?? 'ssl', ['ssl', 'starttls'], 'ssl'),
+            'user' => Util::str($m['user'] ?? '', 190, false) ?: $email,
+            'visible_to' => [$me['id']],
+            'added_by' => $old['added_by'] ?? $me['id'],
+        ];
+        if (!empty($m['password'])) {
+            Settings::setSecret('mailbox_pw_' . $entry['id'], (string) $m['password']);
+        } elseif (!self::password($entry['id'])) {
+            throw new HttpError(422, 'Bitte das Passwort des Postfachs eingeben.');
+        }
+        if ($old && $old['email'] !== $email) {
+            self::hideMails($old['email']);
+            Settings::delete('mail_init_' . $entry['id']);
+        }
+        $list = array_values(array_filter(Settings::get('mailboxes', []) ?: [], static fn ($x) => ($x['id'] ?? '') !== $entry['id']));
+        $list[] = $entry;
+        Settings::set('mailboxes', $list);
+        return self::byAddress($email) ?? $entry;
+    }
+
+    /** Entfernt das persönliche Postfach dieser Person (z. B. beim Austritt) und blendet seine Mails aus. */
+    public static function removePersonal(string $userId): void
+    {
+        $list = Settings::get('mailboxes', []) ?: [];
+        $keep = [];
+        foreach (self::mailboxes() as $m) {
+            if ($m['visible_to'] === [$userId]) {
+                self::forget($m);
+                continue;
+            }
+            // Aus geteilten Postfächern nur die Person austragen
+            $m['visible_to'] = array_values(array_diff($m['visible_to'], [$userId]));
+            $keep[] = $m;
+        }
+        if (count($keep) !== count($list) || $keep !== $list) {
+            Settings::set('mailboxes', $keep);
+        }
+    }
+
+    /** Passwort, Status und Mails eines entfernten Postfachs löschen bzw. ausblenden. */
+    private static function forget(array $m): void
+    {
+        foreach (['mailbox_pw_', 'mail_status_', 'mail_init_'] as $prefix) {
+            Settings::delete($prefix . $m['id']);
+        }
+        self::hideMails($m['email']);
+    }
+
+    private static function hideMails(string $address): void
+    {
+        Db::exec(
+            'UPDATE emails SET deleted = 1, subject = NULL, snippet = NULL, from_name = NULL, from_email = NULL, updated_at = ? WHERE mailbox = ?',
+            [Util::now(), $address]
+        );
+    }
+
+    /** Version 1.1 speicherte persönliche Postfächer getrennt – in die gemeinsame Liste übernehmen. */
+    public static function migrateLegacy(): void
+    {
+        $rows = Db::all("SELECT k FROM settings WHERE k LIKE 'mailbox_user_%'");
+        if (!$rows) {
+            return;
+        }
+        $list = Settings::get('mailboxes', []) ?: [];
+        foreach ($rows as $r) {
+            $userId = substr($r['k'], strlen('mailbox_user_'));
+            $m = Settings::get($r['k']);
+            if (is_array($m) && !empty($m['email']) && !in_array($m['email'], array_column($list, 'email'), true)) {
+                $list[] = $m + ['visible_to' => [$userId], 'added_by' => $userId];
+            }
+            Settings::delete($r['k']);
+        }
+        Settings::set('mailboxes', $list);
     }
 
     public static function test(array $mb): array
@@ -190,11 +282,11 @@ final class MailJob
     public static function run(): array
     {
         $summary = [];
-        $all = self::allMailboxes();
+        $all = self::mailboxes();
         $ownAddresses = array_column($all, 'email');
         foreach ($all as $mb) {
-            // Team-Postfächer: Mails vom eigenen Team ausblenden. Persönlich: nur Mails an sich selbst.
-            $own = $mb['owner_id'] ? [$mb['email']] : $ownAddresses;
+            // Team-Postfächer: Mails vom eigenen Team ausblenden. Persönliche: nur Mails von sich selbst.
+            $own = $mb['visible_to'] ? [$mb['email']] : $ownAddresses;
             try {
                 $summary[$mb['email']] = self::fetchMailbox($mb, $own);
                 Settings::set('mail_status_' . $mb['id'], ['ok' => true, 'at' => Util::now(), 'message' => 'OK']);
@@ -254,9 +346,10 @@ final class MailJob
         foreach ($messages as $uid => $msg) {
             $headers = self::parseHeaders((string) self::firstWithPrefix($msg, 'BODY[HEADER'));
             [$fromName, $fromEmail] = self::parseAddress(self::decodeHeader($headers['from'] ?? ''));
-            if ($fromEmail === '' || in_array($fromEmail, $own, true) || self::isAutomated($headers, $fromEmail)) {
+            if ($fromEmail === '' || in_array($fromEmail, $own, true)) {
                 continue;
             }
+            $auto = self::isAutomated($headers, $fromEmail);
             $id = substr(sha1($mb['email'] . '|' . $validity . '|' . $uid), 0, 40);
             $seenIds[] = $id;
 
@@ -272,10 +365,11 @@ final class MailJob
                 'received_at' => $receivedAt,
                 'snippet' => self::snippet($headers, (string) self::firstWithPrefix($msg, 'BODY[TEXT]')),
             ];
-            $c = self::classify($mail, $now);
+            $c = $auto ? ['important' => false, 'reasons' => [], 'score' => 0] : self::classify($mail, $now);
             $mail['important'] = $c['important'] ? 1 : 0;
             $mail['reasons'] = implode('|', $c['reasons']) ?: null;
             $mail['score'] = $c['score'];
+            $mail['auto'] = $auto ? 1 : 0;
 
             $old = Db::one('SELECT * FROM emails WHERE id = ?', [$id]);
             if (!$old) {
@@ -287,7 +381,6 @@ final class MailJob
                     'from_email' => mb_substr($fromEmail, 0, 255),
                     'status' => 'open',
                     'notified' => $initial ? 2 : 0,
-                    'owner_id' => $mb['owner_id'] ?? null,
                     'created_at' => $now,
                     'updated_at' => $now,
                     'deleted' => 0,
@@ -295,7 +388,7 @@ final class MailJob
                 $new++;
             } else {
                 $changed = (int) $old['deleted'] === 1;
-                foreach (['seen', 'flagged', 'answered', 'important', 'reasons', 'score', 'snippet'] as $k) {
+                foreach (['seen', 'flagged', 'answered', 'important', 'reasons', 'score', 'snippet', 'auto'] as $k) {
                     if ((string) $old[$k] !== (string) $mail[$k]) {
                         $changed = true;
                     }
@@ -309,6 +402,7 @@ final class MailJob
                         'reasons' => $mail['reasons'],
                         'score' => $mail['score'],
                         'snippet' => $mail['snippet'],
+                        'auto' => $mail['auto'],
                         'deleted' => 0,
                         'updated_at' => max($now, (int) $old['updated_at'] + 1),
                     ], ['id' => $id]);
@@ -363,7 +457,7 @@ final class MailJob
                     Notify::toUser($u, [
                         'title' => self::sender($m) . ' · ' . explode('@', (string) $m['mailbox'])[0] . '@',
                         'body' => (string) $m['subject'],
-                        'url' => $m['owner_id'] ? '/postfach?box=' . rawurlencode((string) $m['mailbox']) : '/postfach',
+                        'url' => (self::byAddress((string) $m['mailbox'])['visible_to'] ?? []) ? '/postfach?box=' . rawurlencode((string) $m['mailbox']) : '/postfach',
                         'tag' => 'mail-' . $m['id'],
                     ]);
                 }
@@ -400,15 +494,18 @@ final class MailJob
 
     /**
      * Wer bekommt für welche neuen Mails einen Push?
-     * Team-Mails: alle; persönliche: nur der Besitzer. Nur ungelesene, unbeantwortete, offene Mails
-     * der letzten 12 Stunden; Push für Mails ausgeschaltet → nichts; „Nur wichtige“ → nur wichtige.
+     * Nur wer das Postfach sehen darf („Sichtbar für“). Je nach Einstellung der Person:
+     *   all        – jede neue ungelesene Mail (ohne Newsletter/automatische)
+     *   everything – wirklich jede neue Mail, auch Newsletter, automatische und schon gelesene
+     *   important  – nur wichtige
+     * Immer nur unbeantwortete, offene Mails der letzten 12 Stunden.
      *
      * @return array<string, array<int, array>> userId => Mails
      */
     public static function pushPlan(array $mails, array $users, int $now): array
     {
-        $pushable = array_filter($mails, static fn ($m) =>
-            !(int) $m['deleted'] && !(int) $m['seen'] && !(int) $m['answered'] && $m['status'] === 'open'
+        $recent = array_filter($mails, static fn ($m) =>
+            !(int) $m['deleted'] && !(int) $m['answered'] && $m['status'] === 'open'
             && (int) $m['received_at'] >= $now - 12 * 3600 * 1000);
         $plan = [];
         foreach ($users as $u) {
@@ -416,9 +513,18 @@ final class MailJob
             if (empty($prefs['push']['mail'])) {
                 continue;
             }
-            $onlyImportant = ($prefs['mailScope'] ?? 'all') === 'important';
-            $mine = array_values(array_filter($pushable, static fn ($m) =>
-                self::visibleTo($m, $u['id']) && (!$onlyImportant || (int) $m['important'])));
+            $scope = $prefs['mailScope'] ?? 'all';
+            $mine = array_values(array_filter($recent, static function ($m) use ($scope, $u) {
+                if (!self::visibleTo($m, $u['id'])) {
+                    return false;
+                }
+                $auto = (int) ($m['auto'] ?? 0);
+                return match ($scope) {
+                    'everything' => true,
+                    'important' => (int) $m['important'] && !(int) $m['seen'],
+                    default => !$auto && !(int) $m['seen'],
+                };
+            }));
             if ($mine) {
                 $plan[$u['id']] = $mine;
             }

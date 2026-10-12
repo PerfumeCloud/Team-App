@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Check, CircleCheck, Flag, Inbox as InboxIcon, ListPlus, Lock, Mail, Reply, RotateCcw, Settings, UserRound } from 'lucide-react';
+import { Check, CircleCheck, Flag, Inbox as InboxIcon, ListPlus, Lock, Mail, Newspaper, Reply, RotateCcw, Settings, UserRound } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { Avatar, Button, Chip, cx, EmptyState, Segmented } from '../components/ui';
 import { useStore } from '../lib/store';
@@ -23,6 +23,7 @@ export default function Inbox() {
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState<View>('important');
   const [box, setBox] = useState<string>(() => params.get('box') ?? 'all');
+  const [showAuto, setShowAuto] = useState(false);
 
   // Aus einer Push-Nachricht: /postfach?box=marius.heub@… öffnet das eigene Postfach mit allen offenen Mails
   useEffect(() => {
@@ -35,7 +36,10 @@ export default function Inbox() {
   }, [params, setParams, meta?.myMailbox]);
 
   const users = Object.values(usersMap).filter((u) => !u.deleted);
-  const all = useMemo(() => Object.values(emailsMap).filter((m) => box === 'all' || m.mailbox === box), [emailsMap, box]);
+  const inBox = useMemo(() => Object.values(emailsMap).filter((m) => box === 'all' || m.mailbox === box), [emailsMap, box]);
+  const autoCount = inBox.filter((m) => m.auto && isOpen(m)).length;
+  // Newsletter & automatische Mails nur auf Wunsch
+  const all = useMemo(() => inBox.filter((m) => showAuto || !m.auto), [inBox, showAuto]);
   const lists = useMemo(() => {
     const important = all.filter((m) => isOpen(m) && m.important).sort((a, b) => b.score - a.score || b.received_at - a.received_at);
     const open = all.filter(isOpen).sort((a, b) => b.received_at - a.received_at);
@@ -101,12 +105,28 @@ export default function Inbox() {
                     <span className="inline-flex items-center gap-1">
                       <Lock className="h-3 w-3" /> Mein Postfach
                     </span>
+                  ) : Object.values(emailsMap).some((e) => e.mailbox === m && e.visible_to?.length) ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Lock className="h-3 w-3" /> {m.split('@')[0]}@
+                    </span>
                   ) : (
                     m.split('@')[0] + '@'
                   ),
               })),
             ]}
           />
+        )}
+        {(autoCount > 0 || showAuto) && (
+          <button
+            onClick={() => setShowAuto((v) => !v)}
+            aria-pressed={showAuto}
+            className={cx(
+              'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-medium transition-colors',
+              showAuto ? 'border-accent/40 bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2',
+            )}
+          >
+            <Newspaper className="h-3.5 w-3.5" /> Newsletter & Automatisch <span className="tnum text-ink-3">{autoCount}</span>
+          </button>
         )}
         {!meta.myMailbox && (
           <Button size="sm" variant="ghost" icon={<Mail className="h-3.5 w-3.5" />} onClick={() => navigate('/einstellungen')}>
@@ -131,9 +151,9 @@ export default function Inbox() {
         </ul>
       )}
       <p className="mt-6 text-center text-[12px] leading-relaxed text-ink-3">
-        Angezeigt werden Mails der letzten 14 Tage. Newsletter, automatische Mails und Shopify-Benachrichtigungen werden ausgeblendet.
+        Angezeigt werden Mails der letzten 14 Tage. Newsletter, automatische Mails und Shopify-Benachrichtigungen sind ausgeblendet, lassen sich aber einblenden.
         <br />
-        Beantwortete Mails gelten automatisch als erledigt. Persönliche Postfächer sieht nur ihr Besitzer.
+        Beantwortete Mails gelten automatisch als erledigt. Postfächer mit 🔒 sehen nur die Personen, für die sie freigegeben sind.
       </p>
     </>
   );
@@ -145,7 +165,10 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
   const navigate = useNavigate();
   const [assigning, setAssigning] = useState(false);
   const open = isOpen(mail);
-  const mine = !!mail.owner_id;
+  // „Sichtbar für“: leer = alle; [ich] = mein persönliches Postfach
+  const restricted = (mail.visible_to?.length ?? 0) > 0;
+  const mine = restricted && mail.visible_to!.length === 1 && mail.visible_to![0] === meId;
+  const assignable = restricted ? users.filter((u) => mail.visible_to!.includes(u.id)) : users;
   const assignee = mail.assignee_id ? usersMap[mail.assignee_id] : null;
   const sender = mail.from_name || mail.from_email || 'Unbekannt';
   const replyHref = `mailto:${encodeURIComponent(mail.from_email ?? '')}?subject=${encodeURIComponent((mail.subject ?? '').match(/^re:/i) ? (mail.subject ?? '') : `Re: ${mail.subject ?? ''}`)}`;
@@ -153,8 +176,8 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
   function toTask() {
     const t = saveTask({
       title: `Antworten: ${mail.subject ?? sender}`,
-      // Aufgaben sieht das ganze Team – bei persönlichen Mails daher ohne Mailtext
-      description: mine ? `Mail von ${sender} in deinem persönlichen Postfach` : `Von ${sender}${mail.from_email ? ` <${mail.from_email}>` : ''} an ${mail.mailbox}\n\n${mail.snippet ?? ''}`,
+      // Aufgaben sieht das ganze Team – bei nicht freigegebenen Postfächern daher ohne Mailtext
+      description: restricted ? `Mail von ${sender} in ${mine ? 'deinem persönlichen Postfach' : mail.mailbox}` : `Von ${sender}${mail.from_email ? ` <${mail.from_email}>` : ''} an ${mail.mailbox}\n\n${mail.snippet ?? ''}`,
       assignee_id: mine ? (meId ?? null) : (mail.assignee_id ?? meId ?? null),
       due_date: todayISO(),
       priority: mail.reasons.includes('Kundenanliegen') ? 'high' : 'normal',
@@ -180,9 +203,14 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
               <Chip tone="neutral" icon={<Lock className="h-3 w-3" />}>
                 Mein Postfach
               </Chip>
+            ) : restricted ? (
+              <Chip tone="neutral" icon={<Lock className="h-3 w-3" />}>
+                {mail.mailbox.split('@')[0]}@
+              </Chip>
             ) : (
               <Chip tone="accent">{mail.mailbox.split('@')[0]}@</Chip>
             )}
+            {!!mail.auto && <Chip icon={<Newspaper className="h-3 w-3" />}>Automatisch</Chip>}
             {open &&
               mail.reasons
                 .filter((r) => r !== 'Ungelesen')
@@ -207,7 +235,7 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
 
       {assigning && (
         <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
-          {users.map((u) => (
+          {assignable.map((u) => (
             <button
               key={u.id}
               onClick={() => {
@@ -247,7 +275,7 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
         </a>
         {open && (
           <>
-            {!mine && (
+            {assignable.length > 1 && (
               <Button size="sm" variant="secondary" aria-label="Zuweisen" icon={<UserRound className="h-3.5 w-3.5" />} onClick={() => setAssigning((v) => !v)}>
                 <span className="max-sm:hidden">Zuweisen</span>
               </Button>

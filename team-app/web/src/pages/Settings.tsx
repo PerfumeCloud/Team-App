@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   BellRing,
+  CalendarDays,
+  Check,
   CircleAlert,
   CircleCheck,
   Clock,
@@ -27,6 +29,7 @@ import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { Integrations, MailboxConfig, MyMailbox, Prefs, PushKind, User, UserColor } from '../lib/types';
 import { disablePush, enablePush, isIos, isStandalone, pushState, type PushState } from '../lib/push';
+import { STATES } from '../lib/holidays';
 import { getThemePref, setThemePref, type ThemePref } from '../lib/theme';
 import widgetTemplate from '../lib/widget-template.js?raw';
 import { relative } from '../lib/format';
@@ -40,6 +43,7 @@ const PUSH_KINDS: { key: PushKind; label: string; hint: string }[] = [
   { key: 'tasks', label: 'Aufgaben für mich', hint: 'Wenn dir jemand eine Aufgabe zuweist' },
   { key: 'comments', label: 'Kommentare', hint: 'Zu Aufgaben, die du angelegt hast oder erledigst' },
   { key: 'reminders', label: 'Morgendliche Erinnerung', hint: 'Um 8 Uhr: heute fällige Aufgaben' },
+  { key: 'events', label: 'Termine', hint: 'Erinnerung vor Terminen und wenn dich jemand einträgt' },
 ];
 
 function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
@@ -141,6 +145,7 @@ function General() {
       <PushSection prefs={prefs} onPrefs={(p) => saveProfile({ prefs: p })} />
       <InstallSection />
       <WidgetSection />
+      <CalendarFeedSection />
 
       <Section title="Darstellung">
         <Segmented
@@ -270,7 +275,14 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
             <li className="flex flex-wrap items-center justify-between gap-3 py-3">
               <div>
                 <div className="text-[14.5px] font-medium text-ink">Bei welchen Mails?</div>
-                <div className="text-[12.5px] text-ink-3">Mails aus deinem eigenen Postfach bekommst nur du.</div>
+                <div className="text-[12.5px] text-ink-3">
+                  {prefs.mailScope === 'everything'
+                    ? 'Jede Mail – auch Newsletter, automatische und schon gelesene.'
+                    : prefs.mailScope === 'important'
+                      ? 'Nur Mails, die als wichtig erkannt werden.'
+                      : 'Jede neue ungelesene Mail, ohne Newsletter und automatische.'}{' '}
+                  Immer nur aus Postfächern, die für dich sichtbar sind.
+                </div>
               </div>
               <Segmented
                 size="sm"
@@ -278,6 +290,7 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
                 onChange={(v) => onPrefs({ ...prefs, mailScope: v })}
                 options={[
                   { value: 'all', label: 'Jede neue' },
+                  { value: 'everything', label: 'Wirklich alle' },
                   { value: 'important', label: 'Nur wichtige' },
                 ]}
               />
@@ -286,7 +299,7 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
         </ul>
       )}
       <p className="mt-3 text-[12px] text-ink-3">
-        Zwischen 22 und 7 Uhr werden keine Mail- und Bestell-Nachrichten verschickt – die Mails kommen dann morgens gesammelt. Newsletter und automatische Mails lösen keinen Push aus.
+        Zwischen 22 und 7 Uhr werden keine Mail- und Bestell-Nachrichten verschickt – die Mails kommen dann morgens gesammelt. Termin-Erinnerungen kommen immer pünktlich.
       </p>
     </Section>
   );
@@ -403,6 +416,9 @@ function WidgetSection() {
         <li>
           5. Das neue Widget antippen und halten → <b>Widget bearbeiten</b> → bei „Script“ <b>Perfume Cloud</b> auswählen.
         </li>
+        <li>
+          6. <b>Kalender-Widget:</b> ein zweites Widget hinzufügen, ebenfalls <b>Perfume Cloud</b> auswählen und bei „Parameter“ <b>kalender</b> eintragen. Es zeigt deine nächsten Termine mit Feiertagen und Aktionstagen.
+        </li>
       </ol>
       <p className="mt-3 text-[12.5px] text-ink-3">
         Klappt genauso auf dem Sperrbildschirm. Das Widget aktualisiert sich etwa alle 15 Minuten (iOS entscheidet den genauen Zeitpunkt). Der Zugang darin ist persönlich und kann nur lesen.
@@ -457,17 +473,20 @@ function Team() {
   const sync = useStore((s) => s.sync);
   const admin = me.role === 'admin';
   const users = Object.values(usersMap).filter((u) => !u.deleted);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'member' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'member', invite: true });
   const [busy, setBusy] = useState(false);
   const [reset, setReset] = useState<{ id: string; password: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<(InviteResult & { name: string }) | null>(null);
 
   async function add(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      await api('POST', '/admin/users', form);
-      toast(`${form.name} wurde angelegt`, 'success');
-      setForm({ name: '', email: '', password: '', role: 'member' });
+      const r = await api<{ restored: boolean; invite: InviteResult | null }>('POST', '/admin/users', form);
+      const first = form.name.split(' ')[0];
+      toast(r.restored ? `${first} ist wieder im Team` : `${first} wurde angelegt`, 'success');
+      if (r.invite) setInviteResult({ ...r.invite, name: first });
+      setForm({ name: '', email: '', password: '', role: 'member', invite: true });
       await sync();
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -475,9 +494,22 @@ function Team() {
     setBusy(false);
   }
 
+  async function invite(u: User) {
+    try {
+      const r = await api<InviteResult>('POST', `/admin/users/${u.id}/invite`);
+      setInviteResult({ ...r, name: u.name.split(' ')[0] });
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  }
+
   return (
     <>
-      <Section title="Team" description={admin ? 'Jede Person bekommt ein eigenes Konto. Teile E-Mail und Startpasswort persönlich – das Passwort kann danach jede:r selbst ändern.' : undefined}>
+      <Section
+        title="Team"
+        description={admin ? 'Jede Person bekommt ein eigenes Konto. Am einfachsten per Einladung: Die Person bekommt eine Mail mit einem Link und legt ihr Passwort selbst fest.' : undefined}
+      >
+        {inviteResult && <InviteBox r={inviteResult} onClose={() => setInviteResult(null)} />}
         <ul className="divide-y divide-line/70">
           {users.map((u) => (
             <li key={u.id} className="flex flex-wrap items-center gap-3 py-3">
@@ -490,7 +522,10 @@ function Team() {
               </div>
               {u.role === 'admin' && <Chip tone="accent">Admin</Chip>}
               {admin && u.id !== me.id && (
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
+                  <Button size="sm" variant="ghost" icon={<Mail className="h-3.5 w-3.5" />} onClick={() => invite(u)}>
+                    Einladen
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => setReset({ id: u.id, password: '' })}>
                     Passwort
                   </Button>
@@ -546,7 +581,15 @@ function Team() {
           <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input className="field" placeholder="Name, z. B. Ben oder Keanu" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <input className="field" type="email" placeholder="E-Mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-            <input className="field" type="text" minLength={8} placeholder="Startpasswort (mind. 8 Zeichen)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+            <input
+              className="field"
+              type="text"
+              minLength={8}
+              placeholder={form.invite ? 'Startpasswort (optional)' : 'Startpasswort (mind. 8 Zeichen)'}
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required={!form.invite}
+            />
             <Segmented
               value={form.role}
               onChange={(v) => setForm({ ...form, role: v })}
@@ -555,11 +598,19 @@ function Team() {
                 { value: 'admin', label: 'Admin' },
               ]}
             />
+            <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-2/70 px-3.5 py-2.5 sm:col-span-2">
+              <span className="text-[14px] text-ink">
+                Einladung per E-Mail schicken
+                <span className="block text-[12.5px] text-ink-3">Mit Link zum Passwort-Festlegen – verschickt über euer info@-Postfach.</span>
+              </span>
+              <Toggle label="Einladung per E-Mail" checked={form.invite} onChange={(v) => setForm({ ...form, invite: v })} />
+            </label>
             <div>
               <Button type="submit" icon={<Plus className="h-4 w-4" />} loading={busy}>
                 Hinzufügen
               </Button>
             </div>
+            <p className="text-[12px] text-ink-3 sm:col-span-2">War die Person schon mal im Team und wurde entfernt? Einfach mit derselben E-Mail neu anlegen – sie wird wiederhergestellt.</p>
           </form>
         </Section>
       )}
@@ -570,9 +621,289 @@ function Team() {
 // ---------------- Integrationen ----------------
 
 const DEFAULT_MAILBOXES: MailboxConfig[] = [
-  { email: 'info@perfumecloud.de', host: '', port: 993, security: 'ssl', user: 'info@perfumecloud.de' },
-  { email: 'support@perfumecloud.de', host: '', port: 993, security: 'ssl', user: 'support@perfumecloud.de' },
+  { email: 'info@perfumecloud.de', host: '', port: 993, security: 'ssl', user: 'info@perfumecloud.de', visible_to: [] },
+  { email: 'support@perfumecloud.de', host: '', port: 993, security: 'ssl', user: 'support@perfumecloud.de', visible_to: [] },
 ];
+
+// ---------------- Einladung ----------------
+
+interface InviteResult {
+  sent: boolean;
+  message: string;
+  link: string;
+}
+
+function InviteBox({ r, onClose }: { r: InviteResult & { name: string }; onClose: () => void }) {
+  const share = async () => {
+    const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
+    if (nav.share) {
+      await nav.share({ title: 'Einladung Perfume Cloud Team', text: `Hallo ${r.name}, hier ist deine Einladung zur Team-App:`, url: r.link }).catch(() => undefined);
+    } else {
+      await navigator.clipboard?.writeText(r.link).catch(() => undefined);
+      toast('Link kopiert', 'success');
+    }
+  };
+  return (
+    <div className={cx('mb-4 rounded-2xl p-4', r.sent ? 'bg-good/10' : 'bg-warn/10')}>
+      <p className={cx('flex items-start gap-2 text-[14px] font-medium', r.sent ? 'text-good' : 'text-warn')}>
+        {r.sent ? <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />}
+        <span>{r.sent ? `Einladung an ${r.name} verschickt.` : r.message}</span>
+      </p>
+      <p className="mt-2 text-[13px] text-ink-2">
+        {r.sent ? 'Kommt nichts an (Spam-Ordner prüfen!), kannst du den Link auch direkt schicken, z. B. per WhatsApp:' : `Schick ${r.name} den Link einfach direkt, z. B. per WhatsApp:`}
+      </p>
+      <div className="mt-2 flex gap-2">
+        <input className="field font-mono text-[12px]" readOnly value={r.link} onFocus={(e) => e.target.select()} aria-label="Einladungslink" />
+        <Button variant="secondary" icon={<Share className="h-4 w-4" />} onClick={share}>
+          <span className="max-sm:hidden">Teilen</span>
+        </Button>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] text-ink-3">
+        <span>Der Link gilt 14 Tage und nur einmal.</span>
+        <button className="font-medium text-ink-2 hover:text-ink" onClick={onClose}>
+          Schließen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Wartung ----------------
+
+interface Diagnostics {
+  version: string;
+  schema: string;
+  driver: string;
+  php: string;
+  counts: Record<string, number>;
+  cronLastRun: number;
+  jobsLastRun: number;
+  mailLastFetch: number;
+  mailSender: string | null;
+  people: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    deleted: number;
+    lastSeen: number | null;
+    pushDevices: number;
+    pushLastOk: number | null;
+    mailPush: boolean;
+    mailboxes: string[];
+    invitePending: boolean;
+  }[];
+  log?: string[];
+}
+
+function MaintenanceSection() {
+  const sync = useStore((s) => s.sync);
+  const [d, setD] = useState<Diagnostics | null>(null);
+  const [busy, setBusy] = useState(false);
+  const now = useNow();
+  const load = () => api<Diagnostics>('GET', '/admin/maintenance').then(setD).catch(() => undefined);
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function repair() {
+    setBusy(true);
+    try {
+      const r = await api<Diagnostics>('POST', '/admin/maintenance');
+      setD(r);
+      toast('Datenbank aktualisiert', 'success');
+      await sync({ full: true });
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restore(id: string) {
+    try {
+      await api('POST', `/admin/users/${id}/restore`);
+      toast('Wiederhergestellt', 'success');
+      await load();
+      await sync({ full: true });
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  }
+
+  const active = d?.people.filter((p) => !p.deleted) ?? [];
+  const deleted = d?.people.filter((p) => p.deleted) ?? [];
+  return (
+    <Section
+      title="Wartung"
+      description="Wenn etwas hakt – z. B. jemand keine Mails oder Push-Nachrichten bekommt: „Datenbank aktualisieren“ bringt alles auf den neuesten Stand, löst Hänger und lässt alle Geräte ihre Daten komplett neu laden. Es geht nichts verloren."
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <Button icon={<RefreshCw className={cx('h-4 w-4', busy && 'animate-spin')} />} loading={busy} onClick={repair}>
+          Datenbank aktualisieren
+        </Button>
+        {d && (
+          <span className="text-[12.5px] text-ink-3">
+            Version {d.version} · {d.driver === 'mysql' ? 'MySQL' : 'SQLite'} · PHP {d.php}
+          </span>
+        )}
+      </div>
+      {d?.log && (
+        <ul className="mt-3 space-y-1 rounded-xl bg-good/10 p-3 text-[13px] text-ink-2">
+          {d.log.map((l) => (
+            <li key={l} className="flex gap-2">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-good" /> {l}
+            </li>
+          ))}
+        </ul>
+      )}
+      {d && (
+        <>
+          <p className="mt-4 text-[13px] text-ink-2">
+            Mails zuletzt abgerufen: <b>{d.mailLastFetch ? relative(d.mailLastFetch, now) : 'noch nie'}</b> · Cronjob: <b>{d.cronLastRun ? relative(d.cronLastRun, now) : 'noch nie gelaufen'}</b> · Einladungen gehen über:{' '}
+            <b>{d.mailSender ?? 'kein Team-Postfach'}</b>
+          </p>
+          <ul className="mt-3 divide-y divide-line/70">
+            {active.map((p) => {
+              const problems = [
+                p.pushDevices === 0 && 'Push nicht aktiviert',
+                !p.mailPush && 'Mail-Push ausgeschaltet',
+                !p.lastSeen && (p.invitePending ? 'Einladung noch nicht angenommen' : 'noch nie angemeldet'),
+              ].filter(Boolean) as string[];
+              return (
+                <li key={p.id} className="py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-[14.5px] font-medium text-ink">{p.name}</span>
+                    <span className="text-[12.5px] text-ink-3">{p.lastSeen ? `zuletzt online ${relative(p.lastSeen, now)}` : 'noch nie online'}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <Chip tone={p.pushDevices ? 'good' : 'warn'}>
+                      {p.pushDevices} Push-Gerät{p.pushDevices === 1 ? '' : 'e'}
+                      {p.pushLastOk ? ` · zuletzt ${relative(p.pushLastOk, now)}` : ''}
+                    </Chip>
+                    <Chip>
+                      {p.mailboxes.length} Postf{p.mailboxes.length === 1 ? 'ach' : 'ächer'} sichtbar
+                    </Chip>
+                    {problems.map((x) => (
+                      <Chip key={x} tone="warn" icon={<CircleAlert className="h-3 w-3" />}>
+                        {x}
+                      </Chip>
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {deleted.length > 0 && (
+            <>
+              <p className="eyebrow mb-1 mt-5">Entfernte Personen</p>
+              <ul className="divide-y divide-line/70">
+                {deleted.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-[14px] text-ink-2">{p.name}</div>
+                      <div className="truncate text-[12px] text-ink-3">{p.email}</div>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => restore(p.id)}>
+                      Wiederherstellen
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p className="mt-3 text-[12px] text-ink-3">
+            Push kommt nur an, wenn die Person die App über das Icon auf dem Home-Bildschirm geöffnet und unter Einstellungen → Benachrichtigungen „Aktivieren“ getippt hat.
+          </p>
+        </>
+      )}
+    </Section>
+  );
+}
+
+// ---------------- Kalender abonnieren ----------------
+
+function CalendarFeedSection() {
+  const [active, setActive] = useState<boolean | null>(null);
+  const [links, setLinks] = useState<{ url: string; webcal: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api<{ active: boolean }>('GET', '/kalender/abo').then((r) => setActive(r.active)).catch(() => setActive(false));
+  }, []);
+
+  async function create() {
+    if (active && !confirm('Neuen Link erstellen? Der alte Link funktioniert danach nicht mehr – das Abo muss neu eingerichtet werden.')) return;
+    setBusy(true);
+    try {
+      const r = await api<{ url: string; webcal: string }>('POST', '/kalender/abo');
+      setLinks(r);
+      setActive(true);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section
+      title="Kalender abonnieren"
+      description="Zeigt den Team-Kalender in der Kalender-App deines iPhones, Macs oder in Outlook – inklusive der Kalender-Widgets dort. Änderungen aus der Team-App kommen automatisch an (je nach Gerät alle 15–60 Minuten)."
+    >
+      {active === null ? (
+        <Spinner />
+      ) : links ? (
+        <div className="space-y-3">
+          <a href={links.webcal} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-medium text-accent-ink sm:w-auto sm:px-5">
+            <CalendarDays className="h-4 w-4" /> Im Kalender abonnieren
+          </a>
+          <div className="flex gap-2">
+            <input className="field font-mono text-[12.5px]" readOnly value={links.url} onFocus={(e) => e.target.select()} aria-label="Abo-Link" />
+            <Button
+              variant="secondary"
+              icon={<Copy className="h-4 w-4" />}
+              onClick={async () => {
+                await navigator.clipboard?.writeText(links.url).catch(() => undefined);
+                toast('Link kopiert', 'success');
+              }}
+            >
+              <span className="max-sm:hidden">Kopieren</span>
+            </Button>
+          </div>
+          <ol className="list-decimal space-y-1 pl-5 text-[13px] leading-relaxed text-ink-2">
+            <li>
+              <b>iPhone/Mac:</b> auf <b>Im Kalender abonnieren</b> tippen und bestätigen. Klappt das nicht: Einstellungen → Apps → Kalender → Accounts → Account hinzufügen → Andere → <b>Kalenderabo hinzufügen</b> → Link einfügen.
+            </li>
+            <li>
+              <b>Outlook/Windows:</b> Kalender → Kalender hinzufügen → <b>Aus dem Internet abonnieren</b> → Link einfügen.
+            </li>
+            <li>Danach erscheint „Perfume Cloud Team“ als eigener Kalender – auch im Kalender-Widget auf dem Home-Bildschirm.</li>
+          </ol>
+          <p className="text-[12px] text-ink-3">Der Link ist persönlich und nur lesend. Gib ihn nicht weiter.</p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button icon={<CalendarDays className="h-4 w-4" />} loading={busy} onClick={create}>
+            {active ? 'Neuen Abo-Link erstellen' : 'Abo-Link erstellen'}
+          </Button>
+          {active && (
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                await api('DELETE', '/kalender/abo');
+                setActive(false);
+                toast('Abo-Link gesperrt', 'success');
+              }}
+            >
+              Sperren
+            </Button>
+          )}
+          {active && <span className="text-[13px] text-ink-3">Ein Abo-Link ist aktiv.</span>}
+        </div>
+      )}
+    </Section>
+  );
+}
 
 // ---------------- Mein Postfach ----------------
 
@@ -750,6 +1081,7 @@ function StatusLine({ status }: { status?: { ok: boolean; message: string; at?: 
 function IntegrationsPanel() {
   const [data, setData] = useState<Integrations | null>(null);
   const sync = useStore((s) => s.sync);
+  const usersMap = useStore((s) => s.users);
   const now = useNow();
   const [shop, setShop] = useState({ shop: '', client_id: '', client_secret: '' });
   const [boxes, setBoxes] = useState<MailboxConfig[]>(DEFAULT_MAILBOXES);
@@ -803,7 +1135,15 @@ function IntegrationsPanel() {
     });
   };
 
+  const saveCalendar = (patch: Partial<Integrations['settings']>) =>
+    void run('cal', async () => {
+      setData(await api<Integrations>('PUT', '/admin/settings', patch));
+      toast('Kalender aktualisiert', 'success');
+      void sync();
+    });
+
   const setBox = (i: number, patch: Partial<MailboxConfig>) => setBoxes(boxes.map((b, j) => (j === i ? { ...b, ...patch } : b)));
+  const team = Object.values(usersMap).filter((u) => !u.deleted);
 
   return (
     <>
@@ -861,7 +1201,7 @@ function IntegrationsPanel() {
 
       <Section
         title="Postfächer"
-        description="IMAP-Zugang von info@ und support@. Die Daten stehen bei netcup im Webhosting-Panel unter E-Mail → Postfach → „Mail-Client einrichten“. Die App liest nur – sie markiert nichts als gelesen und löscht nichts."
+        description="Alle Konten an einem Ort: Team-Postfächer wie info@ und support@ und persönliche wie marius.heub@. Bei „Sichtbar für“ legst du fest, wer die Mails sieht und Push-Nachrichten dazu bekommt. Die Daten stehen bei netcup im Webhosting-Panel unter E-Mail. Die App liest nur – sie markiert nichts als gelesen und löscht nichts."
       >
         <form onSubmit={saveMail} className="space-y-5">
           {boxes.map((b, i) => (
@@ -904,6 +1244,50 @@ function IntegrationsPanel() {
                   />
                 </div>
               </div>
+              <div className="mt-4">
+                <span className="label">Sichtbar für</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBox(i, { visible_to: [] })}
+                    aria-pressed={b.visible_to.length === 0}
+                    className={cx(
+                      'flex h-9 items-center gap-2 rounded-full border px-3 text-[13px] transition-colors',
+                      b.visible_to.length === 0 ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2',
+                    )}
+                  >
+                    Alle im Team
+                  </button>
+                  {team.map((u) => {
+                    const on = b.visible_to.includes(u.id);
+                    return (
+                      <button
+                        type="button"
+                        key={u.id}
+                        aria-pressed={on}
+                        onClick={() => setBox(i, { visible_to: on ? b.visible_to.filter((x) => x !== u.id) : [...b.visible_to, u.id] })}
+                        className={cx(
+                          'flex h-9 items-center gap-2 rounded-full border pl-1 pr-3 text-[13px] transition-colors',
+                          on ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2',
+                        )}
+                      >
+                        <Avatar user={u} size={26} />
+                        {u.name.split(' ')[0]}
+                        {on && <Check className="h-3.5 w-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-ink-3">
+                  {b.visible_to.length ? (
+                    <>
+                      <Lock className="h-3.5 w-3.5" /> Nur sichtbar für {b.visible_to.map((id) => usersMap[id]?.name.split(' ')[0] ?? '?').join(', ')} – nur diese bekommen Mails und Push.
+                    </>
+                  ) : (
+                    'Alle im Team sehen die Mails und bekommen Push.'
+                  )}
+                </p>
+              </div>
               <StatusLine status={(b.id && data.tests?.[b.id]) || b.status} />
             </div>
           ))}
@@ -911,11 +1295,52 @@ function IntegrationsPanel() {
             <Button type="submit" icon={<Mail className="h-4 w-4" />} loading={busy === 'mail'}>
               Speichern & testen
             </Button>
-            <Button type="button" variant="ghost" icon={<Plus className="h-4 w-4" />} onClick={() => setBoxes([...boxes, { email: '', host: boxes[0]?.host ?? '', port: 993, security: 'ssl', user: '' }])}>
+            <Button type="button" variant="ghost" icon={<Plus className="h-4 w-4" />} onClick={() => setBoxes([...boxes, { email: '', host: boxes[0]?.host ?? '', port: 993, security: 'ssl', user: '', visible_to: [] }])}>
               Postfach hinzufügen
             </Button>
           </div>
         </form>
+      </Section>
+
+      <Section
+        title="Kalender: Feiertage & Aktionstage"
+        description="Gesetzliche Feiertage und wichtige Tage für den Shop (Valentinstag, Muttertag, Black Friday, Cyber Monday, Advent …) stehen automatisch im Kalender – jedes Jahr neu berechnet, nichts muss eingetragen werden. Wähle euer Bundesland, damit auch die regionalen Feiertage dabei sind."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="label" htmlFor="holiday-state">
+              Bundesland
+            </label>
+            <select
+              id="holiday-state"
+              className="field"
+              value={data.settings.holiday_state}
+              disabled={busy === 'cal'}
+              onChange={(e) => saveCalendar({ holiday_state: e.target.value })}
+            >
+              <option value="">Nur bundesweite Feiertage</option>
+              {STATES.map((st) => (
+                <option key={st.code} value={st.code}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[14px] font-medium text-ink">Feiertage anzeigen</p>
+              <p className="text-[12.5px] text-ink-3">Neujahr, Ostern, Weihnachten … in Rot</p>
+            </div>
+            <Toggle label="Feiertage anzeigen" checked={data.settings.holidays_on} onChange={(v) => saveCalendar({ holidays_on: v })} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[14px] font-medium text-ink">Aktionstage für den Shop</p>
+              <p className="text-[12.5px] text-ink-3">Valentinstag, Muttertag, Black Friday, Cyber Monday …</p>
+            </div>
+            <Toggle label="Aktionstage anzeigen" checked={data.settings.shop_days_on} onChange={(v) => saveCalendar({ shop_days_on: v })} />
+          </div>
+        </div>
       </Section>
 
       <Section
@@ -958,6 +1383,8 @@ function IntegrationsPanel() {
           </Button>
         </div>
       </Section>
+
+      <MaintenanceSection />
     </>
   );
 }
