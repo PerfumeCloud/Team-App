@@ -149,7 +149,7 @@ export default function Home() {
           label="Wichtige Mails"
           icon={<Inbox className="h-4 w-4" />}
           value={meta?.mailConfigured ? openImportantCount(emailsMap) : '–'}
-          sub={meta?.mailConfigured ? 'offen in info@ & support@' : 'Postfächer nicht verbunden'}
+          sub={meta?.mailConfigured ? (meta.myMailbox ? 'offen · Team & dein Postfach' : 'offen in info@ & support@') : 'Postfächer nicht verbunden'}
           onClick={() => navigate('/postfach')}
         />
         <StatTile

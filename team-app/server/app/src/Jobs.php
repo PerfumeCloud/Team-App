@@ -20,7 +20,7 @@ final class Jobs
             if (Shopify::configured()) {
                 $summary['shopify'] = self::safe(static fn () => OrdersJob::run(), 'shopify_status');
             }
-            if (MailJob::mailboxes()) {
+            if (MailJob::allMailboxes()) {
                 $summary['mail'] = MailJob::run();
             }
             $summary['reminders'] = self::safe(static fn () => self::reminders(), null);

@@ -25,7 +25,8 @@ final class Sync
         $tasks = array_map([self::class, 'task'], Db::all("SELECT * FROM tasks WHERE updated_at > ?$live", [$from]));
         $notes = array_map([self::class, 'note'], Db::all("SELECT * FROM notes WHERE updated_at > ?$live", [$from]));
         $comments = array_map([self::class, 'comment'], Db::all("SELECT * FROM comments WHERE updated_at > ?$live", [$from]));
-        $emails = array_map([self::class, 'email'], Db::all("SELECT * FROM emails WHERE updated_at > ?$live", [$from]));
+        // Persönliche Postfächer: nur die eigenen Mails
+        $emails = array_map([self::class, 'email'], Db::all("SELECT * FROM emails WHERE updated_at > ? AND (owner_id IS NULL OR owner_id = ?)$live", [$from, $me['id']]));
         $activity = array_map([self::class, 'activity'], Db::all(
             'SELECT * FROM activity WHERE updated_at > ? ORDER BY created_at DESC LIMIT 60',
             [$full ? $serverTime - 14 * 86400 * 1000 : $from]
@@ -40,16 +41,22 @@ final class Sync
             'comments' => $comments,
             'emails' => $emails,
             'activity' => $activity,
-            'meta' => self::meta(),
+            'meta' => self::meta($me),
         ];
     }
 
-    public static function meta(): array
+    public static function meta(array $me): array
     {
+        $personal = MailJob::personal($me['id']);
+        $boxes = array_column(MailJob::mailboxes(), 'email');
+        if ($personal) {
+            $boxes[] = $personal['email'];
+        }
         return [
             'shopifyConfigured' => Shopify::configured(),
-            'mailConfigured' => count(MailJob::mailboxes()) > 0,
-            'mailboxes' => array_map(static fn ($m) => $m['email'], MailJob::mailboxes()),
+            'mailConfigured' => count($boxes) > 0,
+            'mailboxes' => $boxes,
+            'myMailbox' => $personal['email'] ?? null,
             'jobsLastRun' => (int) Settings::get('jobs_last_run', 0),
             'ordersLastSync' => (int) Settings::get('orders_last_sync', 0),
             'mailLastFetch' => (int) Settings::get('mail_last_fetch', 0),
@@ -234,9 +241,10 @@ final class Sync
     public static function updateEmail(array $me, string $id, array $in): array
     {
         $mail = Db::one('SELECT * FROM emails WHERE id = ?', [$id]);
-        if (!$mail) {
+        if (!$mail || !MailJob::visibleTo($mail, $me['id'])) {
             throw new HttpError(404, 'Mail nicht gefunden.');
         }
+        $private = (bool) $mail['owner_id'];
         $now = max(Util::now(), (int) $mail['updated_at'] + 1);
         $row = ['updated_at' => $now];
         if (array_key_exists('status', $in)) {
@@ -245,7 +253,9 @@ final class Sync
             if ($status === 'done' && $mail['status'] !== 'done') {
                 $row['done_by'] = $me['id'];
                 $row['done_at'] = $now;
-                Activity::log($me['id'], 'mail_done', 'email', $id, 'hat die Mail „' . mb_substr((string) $mail['subject'], 0, 80) . '“ erledigt');
+                if (!$private) {
+                    Activity::log($me['id'], 'mail_done', 'email', $id, 'hat die Mail „' . mb_substr((string) $mail['subject'], 0, 80) . '“ erledigt');
+                }
             } elseif ($status === 'open') {
                 $row['done_by'] = null;
                 $row['done_at'] = null;
@@ -253,6 +263,9 @@ final class Sync
         }
         if (array_key_exists('assignee_id', $in)) {
             $assignee = $in['assignee_id'];
+            if ($private && $assignee !== null && $assignee !== $me['id']) {
+                throw new HttpError(422, 'Mails aus deinem persönlichen Postfach können nicht weitergegeben werden.');
+            }
             if ($assignee !== null && !Db::value('SELECT 1 FROM users WHERE id = ? AND deleted = 0', [$assignee])) {
                 throw new HttpError(422, 'Unbekannte Person.');
             }
@@ -362,6 +375,7 @@ final class Sync
             'assignee_id' => $r['assignee_id'],
             'done_by' => $r['done_by'],
             'done_at' => $r['done_at'] !== null ? (int) $r['done_at'] : null,
+            'owner_id' => $r['owner_id'] ?? null,
             'updated_at' => (int) $r['updated_at'],
             'deleted' => (int) $r['deleted'],
         ];

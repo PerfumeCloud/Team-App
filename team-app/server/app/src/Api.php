@@ -53,6 +53,24 @@ final class Api
             }],
             ['PUT', '/me', static fn () => self::updateMe(Auth::require(), Http::body())],
 
+            // Persönliches Postfach – nur für die angemeldete Person sichtbar
+            ['GET', '/me/mailbox', static fn () => self::myMailbox(Auth::require())],
+            ['PUT', '/me/mailbox', static function () {
+                $me = Auth::require();
+                $mb = MailJob::savePersonal($me, Http::body());
+                $test = MailJob::test($mb);
+                Settings::set('mail_status_' . $mb['id'], ['ok' => $test['ok'], 'at' => Util::now(), 'message' => $test['message']]);
+                if ($test['ok']) {
+                    Http::defer(static fn () => Jobs::run('setup'));
+                }
+                return ['test' => $test] + self::myMailbox($me);
+            }],
+            ['DELETE', '/me/mailbox', static function () {
+                $me = Auth::require();
+                MailJob::removePersonal($me['id']);
+                return self::myMailbox($me);
+            }],
+
             ['GET', '/sync', static function () {
                 $me = Auth::require();
                 $result = Sync::pull($me, (int) (Http::query('since') ?? 0));
@@ -181,6 +199,7 @@ final class Api
                     throw new HttpError(422, 'Du kannst dich nicht selbst entfernen.');
                 }
                 Db::update('users', ['deleted' => 1, 'updated_at' => Util::now()], ['id' => $id]);
+                MailJob::removePersonal($id);
                 Db::exec('DELETE FROM sessions WHERE user_id = ?', [$id]);
                 Db::exec('DELETE FROM push_subscriptions WHERE user_id = ?', [$id]);
                 return ['ok' => true];
@@ -215,6 +234,9 @@ final class Api
                     $prefs['push'][$k] = (bool) $b['prefs']['push'][$k];
                 }
             }
+            if (isset($b['prefs']['mailScope'])) {
+                $prefs['mailScope'] = Util::oneOf($b['prefs']['mailScope'], ['all', 'important'], $prefs['mailScope']);
+            }
             $row['prefs'] = Util::json($prefs);
         }
         if (!empty($b['newPassword'])) {
@@ -226,6 +248,26 @@ final class Api
         Db::update('users', $row, ['id' => $me['id']]);
         $u = Db::one('SELECT * FROM users WHERE id = ?', [$me['id']]);
         return ['user' => Auth::publicUser($u), 'prefs' => Auth::prefs($u)];
+    }
+
+    private static function myMailbox(array $me): array
+    {
+        $mb = MailJob::personal($me['id']);
+        $team = MailJob::mailboxes();
+        return [
+            'mailbox' => $mb ? [
+                'email' => $mb['email'],
+                'host' => $mb['host'],
+                'port' => (int) $mb['port'],
+                'security' => $mb['security'],
+                'user' => $mb['user'],
+                'hasPassword' => MailJob::password($mb['id']) !== null,
+                'status' => Settings::get('mail_status_' . $mb['id']),
+            ] : null,
+            // Vorschlag für den IMAP-Server: derselbe wie bei info@/support@
+            'suggestedHost' => $team[0]['host'] ?? '',
+            'lastFetch' => (int) Settings::get('mail_last_fetch', 0),
+        ];
     }
 
     private static function createUser(array $me, array $b): array

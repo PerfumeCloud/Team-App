@@ -46,8 +46,43 @@ final class Db
             }
             self::$pdo = self::connect($cfg);
             self::$driver = ($cfg['driver'] ?? 'mysql') === 'sqlite' ? 'sqlite' : 'mysql';
+            self::upgradeIfNeeded();
         }
         return self::$pdo;
+    }
+
+    /** Nach einem Update (neue APP_VERSION) Tabellen und Spalten nachziehen. */
+    private static function upgradeIfNeeded(): void
+    {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+        $checked = true;
+        try {
+            $version = Settings::get('schema_version');
+        } catch (\Throwable) {
+            return; // noch nicht eingerichtet
+        }
+        if ($version !== null && $version !== APP_VERSION) {
+            self::migrate();
+        }
+    }
+
+    private static function hasColumn(string $table, string $column): bool
+    {
+        if (self::driver() === 'mysql') {
+            return (bool) self::value(
+                'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+                [$table, $column]
+            );
+        }
+        foreach (self::all("PRAGMA table_info($table)") as $col) {
+            if ($col['name'] === $column) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static function use(PDO $pdo, string $driver): void
@@ -236,6 +271,7 @@ final class Db
                 done_by VARCHAR(36) NULL,
                 done_at BIGINT NULL,
                 notified SMALLINT NOT NULL DEFAULT 0,
+                owner_id VARCHAR(36) NULL,
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL,
                 deleted SMALLINT NOT NULL DEFAULT 0",
@@ -278,6 +314,13 @@ final class Db
             $pdo->exec("CREATE TABLE IF NOT EXISTS $name ($cols)$suffix");
         }
 
+        // 1.1: persönliche Postfächer. Bisher nicht gemeldete Mails gelten als bekannt,
+        // damit nach dem Update keine Flut an Push-Nachrichten kommt.
+        if (!self::hasColumn('emails', 'owner_id')) {
+            $pdo->exec('ALTER TABLE emails ADD COLUMN owner_id VARCHAR(36) NULL');
+            $pdo->exec('UPDATE emails SET notified = 2 WHERE notified = 0');
+        }
+
         $indexes = [
             ['users_email', 'users', 'email', true],
             ['tasks_updated', 'tasks', 'updated_at', false],
@@ -286,6 +329,7 @@ final class Db
             ['comments_task', 'comments', 'task_id', false],
             ['emails_updated', 'emails', 'updated_at', false],
             ['emails_received', 'emails', 'received_at', false],
+            ['emails_owner', 'emails', 'owner_id', false],
             ['orders_created', 'orders', 'created_at', false],
             ['activity_updated', 'activity', 'updated_at', false],
             ['sessions_user', 'sessions', 'user_id', false],

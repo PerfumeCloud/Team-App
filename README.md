@@ -10,7 +10,8 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **Planung:** Aufgaben mit Zuständigkeit, Fälligkeit, Priorität, Kategorie, Checkliste und Kommentaren (Board am PC, Liste am Handy)
 - **Notizen:** gemeinsame Pläne und Ideen mit Autosave
 - **Ideen-Assistent:** Idee einfach hinschreiben oder diktieren – daraus werden Notiz und Aufgaben (mit Zuständigkeit, Datum, Priorität, Kategorie, Checkliste). Läuft ohne KI direkt in der App, kostenlos und offline
-- **Postfach:** wichtige offene Mails aus info@ und support@ (IMAP, nur lesend)
+- **Postfach:** offene Mails aus info@ und support@ (für alle) plus das eigene persönliche Postfach jeder Person (nur für sie sichtbar), IMAP, nur lesend
+- **Push bei jeder neuen Mail:** Team-Mails an alle, persönliche Mails nur an den Besitzer
 - **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Artikel pro Bestellung, bester Tag, Stornos, Erstattungen, Top-Düfte, knapper Bestand – jeweils mit Veränderung in % (grün = besser, rot = schlechter) (Shopify Admin API)
 - **Push-Nachrichten:** neue wichtige Mail, neue Bestellung, zugewiesene Aufgabe, Kommentare, Erinnerung am Morgen
 - **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm)

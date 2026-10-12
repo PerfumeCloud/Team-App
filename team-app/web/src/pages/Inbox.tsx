@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { Check, CircleCheck, Flag, Inbox as InboxIcon, ListPlus, Reply, RotateCcw, Settings, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
+import { Check, CircleCheck, Flag, Inbox as InboxIcon, ListPlus, Lock, Mail, Reply, RotateCcw, Settings, UserRound } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { Avatar, Button, Chip, cx, EmptyState, Segmented } from '../components/ui';
 import { useStore } from '../lib/store';
@@ -20,8 +20,19 @@ export default function Inbox() {
   const me = useStore((s) => s.me);
   const now = useNow();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [view, setView] = useState<View>('important');
-  const [box, setBox] = useState<string>('all');
+  const [box, setBox] = useState<string>(() => params.get('box') ?? 'all');
+
+  // Aus einer Push-Nachricht: /postfach?box=marius.heub@… öffnet das eigene Postfach mit allen offenen Mails
+  useEffect(() => {
+    const b = params.get('box');
+    if (b) {
+      setBox(b);
+      if (b === meta?.myMailbox) setView('open');
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams, meta?.myMailbox]);
 
   const users = Object.values(usersMap).filter((u) => !u.deleted);
   const all = useMemo(() => Object.values(emailsMap).filter((m) => box === 'all' || m.mailbox === box), [emailsMap, box]);
@@ -41,15 +52,18 @@ export default function Inbox() {
           <EmptyState
             icon={<InboxIcon className="h-6 w-6" />}
             title="Postfächer noch nicht verbunden"
-            text="Sobald info@ und support@ eingerichtet sind, erscheinen hier die wichtigen offenen Mails."
+            text="Sobald info@ und support@ eingerichtet sind, erscheinen hier die wichtigen offenen Mails. Dein eigenes Postfach kannst du selbst verbinden – das sieht nur du."
             action={
-              me?.role === 'admin' ? (
-                <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate('/einstellungen/integrationen')}>
-                  Jetzt verbinden
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button icon={<Lock className="h-4 w-4" />} onClick={() => navigate('/einstellungen')}>
+                  Mein Postfach verbinden
                 </Button>
-              ) : (
-                <p className="text-[13px] text-ink-3">Ein Admin kann das unter Einstellungen erledigen.</p>
-              )
+                {me?.role === 'admin' && (
+                  <Button variant="secondary" icon={<Settings className="h-4 w-4" />} onClick={() => navigate('/einstellungen/integrationen')}>
+                    Team-Postfächer
+                  </Button>
+                )}
+              </div>
             }
           />
         </div>
@@ -78,8 +92,26 @@ export default function Inbox() {
             size="sm"
             value={box}
             onChange={setBox}
-            options={[{ value: 'all', label: 'Alle' }, ...meta.mailboxes.map((m) => ({ value: m, label: m.split('@')[0] + '@' }))]}
+            options={[
+              { value: 'all', label: 'Alle' },
+              ...meta.mailboxes.map((m) => ({
+                value: m,
+                label:
+                  m === meta.myMailbox ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Lock className="h-3 w-3" /> Mein Postfach
+                    </span>
+                  ) : (
+                    m.split('@')[0] + '@'
+                  ),
+              })),
+            ]}
           />
+        )}
+        {!meta.myMailbox && (
+          <Button size="sm" variant="ghost" icon={<Mail className="h-3.5 w-3.5" />} onClick={() => navigate('/einstellungen')}>
+            Eigenes Postfach verbinden
+          </Button>
         )}
       </div>
 
@@ -101,7 +133,7 @@ export default function Inbox() {
       <p className="mt-6 text-center text-[12px] leading-relaxed text-ink-3">
         Angezeigt werden Mails der letzten 14 Tage. Newsletter, automatische Mails und Shopify-Benachrichtigungen werden ausgeblendet.
         <br />
-        Beantwortete Mails gelten automatisch als erledigt.
+        Beantwortete Mails gelten automatisch als erledigt. Persönliche Postfächer sieht nur ihr Besitzer.
       </p>
     </>
   );
@@ -113,6 +145,7 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
   const navigate = useNavigate();
   const [assigning, setAssigning] = useState(false);
   const open = isOpen(mail);
+  const mine = !!mail.owner_id;
   const assignee = mail.assignee_id ? usersMap[mail.assignee_id] : null;
   const sender = mail.from_name || mail.from_email || 'Unbekannt';
   const replyHref = `mailto:${encodeURIComponent(mail.from_email ?? '')}?subject=${encodeURIComponent((mail.subject ?? '').match(/^re:/i) ? (mail.subject ?? '') : `Re: ${mail.subject ?? ''}`)}`;
@@ -120,8 +153,9 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
   function toTask() {
     const t = saveTask({
       title: `Antworten: ${mail.subject ?? sender}`,
-      description: `Von ${sender}${mail.from_email ? ` <${mail.from_email}>` : ''} an ${mail.mailbox}\n\n${mail.snippet ?? ''}`,
-      assignee_id: mail.assignee_id ?? meId ?? null,
+      // Aufgaben sieht das ganze Team – bei persönlichen Mails daher ohne Mailtext
+      description: mine ? `Mail von ${sender} in deinem persönlichen Postfach` : `Von ${sender}${mail.from_email ? ` <${mail.from_email}>` : ''} an ${mail.mailbox}\n\n${mail.snippet ?? ''}`,
+      assignee_id: mine ? (meId ?? null) : (mail.assignee_id ?? meId ?? null),
       due_date: todayISO(),
       priority: mail.reasons.includes('Kundenanliegen') ? 'high' : 'normal',
       category: 'Mail',
@@ -142,7 +176,13 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
           <div className={cx('mt-0.5 text-[14px] leading-snug text-ink', !mail.seen && 'font-medium')}>{mail.subject}</div>
           {mail.snippet && <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink-2">{mail.snippet}</p>}
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <Chip tone="accent">{mail.mailbox.split('@')[0]}@</Chip>
+            {mine ? (
+              <Chip tone="neutral" icon={<Lock className="h-3 w-3" />}>
+                Mein Postfach
+              </Chip>
+            ) : (
+              <Chip tone="accent">{mail.mailbox.split('@')[0]}@</Chip>
+            )}
             {open &&
               mail.reasons
                 .filter((r) => r !== 'Ungelesen')
@@ -207,9 +247,11 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
         </a>
         {open && (
           <>
-            <Button size="sm" variant="secondary" aria-label="Zuweisen" icon={<UserRound className="h-3.5 w-3.5" />} onClick={() => setAssigning((v) => !v)}>
-              <span className="max-sm:hidden">Zuweisen</span>
-            </Button>
+            {!mine && (
+              <Button size="sm" variant="secondary" aria-label="Zuweisen" icon={<UserRound className="h-3.5 w-3.5" />} onClick={() => setAssigning((v) => !v)}>
+                <span className="max-sm:hidden">Zuweisen</span>
+              </Button>
+            )}
             <Button size="sm" variant="secondary" aria-label="Als Aufgabe anlegen" icon={<ListPlus className="h-3.5 w-3.5" />} onClick={toTask}>
               <span className="max-sm:hidden">Als Aufgabe</span>
             </Button>

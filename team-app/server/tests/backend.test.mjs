@@ -222,6 +222,77 @@ test('Falsches Mail-Passwort wird gemeldet', () => {
   assert.match(out.status.message, /Anmeldung am Postfach fehlgeschlagen/);
 });
 
+test('Persönliche Postfächer: nur der Besitzer sieht Mails und bekommt Push', async () => {
+  const me = (await admin.req('GET', '/me')).data.user;
+  const empty = await kim.req('GET', '/me/mailbox');
+  assert.equal(empty.data.mailbox, null);
+
+  // Speichern (der Verbindungstest darf hier scheitern – der Test-Server spricht kein SSL)
+  const noPw = await kim.req('PUT', '/me/mailbox', { email: 'kim@perfumecloud.de', host: '127.0.0.1', port: IMAP_PORT });
+  assert.equal(noPw.status, 422);
+  const k = await kim.req('PUT', '/me/mailbox', { email: 'Kim@PerfumeCloud.de', host: '127.0.0.1', port: IMAP_PORT, password: 'secret' });
+  assert.equal(k.status, 200, JSON.stringify(k.data));
+  assert.equal(k.data.mailbox.email, 'kim@perfumecloud.de');
+  assert.equal(k.data.mailbox.hasPassword, true);
+  assert.equal(k.data.mailbox.password, undefined);
+  const m = await admin.req('PUT', '/me/mailbox', { email: 'marius.heub@perfumecloud.de', host: '127.0.0.1', port: IMAP_PORT, password: 'secret' });
+  assert.equal(m.status, 200);
+  // Fremdes oder Team-Postfach geht nicht
+  assert.equal((await admin.req('PUT', '/me/mailbox', { email: 'kim@perfumecloud.de', host: 'x', password: 'y' })).status, 422);
+  assert.equal((await admin.req('PUT', '/me/mailbox', { email: 'support@perfumecloud.de', host: 'x', password: 'y' })).status, 422);
+  // Admin sieht in den Integrationen nur Team-Postfächer
+  const integ = await admin.req('GET', '/admin/integrations');
+  assert.deepEqual(integ.data.mailboxes.map((x) => x.email), ['support@perfumecloud.de']);
+
+  const out = helper('personal-run', String(IMAP_PORT));
+  const kimMails = out.emails.filter((e) => e.owner_id === kimId);
+  const myMails = out.emails.filter((e) => e.owner_id === me.id);
+  assert.ok(kimMails.length > 0 && myMails.length > 0, JSON.stringify(out.summary));
+  assert.ok(kimMails.every((e) => e.mailbox === 'kim@perfumecloud.de'));
+
+  // Sync: jeder sieht Team-Mails + nur die eigenen
+  const ks = await kim.req('GET', '/sync?since=0');
+  assert.ok(ks.data.emails.some((e) => e.owner_id === kimId));
+  assert.ok(ks.data.emails.some((e) => e.owner_id === null));
+  assert.equal(ks.data.emails.filter((e) => e.owner_id === me.id).length, 0);
+  assert.deepEqual(ks.data.meta.mailboxes, ['support@perfumecloud.de', 'kim@perfumecloud.de']);
+  assert.equal(ks.data.meta.myMailbox, 'kim@perfumecloud.de');
+  const ms = await admin.req('GET', '/sync?since=0');
+  assert.equal(ms.data.emails.filter((e) => e.owner_id === kimId).length, 0);
+
+  // Fremde private Mail: nicht änderbar; eigene private Mail: nicht weitergeben
+  assert.equal((await kim.req('PATCH', `/emails/${myMails[0].id}`, { status: 'done' })).status, 404);
+  assert.equal((await admin.req('PATCH', `/emails/${myMails[0].id}`, { assignee_id: kimId })).status, 422);
+  const done = await admin.req('PATCH', `/emails/${myMails[0].id}`, { status: 'done' });
+  assert.equal(done.status, 200);
+  const activity = (await kim.req('GET', '/sync?since=0')).data.activity;
+  assert.equal(activity.some((a) => a.entity_id === myMails[0].id), false, 'private Mail taucht nicht im Team-Verlauf auf');
+
+  // Push: persönliche Mails nur an den Besitzer
+  const plan = out.plan;
+  assert.ok((plan[kimId] ?? []).length > 0);
+  assert.ok((plan[me.id] ?? []).length > 0);
+  assert.ok(plan[kimId].every((x) => x.owner_id === null || x.owner_id === kimId));
+  assert.ok(plan[me.id].every((x) => x.owner_id === null || x.owner_id === me.id));
+
+  // Widget zeigt keine fremden privaten Mails
+  const { data: tok } = await kim.req('POST', '/widget/token');
+  const w = await new Client().req('GET', `/widget?token=${encodeURIComponent(tok.token)}`);
+  assert.equal(w.data.mails.some((x) => x.mailbox === 'marius.heub@'), false);
+  await kim.req('DELETE', '/widget/token');
+
+  // Einstellung „Nur wichtige“ wird gespeichert
+  const pref = await kim.req('PUT', '/me', { prefs: { mailScope: 'important' } });
+  assert.equal(pref.data.prefs.mailScope, 'important');
+
+  // Entfernen: Postfach weg, Mails ausgeblendet
+  const del = await kim.req('DELETE', '/me/mailbox');
+  assert.equal(del.data.mailbox, null);
+  const after = await kim.req('GET', '/sync?since=0');
+  assert.equal(after.data.emails.filter((e) => e.owner_id === kimId).length, 0);
+  assert.equal(after.data.meta.myMailbox, null);
+});
+
 test('Statistik aus Bestellungen', () => {
   const s = helper('seed-orders', '30');
   assert.equal(s.days, 30);

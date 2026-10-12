@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   LayoutGrid,
+  Lock,
   LogOut,
   Mail,
   Monitor,
@@ -24,7 +25,7 @@ import { PageHeader } from '../components/AppShell';
 import { Avatar, Button, Chip, cx, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
-import type { Integrations, MailboxConfig, Prefs, PushKind, User, UserColor } from '../lib/types';
+import type { Integrations, MailboxConfig, MyMailbox, Prefs, PushKind, User, UserColor } from '../lib/types';
 import { disablePush, enablePush, isIos, isStandalone, pushState, type PushState } from '../lib/push';
 import { getThemePref, setThemePref, type ThemePref } from '../lib/theme';
 import widgetTemplate from '../lib/widget-template.js?raw';
@@ -34,7 +35,7 @@ import { toast } from '../lib/toast';
 
 const COLORS: UserColor[] = ['blue', 'sage', 'rose', 'amber', 'plum', 'slate'];
 const PUSH_KINDS: { key: PushKind; label: string; hint: string }[] = [
-  { key: 'mail', label: 'Wichtige Mails', hint: 'Neue wichtige Mail oder seit 24 Std. offen' },
+  { key: 'mail', label: 'Mails', hint: 'Neue Mails in info@, support@ und deinem eigenen Postfach' },
   { key: 'orders', label: 'Neue Bestellungen', hint: 'Sobald eine Bestellung eingeht' },
   { key: 'tasks', label: 'Aufgaben für mich', hint: 'Wenn dir jemand eine Aufgabe zuweist' },
   { key: 'comments', label: 'Kommentare', hint: 'Zu Aufgaben, die du angelegt hast oder erledigst' },
@@ -136,6 +137,7 @@ function General() {
         <p className="mt-4 text-[13px] text-ink-3">Angemeldet als {me.email}</p>
       </Section>
 
+      <MyMailboxSection />
       <PushSection prefs={prefs} onPrefs={(p) => saveProfile({ prefs: p })} />
       <InstallSection />
       <WidgetSection />
@@ -264,9 +266,28 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
               <Toggle label={k.label} checked={prefs.push[k.key]} onChange={(v) => onPrefs({ ...prefs, push: { ...prefs.push, [k.key]: v } })} />
             </li>
           ))}
+          {prefs.push.mail && (
+            <li className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div>
+                <div className="text-[14.5px] font-medium text-ink">Bei welchen Mails?</div>
+                <div className="text-[12.5px] text-ink-3">Mails aus deinem eigenen Postfach bekommst nur du.</div>
+              </div>
+              <Segmented
+                size="sm"
+                value={prefs.mailScope ?? 'all'}
+                onChange={(v) => onPrefs({ ...prefs, mailScope: v })}
+                options={[
+                  { value: 'all', label: 'Jede neue' },
+                  { value: 'important', label: 'Nur wichtige' },
+                ]}
+              />
+            </li>
+          )}
         </ul>
       )}
-      <p className="mt-3 text-[12px] text-ink-3">Zwischen 22 und 7 Uhr werden keine Mail- und Bestell-Nachrichten verschickt.</p>
+      <p className="mt-3 text-[12px] text-ink-3">
+        Zwischen 22 und 7 Uhr werden keine Mail- und Bestell-Nachrichten verschickt – die Mails kommen dann morgens gesammelt. Newsletter und automatische Mails lösen keinen Push aus.
+      </p>
     </Section>
   );
 }
@@ -552,6 +573,165 @@ const DEFAULT_MAILBOXES: MailboxConfig[] = [
   { email: 'info@perfumecloud.de', host: '', port: 993, security: 'ssl', user: 'info@perfumecloud.de' },
   { email: 'support@perfumecloud.de', host: '', port: 993, security: 'ssl', user: 'support@perfumecloud.de' },
 ];
+
+// ---------------- Mein Postfach ----------------
+
+function MyMailboxSection() {
+  const me = useStore((s) => s.me)!;
+  const sync = useStore((s) => s.sync);
+  const navigate = useNavigate();
+  const [data, setData] = useState<MyMailbox | null>(null);
+  const [form, setForm] = useState({ email: '', host: '', port: 993, user: '', password: '' });
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState<'' | 'save' | 'remove'>('');
+  const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
+
+  function apply(r: MyMailbox) {
+    setData(r);
+    setForm({ email: r.mailbox?.email ?? '', host: r.mailbox?.host || r.suggestedHost || '', port: r.mailbox?.port ?? 993, user: r.mailbox?.user ?? '', password: '' });
+  }
+  useEffect(() => {
+    api<MyMailbox>('GET', '/me/mailbox').then(apply).catch(() => undefined);
+  }, []);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setBusy('save');
+    try {
+      const r = await api<MyMailbox>('PUT', '/me/mailbox', {
+        email: form.email,
+        host: form.host,
+        port: form.port,
+        security: form.port === 143 ? 'starttls' : 'ssl',
+        user: form.user.trim() || form.email,
+        password: form.password,
+      });
+      apply(r);
+      setTest(r.test ?? null);
+      if (r.test?.ok) {
+        setEditing(false);
+        toast('Postfach verbunden – die Mails erscheinen gleich im Postfach', 'success');
+        window.setTimeout(() => void sync(), 4000);
+      }
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function remove() {
+    if (!confirm('Dein Postfach aus der App entfernen? Die Mails verschwinden aus der App – im Postfach selbst bleibt alles, wie es ist.')) return;
+    setBusy('remove');
+    try {
+      apply(await api<MyMailbox>('DELETE', '/me/mailbox'));
+      setTest(null);
+      setEditing(false);
+      toast('Postfach entfernt', 'success');
+      void sync();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const mb = data?.mailbox;
+  const first = me.name.trim().split(/\s+/)[0]?.toLowerCase() || 'vorname';
+  return (
+    <Section
+      title="Mein Postfach"
+      description={
+        <span className="inline-flex items-start gap-1.5">
+          <Lock className="mt-[3px] h-3.5 w-3.5 shrink-0" />
+          <span>Dein eigenes Firmen-Postfach. Nur du siehst diese Mails in der App, und nur du bekommst die Push-Nachrichten dazu. Das Passwort wird verschlüsselt gespeichert.</span>
+        </span>
+      }
+    >
+      {!data ? (
+        <Spinner />
+      ) : mb && !editing ? (
+        <div className="rounded-2xl border border-line p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-[14.5px] font-semibold text-ink">
+              <Mail className="h-4 w-4 shrink-0 text-accent" />
+              <span className="truncate">{mb.email}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="soft" onClick={() => navigate(`/postfach?box=${encodeURIComponent(mb.email)}`)}>
+                Öffnen
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+                Ändern
+              </Button>
+              <Button size="sm" variant="ghost" loading={busy === 'remove'} onClick={remove}>
+                Entfernen
+              </Button>
+            </div>
+          </div>
+          <StatusLine status={test ?? mb.status} />
+        </div>
+      ) : (
+        <form onSubmit={save} className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
+            <div className="sm:col-span-3">
+              <label className="label" htmlFor="my-mail">E-Mail-Adresse</label>
+              <input
+                id="my-mail"
+                className="field"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder={`${first}@perfumecloud.de`}
+                autoComplete="off"
+                required
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="label" htmlFor="my-pw">
+                Passwort des Postfachs {mb?.hasPassword && <span className="text-ink-3">(gespeichert)</span>}
+              </label>
+              <input
+                id="my-pw"
+                className="field"
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder={mb?.hasPassword ? '•••••••• unverändert' : ''}
+                required={!mb?.hasPassword}
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <label className="label" htmlFor="my-host">IMAP-Server</label>
+              <input id="my-host" className="field" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="z. B. mxf938.netcup.net" required />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label" htmlFor="my-port">Port</label>
+              <input id="my-port" className="field" type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) || 993 })} />
+            </div>
+            <div className="sm:col-span-6">
+              <label className="label" htmlFor="my-user">
+                Benutzername <span className="text-ink-3">(leer = E-Mail-Adresse)</span>
+              </label>
+              <input id="my-user" className="field" value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} placeholder={form.email || 'E-Mail-Adresse'} autoComplete="off" />
+            </div>
+          </div>
+          <StatusLine status={test} />
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button type="submit" icon={<Mail className="h-4 w-4" />} loading={busy === 'save'}>
+              Speichern & testen
+            </Button>
+            {mb && (
+              <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+                Abbrechen
+              </Button>
+            )}
+          </div>
+          <p className="text-[12px] text-ink-3">Server und Passwort stehen bei netcup unter E-Mail → deine Adresse. Die App liest nur – sie markiert nichts als gelesen und löscht nichts.</p>
+        </form>
+      )}
+    </Section>
+  );
+}
 
 function StatusLine({ status }: { status?: { ok: boolean; message: string; at?: number } | null }) {
   const now = useNow();

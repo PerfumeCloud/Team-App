@@ -33,7 +33,7 @@ final class Notify
         if (!$subs) {
             return 0;
         }
-        $payload['badge'] = self::badgeCount();
+        $payload['badge'] = self::badgeCount($user['id']);
         $subject = 'mailto:' . (Settings::get('push_contact') ?: $user['email']);
         $ok = 0;
         foreach ($subs as $s) {
@@ -60,10 +60,13 @@ final class Notify
         return $ok;
     }
 
-    /** Zahl auf dem App-Icon: wichtige offene Mails. */
-    public static function badgeCount(): int
+    /** Zahl auf dem App-Icon: wichtige offene Mails, die diese Person sehen darf (Team + eigenes Postfach). */
+    public static function badgeCount(string $userId): int
     {
-        return (int) Db::value("SELECT COUNT(*) FROM emails WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open'");
+        return (int) Db::value(
+            "SELECT COUNT(*) FROM emails WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND (owner_id IS NULL OR owner_id = ?)",
+            [$userId]
+        );
     }
 
     public static function quietHours(): bool

@@ -4,7 +4,11 @@ declare(strict_types=1);
 namespace PC;
 
 /**
- * Holt Mails aus info@ / support@ und markiert die wichtigen offenen.
+ * Holt Mails aus den Team-Postfächern (info@, support@) und den persönlichen Postfächern
+ * (z. B. marius.heub@) und markiert die wichtigen offenen.
+ *
+ * Persönliche Postfächer gehören genau einer Person (owner_id): Nur sie sieht die Mails
+ * und bekommt die Push-Nachrichten dazu.
  *
  * Offen   = nicht beantwortet (\Answered oder Antwort im Gesendet-Ordner) und in der App nicht erledigt.
  * Wichtig = offen UND (ungelesen ODER markiert ODER Kundenanliegen ODER > 24 h ohne Antwort).
@@ -32,6 +36,90 @@ final class MailJob
     public static function password(string $id): ?string
     {
         return Settings::getSecret('mailbox_pw_' . $id);
+    }
+
+    /** Persönliches Postfach einer Person oder null. */
+    public static function personal(string $userId): ?array
+    {
+        $m = Settings::get('mailbox_user_' . $userId);
+        return is_array($m) && !empty($m['email']) && !empty($m['host']) ? $m + ['owner_id' => $userId] : null;
+    }
+
+    /** Team- und persönliche Postfächer aller aktiven Personen (mit owner_id). */
+    public static function allMailboxes(): array
+    {
+        $list = array_map(static fn ($m) => $m + ['owner_id' => null], self::mailboxes());
+        foreach (Db::all('SELECT id FROM users WHERE deleted = 0') as $u) {
+            if ($mb = self::personal($u['id'])) {
+                $list[] = $mb;
+            }
+        }
+        return $list;
+    }
+
+    /** Speichert das persönliche Postfach von $me; leeres Passwort = unverändert. */
+    public static function savePersonal(array $me, array $m): array
+    {
+        $email = mb_strtolower(trim((string) ($m['email'] ?? '')));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new HttpError(422, 'Bitte eine gültige E-Mail-Adresse angeben.');
+        }
+        if (in_array($email, array_column(self::mailboxes(), 'email'), true)) {
+            throw new HttpError(422, $email . ' ist ein Team-Postfach und wird schon für alle abgerufen.');
+        }
+        foreach (Db::all('SELECT id FROM users WHERE deleted = 0 AND id <> ?', [$me['id']]) as $u) {
+            if ((self::personal($u['id'])['email'] ?? null) === $email) {
+                throw new HttpError(422, 'Dieses Postfach ist schon bei jemand anderem eingetragen.');
+            }
+        }
+        $old = self::personal($me['id']);
+        $host = Util::str($m['host'] ?? '', 190, false) ?: (self::mailboxes()[0]['host'] ?? '');
+        if ($host === '') {
+            throw new HttpError(422, 'Bitte den IMAP-Server angeben.');
+        }
+        $sameBox = $old && $old['email'] === $email;
+        $entry = [
+            'id' => $sameBox ? $old['id'] : substr(sha1($me['id'] . $email . random_bytes(4)), 0, 12),
+            'email' => $email,
+            'label' => explode('@', $email)[0],
+            'host' => $host,
+            'port' => (int) ($m['port'] ?? 993) ?: 993,
+            'security' => Util::oneOf($m['security'] ?? 'ssl', ['ssl', 'starttls'], 'ssl'),
+            'user' => Util::str($m['user'] ?? '', 190, false) ?: $email,
+        ];
+        if ($old && !$sameBox) {
+            self::removePersonal($me['id']);
+        }
+        if (!empty($m['password'])) {
+            Settings::setSecret('mailbox_pw_' . $entry['id'], (string) $m['password']);
+        } elseif (!self::password($entry['id'])) {
+            throw new HttpError(422, 'Bitte das Passwort des Postfachs eingeben.');
+        }
+        Settings::set('mailbox_user_' . $me['id'], $entry);
+        return $entry + ['owner_id' => $me['id']];
+    }
+
+    /** Entfernt das persönliche Postfach samt Passwort und blendet seine Mails aus. */
+    public static function removePersonal(string $userId): void
+    {
+        $mb = self::personal($userId);
+        if (!$mb) {
+            return;
+        }
+        foreach (['mailbox_pw_', 'mail_status_', 'mail_init_'] as $prefix) {
+            Settings::delete($prefix . $mb['id']);
+        }
+        Settings::delete('mailbox_user_' . $userId);
+        Db::exec(
+            'UPDATE emails SET deleted = 1, subject = NULL, snippet = NULL, from_name = NULL, from_email = NULL, updated_at = ? WHERE owner_id = ?',
+            [Util::now(), $userId]
+        );
+    }
+
+    /** Darf $user diese Mail sehen? Team-Mails ja, persönliche nur die eigenen. */
+    public static function visibleTo(array $mail, string $userId): bool
+    {
+        return $mail['owner_id'] === null || $mail['owner_id'] === '' || $mail['owner_id'] === $userId;
     }
 
     /** Speichert die Postfächer; leeres Passwort bedeutet „unverändert lassen“. */
@@ -102,8 +190,11 @@ final class MailJob
     public static function run(): array
     {
         $summary = [];
-        $own = array_map(static fn ($m) => $m['email'], self::mailboxes());
-        foreach (self::mailboxes() as $mb) {
+        $all = self::allMailboxes();
+        $ownAddresses = array_column($all, 'email');
+        foreach ($all as $mb) {
+            // Team-Postfächer: Mails vom eigenen Team ausblenden. Persönlich: nur Mails an sich selbst.
+            $own = $mb['owner_id'] ? [$mb['email']] : $ownAddresses;
             try {
                 $summary[$mb['email']] = self::fetchMailbox($mb, $own);
                 Settings::set('mail_status_' . $mb['id'], ['ok' => true, 'at' => Util::now(), 'message' => 'OK']);
@@ -196,6 +287,7 @@ final class MailJob
                     'from_email' => mb_substr($fromEmail, 0, 255),
                     'status' => 'open',
                     'notified' => $initial ? 2 : 0,
+                    'owner_id' => $mb['owner_id'] ?? null,
                     'created_at' => $now,
                     'updated_at' => $now,
                     'deleted' => 0,
@@ -241,48 +333,102 @@ final class MailJob
         return count($messages) . " geprüft, $new neu, $important wichtig offen";
     }
 
-    private static function notify(): void
+    /**
+     * Push für jede neue Mail: Team-Mails an alle, persönliche nur an den Besitzer.
+     * Wer in den Einstellungen „Nur wichtige“ gewählt hat, bekommt nur wichtige.
+     * Schon gelesene oder beantwortete Mails lösen keinen Push aus.
+     */
+    public static function notify(): void
     {
         if (Notify::quietHours()) {
-            return;
+            return; // bleiben offen und kommen morgens gesammelt
         }
-        $fresh = Db::all("SELECT * FROM emails WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND notified = 0 ORDER BY received_at");
+        $now = Util::now();
+        $fresh = Db::all('SELECT * FROM emails WHERE deleted = 0 AND notified = 0 ORDER BY received_at');
+        $users = Db::all('SELECT * FROM users WHERE deleted = 0');
         if ($fresh) {
-            if (count($fresh) <= 2) {
-                foreach ($fresh as $m) {
-                    Notify::users(null, 'mail', [
-                        'title' => ($m['from_name'] ?: $m['from_email']) . ' · ' . explode('@', $m['mailbox'])[0] . '@',
-                        'body' => (string) $m['subject'],
+            $plan = self::pushPlan($fresh, $users, $now);
+            foreach ($users as $u) {
+                $mine = $plan[$u['id']] ?? [];
+                if (count($mine) > 3) {
+                    Notify::toUser($u, [
+                        'title' => count($mine) . ' neue Mails',
+                        'body' => implode(' · ', array_map(static fn ($m) => self::sender($m) . ': ' . $m['subject'], array_slice($mine, 0, 3))),
                         'url' => '/postfach',
+                        'tag' => 'mail-summary',
+                    ]);
+                    continue;
+                }
+                foreach ($mine as $m) {
+                    Notify::toUser($u, [
+                        'title' => self::sender($m) . ' · ' . explode('@', (string) $m['mailbox'])[0] . '@',
+                        'body' => (string) $m['subject'],
+                        'url' => $m['owner_id'] ? '/postfach?box=' . rawurlencode((string) $m['mailbox']) : '/postfach',
                         'tag' => 'mail-' . $m['id'],
                     ]);
                 }
-            } else {
-                Notify::users(null, 'mail', [
-                    'title' => count($fresh) . ' neue wichtige Mails',
-                    'body' => implode(' · ', array_map(static fn ($m) => (string) $m['subject'], array_slice($fresh, 0, 3))),
-                    'url' => '/postfach',
-                    'tag' => 'mail-summary',
-                ]);
             }
             $ids = array_column($fresh, 'id');
             Db::exec('UPDATE emails SET notified = 1 WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids);
         }
 
+        // Erinnerung: wichtige Mails seit über 24 Std. unbeantwortet
         $stale = Db::all(
-            "SELECT * FROM emails WHERE deleted = 0 AND answered = 0 AND status = 'open' AND notified = 1 AND received_at < ?",
-            [Util::now() - 24 * 3600 * 1000]
+            "SELECT * FROM emails WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND notified = 1 AND received_at < ?",
+            [$now - 24 * 3600 * 1000]
         );
         if ($stale) {
-            Notify::users(null, 'mail', [
-                'title' => count($stale) === 1 ? 'Seit über 24 Std. unbeantwortet' : count($stale) . ' Mails seit über 24 Std. unbeantwortet',
-                'body' => implode(' · ', array_map(static fn ($m) => (string) $m['subject'], array_slice($stale, 0, 3))),
-                'url' => '/postfach',
-                'tag' => 'mail-stale',
-            ]);
+            foreach ($users as $u) {
+                if (empty(Auth::prefs($u)['push']['mail'])) {
+                    continue;
+                }
+                $mine = array_values(array_filter($stale, static fn ($m) => self::visibleTo($m, $u['id'])));
+                if (!$mine) {
+                    continue;
+                }
+                Notify::toUser($u, [
+                    'title' => count($mine) === 1 ? 'Seit über 24 Std. unbeantwortet' : count($mine) . ' Mails seit über 24 Std. unbeantwortet',
+                    'body' => implode(' · ', array_map(static fn ($m) => (string) $m['subject'], array_slice($mine, 0, 3))),
+                    'url' => '/postfach',
+                    'tag' => 'mail-stale',
+                ]);
+            }
             $ids = array_column($stale, 'id');
             Db::exec('UPDATE emails SET notified = 2 WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids);
         }
+    }
+
+    /**
+     * Wer bekommt für welche neuen Mails einen Push?
+     * Team-Mails: alle; persönliche: nur der Besitzer. Nur ungelesene, unbeantwortete, offene Mails
+     * der letzten 12 Stunden; Push für Mails ausgeschaltet → nichts; „Nur wichtige“ → nur wichtige.
+     *
+     * @return array<string, array<int, array>> userId => Mails
+     */
+    public static function pushPlan(array $mails, array $users, int $now): array
+    {
+        $pushable = array_filter($mails, static fn ($m) =>
+            !(int) $m['deleted'] && !(int) $m['seen'] && !(int) $m['answered'] && $m['status'] === 'open'
+            && (int) $m['received_at'] >= $now - 12 * 3600 * 1000);
+        $plan = [];
+        foreach ($users as $u) {
+            $prefs = Auth::prefs($u);
+            if (empty($prefs['push']['mail'])) {
+                continue;
+            }
+            $onlyImportant = ($prefs['mailScope'] ?? 'all') === 'important';
+            $mine = array_values(array_filter($pushable, static fn ($m) =>
+                self::visibleTo($m, $u['id']) && (!$onlyImportant || (int) $m['important'])));
+            if ($mine) {
+                $plan[$u['id']] = $mine;
+            }
+        }
+        return $plan;
+    }
+
+    private static function sender(array $m): string
+    {
+        return (string) ($m['from_name'] ?: $m['from_email']);
     }
 
     // ---------- Bewertung ----------

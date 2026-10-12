@@ -22,6 +22,22 @@ switch ($cmd) {
         echo Util::json(['summary' => $summary, 'emails' => $rows, 'status' => Settings::get('mail_status_mb1')]);
         break;
 
+    case 'personal-run':
+        // Persönliche Postfächer auf den Test-IMAP-Server (unverschlüsselt) umbiegen und abrufen
+        foreach (Db::all('SELECT id FROM users WHERE deleted = 0') as $u) {
+            $mb = Settings::get('mailbox_user_' . $u['id']);
+            if (is_array($mb)) {
+                Settings::set('mailbox_user_' . $u['id'], ['host' => '127.0.0.1', 'port' => (int) $arg, 'security' => 'none'] + $mb);
+            }
+        }
+        $summary = MailJob::run();
+        $rows = Db::all('SELECT * FROM emails WHERE deleted = 0');
+        $users = Db::all('SELECT * FROM users WHERE deleted = 0');
+        // Push-Plan so berechnen, als wären alle Mails gerade neu angekommen
+        $plan = array_map(static fn ($list) => array_map(static fn ($m) => ['id' => $m['id'], 'owner_id' => $m['owner_id'], 'mailbox' => $m['mailbox']], $list), MailJob::pushPlan($rows, $users, Util::now()));
+        echo Util::json(['summary' => $summary, 'emails' => array_map([Sync::class, 'email'], $rows), 'plan' => (object) $plan]);
+        break;
+
     case 'push-encrypt':
         // argv: p256dh auth payload
         $body = WebPush::encrypt($argv[4], $argv[2], $argv[3]);

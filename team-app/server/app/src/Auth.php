@@ -149,12 +149,15 @@ final class Auth
                 'comments' => true,
                 'reminders' => true,
             ],
+            // Push für Mails: 'all' = jede neue Mail, 'important' = nur wichtige
+            'mailScope' => 'all',
         ];
         $p = json_decode((string) ($u['prefs'] ?? ''), true);
         if (!is_array($p)) {
             return $defaults;
         }
         $p['push'] = array_merge($defaults['push'], is_array($p['push'] ?? null) ? $p['push'] : []);
+        $p['mailScope'] = in_array($p['mailScope'] ?? null, ['all', 'important'], true) ? $p['mailScope'] : $defaults['mailScope'];
         return $p;
     }
 }

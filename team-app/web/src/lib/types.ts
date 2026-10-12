@@ -67,6 +67,8 @@ export interface Comment {
 export interface Email {
   id: string;
   mailbox: string;
+  /** Persönliches Postfach: gehört dieser Person (nur sie bekommt die Mail zu sehen). null = Team-Postfach. */
+  owner_id?: string | null;
   from_name: string | null;
   from_email: string | null;
   subject: string | null;
@@ -100,6 +102,8 @@ export interface Meta {
   shopifyConfigured: boolean;
   mailConfigured: boolean;
   mailboxes: string[];
+  /** Eigenes persönliches Postfach (z. B. marius.heub@…) oder null. */
+  myMailbox?: string | null;
   jobsLastRun: number;
   ordersLastSync: number;
   mailLastFetch: number;
@@ -119,6 +123,23 @@ export interface SyncResponse {
 
 export interface Prefs {
   push: Record<PushKind, boolean>;
+  /** Push für Mails: jede neue oder nur wichtige. */
+  mailScope?: 'all' | 'important';
+}
+
+export interface MyMailbox {
+  mailbox: {
+    email: string;
+    host: string;
+    port: number;
+    security: 'ssl' | 'starttls';
+    user: string;
+    hasPassword: boolean;
+    status: { ok: boolean; at: number; message: string } | null;
+  } | null;
+  suggestedHost: string;
+  lastFetch: number;
+  test?: { ok: boolean; message: string };
 }
 
 export interface StatusResponse {

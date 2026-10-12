@@ -65,8 +65,9 @@ final class Widget
         });
         $mails = Db::all(
             "SELECT from_name, from_email, subject, mailbox, received_at FROM emails
-             WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open'
-             ORDER BY score DESC, received_at DESC"
+             WHERE deleted = 0 AND important = 1 AND answered = 0 AND status = 'open' AND (owner_id IS NULL OR owner_id = ?)
+             ORDER BY score DESC, received_at DESC",
+            [$user['id']]
         );
         $shopify = Shopify::configured() || (int) Db::value('SELECT COUNT(*) FROM orders') > 0;
 
@@ -74,7 +75,7 @@ final class Widget
             'name' => explode(' ', trim($user['name']))[0],
             'serverTime' => Util::now(),
             'shopify' => $shopify,
-            'mail' => count(MailJob::mailboxes()) > 0,
+            'mail' => count(MailJob::mailboxes()) > 0 || MailJob::personal($user['id']) !== null,
             'today' => $shopify ? Stats::today() : null,
             'toShip' => $shopify ? count(Stats::toShip()) : null,
             'importantMails' => count($mails),

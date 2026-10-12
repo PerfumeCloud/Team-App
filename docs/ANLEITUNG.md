@@ -201,6 +201,19 @@ In der App auf **Ideen** (oder auf der Übersicht ins Feld **„Idee oder Aufgab
 
 Beispiel: *„Wir sollten im November einen Adventskalender mit 24 Proben machen, Ben kümmert sich um die Fotos bis Freitag, Keanu um die Verpackung“* → Notiz „Adventskalender …“ und zwei Aufgaben: **Fotos** (Ben, Freitag) und **Verpackung** (Keanu).
 
+## Teil G – Eigenes Postfach (jede:r für sich)
+
+Neben info@ und support@ kann jede Person ihr **persönliches Firmen-Postfach** verbinden, z. B. `marius.heub@perfumecloud.de`. **Nur der Besitzer** sieht diese Mails in der App und bekommt die Push-Nachrichten dazu. Ben und Keanu sehen davon nichts, auch nicht als Admin.
+
+1. Bei netcup in Plesk unter **E-Mail** → die eigene Adresse → **Passwort** setzen bzw. nachsehen. Das Häkchen bei **E-Mail-Postfach** muss gesetzt sein.
+2. In der Team-App: **Einstellungen** → **Mein Postfach**.
+   - **E-Mail-Adresse**, z. B. `marius.heub@perfumecloud.de`
+   - **Passwort des Postfachs**
+   - **IMAP-Server** ist schon eingetragen (`mxf938.netcup.net`), **Port** `993`, **Benutzername** leer lassen
+3. **Speichern & testen** tippen. Nach ein paar Minuten erscheinen die Mails unter **Postfach** → **🔒 Mein Postfach**.
+
+**Push für Mails:** Jede neue Mail löst eine Push-Nachricht aus. Mails an info@ und support@ gehen an alle, Mails ins persönliche Postfach nur an den Besitzer. Unter **Einstellungen → Benachrichtigungen → Bei welchen Mails?** lässt sich das auf **Nur wichtige** umstellen. Keinen Push lösen Newsletter, automatische Mails und Mails aus, die schon gelesen wurden. Zwischen 22 und 7 Uhr ist Ruhe, dann kommt morgens eine Zusammenfassung.
+
 ## Wenn etwas hakt
 
 | Problem | Lösung |
