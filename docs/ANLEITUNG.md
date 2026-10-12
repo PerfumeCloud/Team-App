@@ -33,7 +33,7 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 > Taucht `perfumecloud.de` in Plesk nicht auf, ist die Domain dem Webhosting noch nicht zugeordnet. Dann kurz Claude fragen.
 
 ### A2 · DNS-Eintrag für `team` setzen
-Damit `team.perfumecloud.de` auf euer Webhosting zeigt, während der Shop bei Shopify bleibt. Zuerst die **IPv4-Adresse eures Webhostings** notieren: CCP → **Produkte** → **Webhosting 1000** → **Übersicht**.
+Damit `team.perfumecloud.de` auf euer Webhosting zeigt, während der Shop bei Shopify bleibt. Zuerst die **IPv4-Adresse eures Webservers** notieren: im Webhosting-Panel unter **Domain-Einstellungen** bei „Webserver“. Bei euch ist das **`46.38.249.54`**.
 
 **Solange die Domain noch bei Shopify verwaltet wird** (Stand jetzt):
 1. Shopify-Admin → **Einstellungen** → **Domains** → **perfumecloud.de** → **DNS-Einstellungen**.
@@ -75,7 +75,7 @@ Andere Einträge für `@` oder `www` (z. B. ein A- oder **AAAA-Eintrag mit netcu
 ### A6 · Einrichtungsassistent
 1. Im Browser **`https://team.perfumecloud.de`** öffnen. Es erscheint „Willkommen!“.
 2. **Datenbank:**
-   - **MySQL:** Server `localhost`, Port `3306`, dazu Name, Benutzer und Passwort aus A4.
+   - **MySQL:** Server **`mysqlf937.netcup.net`** (steht im Webhosting-Panel unter „Domain-Einstellungen → MySQL-Server“), Port `3306`, dazu Name, Benutzer und Passwort aus A4.
    - Oder **SQLite**, wenn es keine freie Datenbank gibt.
 3. **Dein Admin-Konto:** Name `Marius`, deine E-Mail und ein sicheres Passwort.
 4. Auf **App einrichten** klicken. Du bist angemeldet und siehst die Übersicht.

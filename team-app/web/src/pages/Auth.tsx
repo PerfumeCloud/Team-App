@@ -162,7 +162,7 @@ export function Setup() {
                   <label className="label">Passwort</label>
                   <input className="field" type="password" value={db.pass} onChange={set('pass')} autoComplete="new-password" />
                 </div>
-                <p className="text-[12.5px] text-ink-3 sm:col-span-3">Zu finden in Plesk unter „Datenbanken“. Der Server ist meist „localhost“.</p>
+                <p className="text-[12.5px] text-ink-3 sm:col-span-3">Bei netcup steht der Server im Webhosting-Panel unter „Domain-Einstellungen → MySQL-Server“ (z. B. mysqlf937.netcup.net).</p>
               </div>
             ) : (
               <p className="text-[13.5px] text-ink-2">Die Daten liegen in einer Datei im geschützten Ordner „storage“. Gut zum Ausprobieren – für den Alltag ist MySQL robuster.</p>
