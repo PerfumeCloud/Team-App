@@ -1,6 +1,7 @@
-# Perfume Cloud · Team-App
+# Perfume Cloud · Apps
 
-Die interne App von Perfume Cloud für Marius, Ben und Keanu.
+- **[Team-App](#team-app)** – die interne App für Marius, Ben und Keanu (`team.perfumecloud.de`)
+- **[Kunden-App „Perfume Cloud Club“](#kunden-app-perfume-cloud-club)** – Treuepunkte und Bestellverfolgung für Kundinnen und Kunden (`app.perfumecloud.de`)
 
 ## Team-App
 
@@ -56,4 +57,53 @@ node --test team-app/web/tests/widget.test.mjs       # Scriptable-Widget
 node --test team-app/web/tests/assistant.test.mjs    # Ideen-Assistent (Text → Notiz/Aufgaben/Termine)
 node --test team-app/web/tests/holidays.test.mjs     # Feiertage/Aktionstage, gleich in App und PHP
 cd team-app/web && npx tsc -b                         # Typprüfung
+```
+
+## Kunden-App „Perfume Cloud Club“
+
+Web-App (PWA) für Kundinnen und Kunden im Design des Shops (Elfenbein, Dünen, Castoro, Glas-Dock).
+
+- **Anmeldung mit dem Shopify-Kundenkonto** (Customer Account API, Code per Mail, kein Passwort). Ausweichweg: E-Mail-Code über info@
+- **Treuepunkte:** 1 Punkt je Euro Warenwert, Willkommensbonus, Gutschrift nach der Rückgabefrist, Storno/Erstattung werden verrechnet
+- **Prämien:** Punkte gegen Rabattcodes tauschen (100 Punkte = 5 €), Code nur für das eigene Kundenkonto, „Im Shop einlösen“ legt ihn direkt in den Warenkorb, ungenutzte Codes zurückgeben, abgelaufene Codes geben die Punkte zurück
+- **Bestellungen:** Status, Zeitleiste, Sendungsnummer mit Link, Artikel, Punkte je Bestellung
+- **Club-Admin** (`/admin`): Kennzahlen, Mitglieder, Punkte gutschreiben, alle Regeln einstellbar, Abgleich mit Shopify
+- **Shopify:** Tag `club`, Kunden-Metafelder `club.punkte`, `club.punkte_ausstehend`, `club.mitglied_seit` (für Theme, Segmente, Mails)
+
+➡️ **Anleitung (online stellen, Shopify verbinden):** [docs/KUNDEN-APP.md](docs/KUNDEN-APP.md)
+
+### Aufbau
+
+```
+kunden-app/
+  web/       React + Vite (PWA), eigenes CSS nach dem Shop-Theme
+  server/
+    public/  api.php + .htaccess  → Dokumentenstamm
+    app/     PHP-Backend ohne externe Abhängigkeiten (Shopify Admin API, Customer Account API, Punkte, Codes)
+    tests/   Integrationstests mit Shopify-Nachbau (mock-shopify.php)
+  package.sh baut das Upload-Paket nach kunden-app/build/
+.github/workflows/kunden-app.yml   Tests + Build + FTP-Upload zu netcup
+```
+
+### Lokal entwickeln
+
+```bash
+# Shopify-Nachbau und Backend (PHP 8.1+) mit SQLite
+cd kunden-app/server
+export CLUB_CONFIG=$PWD/storage/config.php CLUB_STORAGE=$PWD/storage MOCK_STATE=$PWD/storage/mock.json \
+       CLUB_SHOPIFY_BASE=http://127.0.0.1:8095 CLUB_CA_BASE=http://127.0.0.1:8095 CLUB_MAIL_LOG=$PWD/storage/mails.log
+php -S 127.0.0.1:8095 tests/mock-shopify.php &
+php -S 127.0.0.1:8094 -t public public/router.php
+
+# Frontend
+cd kunden-app/web && npm install && npm run dev   # http://localhost:5174, /api geht an :8094
+```
+
+Einrichten mit **SQLite**, dann im Club-Admin die Zugänge des Nachbaus eintragen: Shopify-App `admin-client`/`admin-secret` (Shop `ks8yin-mg.myshopify.com`), Kundenkonto-Client `ca-client`/`ca-secret`. Kundinnen, Bestellungen und wer sich gerade „bei Shopify anmeldet“ legt `POST http://127.0.0.1:8095/__mock/state` fest (Beispiele in `server/tests/backend.test.mjs`).
+
+### Tests
+
+```bash
+node --test kunden-app/server/tests/backend.test.mjs   # Login (vertraulich + PKCE), Beitritt, Punkte, Codes, Cron, Admin, Austritt
+cd kunden-app/web && npx tsc -b                         # Typprüfung
 ```

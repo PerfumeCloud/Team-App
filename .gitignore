@@ -7,3 +7,7 @@ team-app/server/public/index.html
 *.log
 .DS_Store
 .env
+kunden-app/build/
+kunden-app/server/config.php
+kunden-app/server/storage/
+kunden-app/server/public/index.html

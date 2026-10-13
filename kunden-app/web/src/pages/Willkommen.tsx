@@ -1,0 +1,132 @@
+import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
+import { BadgePercent, Gift, Truck } from 'lucide-react';
+import { api, fehlertext } from '../lib/api';
+import { useKunde, useStatus } from '../lib/kontext';
+import { useTitel } from '../lib/hooks';
+import { abmelden } from '../lib/konto';
+import { euro, punkteWort } from '../lib/format';
+import type { Me } from '../lib/types';
+import { Erfolg, Hb, Hinweis, Seitenkopf } from '../components/ui';
+import { KundenShell } from '../components/Shell';
+
+export default function Willkommen() {
+  useTitel('Willkommen');
+  const { me, setMe } = useKunde();
+  const status = useStatus();
+  const navigate = useNavigate();
+  const p = me.program;
+  const [vorname, setVorname] = useState('');
+  const [ok, setOk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [beigetreten, setBeigetreten] = useState<Me | null>(null);
+
+  async function beitreten(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setFehler(null);
+    try {
+      setBeigetreten(await api<Me>('POST', '/me/join', { terms: ok, first_name: vorname.trim() || undefined }));
+    } catch (err) {
+      setFehler(fehlertext(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const name = me.member.first_name;
+
+  return (
+    <KundenShell shopUrl={me.shop_url} ohneDock>
+      <Seitenkopf label="Willkommen" titel={<>Schön, dass du <em>da bist{name ? `, ${name}` : ''}</em></>}>
+        <p>Du bist angemeldet als {me.member.email}. Ein Schritt noch, dann sammelst du mit jeder Bestellung Punkte.</p>
+      </Seitenkopf>
+
+      <ul className="vorteile">
+        <li>
+          <span className="symbol">
+            <Gift />
+          </span>
+          <h2 className="karte-titel">{p.welcome_points > 0 ? `${punkteWort(p.welcome_points)} geschenkt` : 'Punkte sammeln'}</h2>
+          <p>
+            {p.welcome_points > 0 ? 'Gleich zum Start. ' : ''}Danach bekommst du für jeden Euro {punkteWort(p.earn_per_euro)}.
+            {p.retro_days > 0 && ` Bestellungen der letzten ${p.retro_days} Tage zählen schon mit.`}
+          </p>
+        </li>
+        <li>
+          <span className="symbol">
+            <BadgePercent />
+          </span>
+          <h2 className="karte-titel">Als Rabatt einlösen</h2>
+          <p>
+            Je {punkteWort(p.redeem_points)} gibt es {euro(p.redeem_cents)} Rabatt, als Code für deinen nächsten Einkauf.
+          </p>
+        </li>
+        <li>
+          <span className="symbol">
+            <Truck />
+          </span>
+          <h2 className="karte-titel">Bestellungen verfolgen</h2>
+          <p>Du siehst jederzeit, wo dein Paket gerade ist.</p>
+        </li>
+      </ul>
+
+      <form className="karte formular" onSubmit={beitreten} style={{ maxWidth: '36rem' }}>
+        <h2 className="karte-titel">Dem Club beitreten</h2>
+        {!name && (
+          <label className="feld">
+            <span>Wie dürfen wir dich nennen? (freiwillig)</span>
+            <input autoComplete="given-name" value={vorname} onChange={(e) => setVorname(e.target.value)} placeholder="Vorname" maxLength={100} />
+          </label>
+        )}
+        <label className="haken-zeile">
+          <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
+          <span>
+            Ich möchte mitmachen und akzeptiere die{' '}
+            {status.terms_url ? (
+              <a href={status.terms_url} target="_blank" rel="noopener">
+                Teilnahmebedingungen
+              </a>
+            ) : (
+              'Teilnahmebedingungen'
+            )}
+            . Punkte werden {p.wait_days > 0 ? `${p.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben, Codes gelten {p.code_days} Tage. Austreten kann ich jederzeit.
+          </span>
+        </label>
+        {fehler && <Hinweis fehler>{fehler}</Hinweis>}
+        <div>
+          <Hb dunkel type="submit" busy={busy} disabled={!ok}>
+            Jetzt beitreten
+          </Hb>
+        </div>
+      </form>
+
+      <p className="klein leise">
+        Nicht du?{' '}
+        <button className="textlink" onClick={() => void abmelden()}>
+          Abmelden
+        </button>
+      </p>
+
+      {beigetreten && (
+        <Erfolg name="WILLKOMMEN" titel="Du bist im Club">
+          <p>
+            {p.welcome_points > 0
+              ? `${punkteWort(p.welcome_points)} Willkommensbonus sind schon auf deinem Konto.`
+              : 'Ab jetzt sammelst du mit jeder Bestellung Punkte.'}
+          </p>
+          <Hb
+            dunkel
+            onClick={() => {
+              navigate('/', { replace: true });
+              setMe(beigetreten);
+            }}
+          >
+            Zu meinen Punkten
+          </Hb>
+        </Erfolg>
+      )}
+    </KundenShell>
+  );
+}

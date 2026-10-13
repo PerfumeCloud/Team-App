@@ -1,0 +1,70 @@
+name: Kunden-App
+
+on:
+  push:
+    branches: [main]
+    paths: ['kunden-app/**', '.github/workflows/kunden-app.yml']
+  pull_request:
+    paths: ['kunden-app/**', '.github/workflows/kunden-app.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-und-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, pdo_mysql, mbstring, openssl, curl
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kunden-app/web/package-lock.json
+
+      - name: PHP-Syntax prüfen
+        run: find kunden-app/server -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Backend-Tests (mit Shopify-Nachbau)
+        run: node --test kunden-app/server/tests/backend.test.mjs
+
+      - name: App bauen
+        run: ./kunden-app/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kunden-app-upload
+          path: kunden-app/build
+          include-hidden-files: true
+          retention-days: 14
+
+  deploy:
+    # Läuft erst, wenn in GitHub unter Settings → Secrets and variables → Actions
+    # die Variable CLUB_DEPLOY_ENABLED=true, CLUB_FTP_DIR und die FTP-Secrets eingetragen sind.
+    needs: test-und-build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CLUB_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    concurrency: deploy-kunden-app
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kunden-app-upload
+          path: build
+
+      - name: Zu netcup hochladen (FTPS)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: build/
+          server-dir: ${{ vars.CLUB_FTP_DIR }}
+          state-name: .ftp-deploy-sync-state-club.json
