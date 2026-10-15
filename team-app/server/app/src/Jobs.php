@@ -9,7 +9,13 @@ final class Jobs
     private const LOCK_STALE_MS = 10 * 60 * 1000;
     private const POKE_AFTER_MS = 4 * 60 * 1000;
 
-    public static function run(string $trigger): array
+    public const ALL = ['orders' => true, 'mail' => true, 'other' => true];
+
+    /**
+     * @param array{orders?:bool, mail?:bool, other?:bool} $parts Was laufen soll (der Sofort-Abruf
+     *        holt Bestellungen öfter als den vollständigen Mail-Abgleich)
+     */
+    public static function run(string $trigger, array $parts = self::ALL): array
     {
         @set_time_limit(170);
         if ($trigger === 'cron') {
@@ -21,15 +27,17 @@ final class Jobs
         }
         $summary = ['trigger' => $trigger];
         try {
-            if (Shopify::configured()) {
+            if (!empty($parts['orders']) && Shopify::configured()) {
                 $summary['shopify'] = self::safe(static fn () => OrdersJob::run(), 'shopify_status');
             }
-            if (MailJob::mailboxes()) {
+            if (!empty($parts['mail']) && MailJob::mailboxes()) {
                 $summary['mail'] = MailJob::run();
             }
-            $summary['reminders'] = self::safe(static fn () => self::reminders(), null);
-            $summary['events'] = self::safe(static fn () => Calendar::remind(), null);
-            $summary['cleanup'] = self::safe(static fn () => self::cleanup(), null);
+            if (!empty($parts['other'])) {
+                $summary['reminders'] = self::safe(static fn () => self::reminders(), null);
+                $summary['events'] = self::safe(static fn () => Calendar::remind(), null);
+                $summary['cleanup'] = self::safe(static fn () => self::cleanup(), null);
+            }
             Settings::set('jobs_last_run', Util::now());
         } finally {
             self::unlock();

@@ -27,12 +27,13 @@ import {
   SquarePlus,
   Sun,
   Trash2,
+  Zap,
 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { Avatar, Button, Chip, cx, IconButton, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
-import type { ClubSettings, Integrations, MailboxConfig, MailCheck, MyMailbox, Prefs, PushDevice, PushKind, PushTestResult, User, UserColor } from '../lib/types';
+import type { ClubSettings, Integrations, LiveStatus, MailboxConfig, MailCheck, MyMailbox, Prefs, PushDevice, PushKind, PushTestResult, User, UserColor } from '../lib/types';
 import { disablePush, enablePush, isIos, isStandalone, pushState, thisDeviceId, type PushState } from '../lib/push';
 import { openClubAdmin } from './Club';
 import { STATES } from '../lib/holidays';
@@ -793,6 +794,76 @@ function InviteBox({ r, onClose }: { r: InviteResult & { name: string }; onClose
 
 // ---------------- Wartung ----------------
 
+const LIVE_STATE: Record<LiveStatus['boxes'][string]['state'], { label: string; tone: 'good' | 'warn' | 'bad' | 'neutral' }> = {
+  idle: { label: 'sofort', tone: 'good' },
+  poll: { label: 'alle 10 Sek.', tone: 'warn' },
+  connecting: { label: 'verbindet …', tone: 'neutral' },
+  error: { label: 'Fehler', tone: 'bad' },
+};
+
+/** Zustand des Sofort-Abrufs: läuft er, wie schnell ist jedes Postfach, wie schnell kam die letzte Mail? */
+function LiveStatusView({ live, now }: { live: LiveStatus; now: number }) {
+  const boxes = Object.entries(live.boxes ?? {});
+  if (!live.active) {
+    return (
+      <p className="flex items-start gap-2 rounded-xl bg-warn/10 p-3 text-[13px] text-warn">
+        <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          Der Sofort-Abruf läuft nicht{live.beat ? ` (zuletzt ${relative(live.beat, now)})` : ''}. Richtet die geplante Aufgabe unten ein – jede Minute. Bis dahin kommen Push-Nachrichten erst beim nächsten Abgleich.
+        </span>
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-xl bg-good/10 p-3 text-[13px] text-ink-2">
+      <p className="flex items-center gap-2 font-medium text-good">
+        <Zap className="h-4 w-4" /> Sofort-Abruf aktiv
+      </p>
+      {boxes.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {boxes.map(([email, b]) => (
+            <li key={email} className="flex flex-wrap items-center gap-2">
+              <span className="truncate">{email}</span>
+              <Chip tone={LIVE_STATE[b.state]?.tone ?? 'neutral'}>{LIVE_STATE[b.state]?.label ?? b.state}</Chip>
+              {b.message && <span className="text-[12px] text-bad">{b.message}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {live.lastMail && (
+        <p className="mt-2 text-[12.5px] text-ink-3">
+          Letzte Mail {relative(live.lastMail.at, now)} gemeldet, {seconds(live.lastMail.delay)} nach dem Eingang.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function seconds(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return s < 120 ? `${s} Sek.` : `${Math.round(s / 60)} Min.`;
+}
+
+function CopyRow({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <input className="field min-w-0 flex-1 font-mono text-[12.5px]" readOnly value={value} onFocus={(e) => e.target.select()} />
+      <Button
+        variant="secondary"
+        className="shrink-0 px-3 sm:px-4"
+        aria-label="Kopieren"
+        icon={<Copy className="h-4 w-4" />}
+        onClick={() => {
+          void navigator.clipboard?.writeText(value);
+          toast(label, 'success');
+        }}
+      >
+        <span className="hidden sm:inline">Kopieren</span>
+      </Button>
+    </div>
+  );
+}
+
 interface Diagnostics {
   version: string;
   schema: string;
@@ -1451,7 +1522,7 @@ function IntegrationsPanel() {
       toast(r.ok ? 'Abruf und Versand funktionieren – Testmail ist unterwegs' : 'Es hakt – Details beim Postfach', r.ok ? 'success' : 'error');
     });
   const senderBox = data.mailboxes.find((m) => m.email === data.mail?.sender);
-  const cronLate = !data.cron.lastRun || now - data.cron.lastRun > 30 * 60000;
+  const cronLate = !data.cron.lastRun || now - data.cron.lastRun > 3 * 60000;
 
   return (
     <>
@@ -1732,27 +1803,26 @@ function IntegrationsPanel() {
       </Section>
 
       <Section
-        title="Cronjob"
-        description="Damit Mails, Bestellungen und Push-Nachrichten auch dann aktuell sind, wenn niemand die App offen hat, ruft netcup alle 5 Minuten diese Adresse auf. In Plesk: Geplante Aufgaben → Aufgabe hinzufügen → „URL abrufen“."
+        title="Sofort-Abruf & Cronjob"
+        description="Neue Mails meldet die App nach wenigen Sekunden: Ein Hintergrundprozess hält die Verbindung zu den Postfächern offen, und der Mailserver meldet jede neue Mail sofort. netcup startet ihn über eine geplante Aufgabe jede Minute bzw. hält ihn am Laufen. Bestellungen kommen alle 20 Sekunden dazu."
       >
-        <div className="flex items-center gap-2">
-          <input className="field font-mono text-[12.5px]" readOnly value={data.cron.url} onFocus={(e) => e.target.select()} />
-          <Button
-            variant="secondary"
-            icon={<Copy className="h-4 w-4" />}
-            onClick={() => {
-              void navigator.clipboard?.writeText(data.cron.url);
-              toast('Adresse kopiert', 'success');
-            }}
-          >
-            Kopieren
-          </Button>
-        </div>
+        <LiveStatusView live={data.cron.live} now={now} />
+        <ol className="mt-4 list-decimal space-y-1 pl-5 text-[13px] leading-relaxed text-ink-2">
+          <li>
+            In Plesk: <b>Geplante Aufgaben</b> → <b>Aufgabe hinzufügen</b> → <b>PHP-Skript ausführen</b>.
+          </li>
+          <li>Diesen Pfad als Skript eintragen (PHP 8.3), Ausführen: Cron-Stil <code className="rounded bg-surface-2 px-1">* * * * *</code> (jede Minute), Benachrichtigung: keine.</li>
+        </ol>
+        <CopyRow value={data.cron.script} label="Skript kopiert" />
+        <p className="mt-4 text-[12.5px] text-ink-3">
+          Alternativ „URL abrufen“ mit dieser Adresse, ebenfalls jede Minute. Das klappt nur, wenn PHP auf eurem Hosting als FPM läuft; sonst holt die App Mails dabei einmal pro Minute.
+        </p>
+        <CopyRow value={data.cron.url} label="Adresse kopiert" />
         {cronLate && (
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn/10 p-3 text-[13px] text-warn">
             <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Der Cronjob läuft nicht{data.cron.lastRun ? ` (zuletzt ${relative(data.cron.lastRun, now)})` : ''}. Ohne ihn werden Mails und Bestellungen nur abgerufen, solange jemand die App offen hat – und Push-Nachrichten kommen verspätet.
+              Der Cronjob läuft nicht jede Minute{data.cron.lastRun ? ` (zuletzt ${relative(data.cron.lastRun, now)})` : ''}. Ohne ihn werden Mails und Bestellungen nur abgerufen, solange jemand die App offen hat – und Push-Nachrichten kommen verspätet.
             </span>
           </p>
         )}

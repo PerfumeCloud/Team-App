@@ -311,13 +311,9 @@ final class MailJob
     public static function run(): array
     {
         $summary = [];
-        $all = self::mailboxes();
-        $ownAddresses = array_column($all, 'email');
-        foreach ($all as $mb) {
-            // Team-Postfächer: Mails vom eigenen Team ausblenden. Persönliche: nur Mails von sich selbst.
-            $own = $mb['visible_to'] ? [$mb['email']] : $ownAddresses;
+        foreach (self::mailboxes() as $mb) {
             try {
-                $summary[$mb['email']] = self::fetchMailbox($mb, $own);
+                $summary[$mb['email']] = self::fetchMailbox($mb, self::ownAddresses($mb));
                 Settings::set('mail_status_' . $mb['id'], ['ok' => true, 'at' => Util::now(), 'message' => 'OK']);
             } catch (\Throwable $e) {
                 $summary[$mb['email']] = 'Fehler: ' . $e->getMessage();
@@ -370,6 +366,34 @@ final class MailJob
 
         $initial = !Settings::get('mail_init_' . $mb['id']);
         $now = Util::now();
+        ['new' => $new, 'important' => $important, 'ids' => $seenIds] = self::store($mb, $own, $validity, $messages, $replied, $initial, $now);
+        if ($uids) {
+            self::rememberUid($mb, $validity, max($uids));
+        }
+
+        // Mails, die im Postfach gelöscht oder verschoben wurden, aus der App entfernen
+        $rows = Db::all('SELECT id FROM emails WHERE mailbox = ? AND deleted = 0 AND received_at >= ?', [$mb['email'], $sinceTs * 1000]);
+        foreach ($rows as $r) {
+            if (!in_array($r['id'], $seenIds, true)) {
+                Db::update('emails', ['deleted' => 1, 'updated_at' => $now], ['id' => $r['id']]);
+            }
+        }
+
+        if ($initial) {
+            Settings::set('mail_init_' . $mb['id'], true);
+        }
+        return count($messages) . " geprüft, $new neu, $important wichtig offen";
+    }
+
+
+    /**
+     * Abgerufene Mails speichern bzw. aktualisieren und neu einstufen.
+     * @param array<int, array<string, mixed>> $messages nach UID (aus Imap::fetch)
+     * @param array<string, bool>|null $replied Message-IDs mit Antwort im Gesendet-Ordner (null = nicht geprüft)
+     * @return array{new:int, important:int, ids:string[]}
+     */
+    private static function store(array $mb, array $own, string $validity, array $messages, ?array $replied, bool $initial, int $now): array
+    {
         $seenIds = [];
         $new = 0;
         $important = 0;
@@ -396,27 +420,34 @@ final class MailJob
                 'received_at' => $receivedAt,
                 'snippet' => self::snippet($headers, (string) self::firstWithPrefix($msg, 'BODY[TEXT]')),
             ];
+            $old = Db::one('SELECT * FROM emails WHERE id = ?', [$id]);
+            if ($replied === null && $old && (int) $old['answered'] === 1) {
+                $mail['answered'] = 1; // Antwort im Gesendet-Ordner bleibt bekannt
+            }
             $c = $auto ? ['important' => false, 'reasons' => [], 'score' => 0] : self::classify($mail, $now);
             $mail['important'] = $c['important'] ? 1 : 0;
             $mail['reasons'] = implode('|', $c['reasons']) ?: null;
             $mail['score'] = $c['score'];
             $mail['auto'] = $auto ? 1 : 0;
 
-            $old = Db::one('SELECT * FROM emails WHERE id = ?', [$id]);
             if (!$old) {
-                Db::insert('emails', $mail + [
-                    'id' => $id,
-                    'mailbox' => $mb['email'],
-                    'message_id' => mb_substr($messageId, 0, 255) ?: null,
-                    'from_name' => mb_substr($fromName, 0, 255) ?: null,
-                    'from_email' => mb_substr($fromEmail, 0, 255),
-                    'status' => 'open',
-                    'notified' => $initial ? 2 : 0,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                    'deleted' => 0,
-                ]);
-                $new++;
+                try {
+                    Db::insert('emails', $mail + [
+                        'id' => $id,
+                        'mailbox' => $mb['email'],
+                        'message_id' => mb_substr($messageId, 0, 255) ?: null,
+                        'from_name' => mb_substr($fromName, 0, 255) ?: null,
+                        'from_email' => mb_substr($fromEmail, 0, 255),
+                        'status' => 'open',
+                        'notified' => $initial ? 2 : 0,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                        'deleted' => 0,
+                    ]);
+                    $new++;
+                } catch (\PDOException) {
+                    // Gleichzeitig von einem anderen Abruf eingetragen – dann ist sie schon da
+                }
             } else {
                 $changed = (int) $old['deleted'] === 1;
                 foreach (['seen', 'flagged', 'answered', 'important', 'reasons', 'score', 'snippet', 'auto'] as $k) {
@@ -444,32 +475,69 @@ final class MailJob
             }
         }
 
-        // Mails, die im Postfach gelöscht oder verschoben wurden, aus der App entfernen
-        $rows = Db::all('SELECT id FROM emails WHERE mailbox = ? AND deleted = 0 AND received_at >= ?', [$mb['email'], $sinceTs * 1000]);
-        foreach ($rows as $r) {
-            if (!in_array($r['id'], $seenIds, true)) {
-                Db::update('emails', ['deleted' => 1, 'updated_at' => $now], ['id' => $r['id']]);
-            }
-        }
+        return ['new' => $new, 'important' => $important, 'ids' => $seenIds];
+    }
 
-        if ($initial) {
-            Settings::set('mail_init_' . $mb['id'], true);
+    /** Team-Postfächer: Mails vom eigenen Team ausblenden. Persönliche: nur Mails von sich selbst. */
+    public static function ownAddresses(array $mb): array
+    {
+        return $mb['visible_to'] ? [$mb['email']] : array_column(self::mailboxes(), 'email');
+    }
+
+    /** Höchste bekannte UID im Posteingang merken (für den Sofort-Abruf, auch über Neustarts hinweg). */
+    public static function rememberUid(array $mb, string $validity, int $uid): void
+    {
+        $old = Settings::get('mail_uid_' . $mb['id']);
+        if (!is_array($old) || ($old['v'] ?? '') !== $validity || (int) ($old['uid'] ?? 0) < $uid) {
+            Settings::set('mail_uid_' . $mb['id'], ['v' => $validity, 'uid' => $uid]);
         }
-        return count($messages) . " geprüft, $new neu, $important wichtig offen";
+    }
+
+    /** Zuletzt bekannte UID, falls sie zur UIDVALIDITY passt (sonst null). */
+    public static function knownUid(array $mb, string $validity): ?int
+    {
+        $old = Settings::get('mail_uid_' . $mb['id']);
+        return is_array($old) && ($old['v'] ?? '') === $validity ? (int) ($old['uid'] ?? 0) : null;
+    }
+
+    /**
+     * Sofort-Abruf: nur Mails mit UID > $afterUid holen – auf einer bestehenden Verbindung,
+     * deren Posteingang schon (schreibgeschützt) geöffnet ist. Gibt die höchste UID und die Zahl neuer Mails zurück.
+     * @return array{uid:int, new:int}
+     */
+    public static function fetchNew(Imap $imap, array $mb, string $validity, int $afterUid): array
+    {
+        // „UID n:*“ liefert laut RFC immer mindestens die höchste UID – darum selbst filtern
+        $uids = array_values(array_filter($imap->search('UID ' . ($afterUid + 1) . ':*'), static fn ($u) => $u > $afterUid));
+        if (!$uids) {
+            return ['uid' => $afterUid, 'new' => 0];
+        }
+        $uids = array_slice($uids, -50); // Rest übernimmt der vollständige Abgleich
+        $messages = $imap->fetch($uids, 'UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (' . self::HEADER_FIELDS . ')] BODY.PEEK[TEXT]<0.6000>');
+        $initial = !Settings::get('mail_init_' . $mb['id']);
+        $res = self::store($mb, self::ownAddresses($mb), $validity, $messages, null, $initial, Util::now());
+        $max = max($uids);
+        self::rememberUid($mb, $validity, $max);
+        return ['uid' => $max, 'new' => $res['new']];
     }
 
     /**
      * Push für jede neue Mail: Team-Mails an alle, persönliche nur an den Besitzer.
      * Wer in den Einstellungen „Nur wichtige“ gewählt hat, bekommt nur wichtige.
      * Schon gelesene oder beantwortete Mails lösen keinen Push aus.
+     * @return array<int, array> die Mails, die jetzt gemeldet wurden
      */
-    public static function notify(): void
+    public static function notify(): array
     {
         if (Notify::quietHours()) {
-            return; // bleiben offen und kommen morgens gesammelt
+            return []; // bleiben offen und kommen morgens gesammelt
         }
         $now = Util::now();
-        $fresh = Db::all('SELECT * FROM emails WHERE deleted = 0 AND notified = 0 ORDER BY received_at');
+        // Jede Mail wird genau einmal gemeldet, auch wenn zwei Abrufe gleichzeitig laufen
+        $fresh = array_values(array_filter(
+            Db::all('SELECT * FROM emails WHERE deleted = 0 AND notified = 0 ORDER BY received_at'),
+            static fn ($m) => Db::exec('UPDATE emails SET notified = 1 WHERE id = ? AND notified = 0', [$m['id']]) === 1
+        ));
         $users = Db::all('SELECT * FROM users WHERE deleted = 0');
         if ($fresh) {
             $plan = self::pushPlan($fresh, $users, $now);
@@ -493,8 +561,6 @@ final class MailJob
                     ]);
                 }
             }
-            $ids = array_column($fresh, 'id');
-            Db::exec('UPDATE emails SET notified = 1 WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids);
         }
 
         // Erinnerung: wichtige Mails seit über 24 Std. unbeantwortet
@@ -521,6 +587,7 @@ final class MailJob
             $ids = array_column($stale, 'id');
             Db::exec('UPDATE emails SET notified = 2 WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids);
         }
+        return $fresh;
     }
 
     /**

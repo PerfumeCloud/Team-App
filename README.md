@@ -13,10 +13,10 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **Ideen-Assistent:** Idee einfach hinschreiben oder diktieren – daraus werden Notiz, Aufgaben (mit Zuständigkeit, Datum, Priorität, Kategorie, Checkliste) und Termine (Uhrzeit, Zeitraum, Ort, Teilnehmer). Läuft ohne KI direkt in der App, kostenlos und offline
 - **Kalender:** Termine, Meetings, Events und Fristen mit Erinnerung und Einladung per Push, Abo für die iPhone-/Outlook-Kalender-App, Feiertage je Bundesland und Shop-Aktionstage (Black Friday, Muttertag …) automatisch für jedes Jahr
 - **Postfach:** beliebige Postfächer (info@, support@, persönliche) mit „Sichtbar für“ je Postfach, IMAP, nur lesend
-- **Push bei Mails:** wählbar „Jede neue“, „Wirklich alle“ oder „Nur wichtige“ – immer nur an die Personen, die das Postfach sehen
+- **Push bei Mails:** wenige Sekunden nach dem Eingang (Sofort-Abruf per IMAP IDLE, vom Cronjob jede Minute am Laufen gehalten), wählbar „Jede neue“, „Wirklich alle“ oder „Nur wichtige“ – immer nur an die Personen, die das Postfach sehen
 - **Team:** Einladung per Mail mit Link zum Passwort-Festlegen, gelöschte Personen wiederherstellen, Wartung mit „Datenbank aktualisieren“ und Geräte-Status
 - **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Artikel pro Bestellung, bester Tag, Stornos, Erstattungen, Top-Düfte, knapper Bestand – jeweils mit Veränderung in % (grün = besser, rot = schlechter) (Shopify Admin API)
-- **Push-Nachrichten:** neue wichtige Mail, neue Bestellung, zugewiesene Aufgabe, Kommentare, Erinnerung am Morgen
+- **Push-Nachrichten:** neue Mail, neue Bestellung (alle 20 Sekunden geprüft), zugewiesene Aufgabe, Kommentare, Erinnerung am Morgen
 - **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm), auch als Kalender-Widget
 - **Members Club:** Statistik zum Club (Mitglieder, Bronze/Silber/Gold, Punkte, Prämien, Feedback), „Nachricht an Mitglieder senden“ mit Vorlagen, Prüfung und Freigabe, Club-Admin mit einem Klick, Club-Zugang je Person
 - **Diagnose:** Testmail über „Mails verschicken“ (Port 465/587), Push-Test je Gerät
@@ -54,7 +54,7 @@ Beispieldaten für eine Vorschau: `PC_CONFIG=… PC_STORAGE=… php team-app/ser
 ### Tests
 
 ```bash
-node --test team-app/server/tests/backend.test.mjs   # API, Sync, Mail-Erkennung, Push-Verschlüsselung, Widget
+node --test team-app/server/tests/backend.test.mjs   # API, Sync, Mail-Erkennung, Sofort-Abruf (IDLE), Push-Verschlüsselung, Widget
 node --test team-app/web/tests/widget.test.mjs       # Scriptable-Widget
 node --test team-app/web/tests/assistant.test.mjs    # Ideen-Assistent (Text → Notiz/Aufgaben/Termine)
 node --test team-app/web/tests/holidays.test.mjs     # Feiertage/Aktionstage, gleich in App und PHP

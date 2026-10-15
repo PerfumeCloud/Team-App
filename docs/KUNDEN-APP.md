@@ -197,7 +197,7 @@ Danach landet jede Änderung an der Kunden-App automatisch auf netcup.
 
 Danach teilen sich Club und Team-App **eine Datenbank** (alle Club-Tabellen beginnen mit `club_`) und **dieselben Benutzer**: Wer in der Team-App Admin ist, ist auch Club-Admin. Die Team-App zeigt die Club-Statistik und verschickt Nachrichten an Mitglieder.
 
-**Voraussetzung:** Team-App **Version 1.3** ist hochgeladen (Upload wie in der Team-App-Anleitung, Teil A5, oder automatisch per Teil E dort). Bei beiden Subdomains steht **open_basedir** auf `{WEBSPACEROOT}` (A3), damit der Club die Zugangsdaten der Team-App lesen darf.
+**Voraussetzung:** Team-App **Version 1.4** (oder neuer) ist hochgeladen (Upload wie in der Team-App-Anleitung, Teil A5, oder automatisch per Teil E dort). Bei beiden Subdomains steht **open_basedir** auf `{WEBSPACEROOT}` (A3), damit der Club die Zugangsdaten der Team-App lesen darf.
 
 ### H1 · Datenbank umziehen (einmalig)
 1. Club-Admin → **Einstellungen → System → Datenbank**.

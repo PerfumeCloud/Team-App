@@ -973,6 +973,89 @@ test('Club: Adresse und Schlüssel aus der gemeinsamen Datenbank erkennen', asyn
   assert.equal((await admin.req('GET', '/admin/club')).data.club.keySource, 'auto');
 });
 
+test('Sofort-Abruf: neue Mail per IDLE in Sekunden gemeldet, Lücken nachgeholt, ohne IDLE alle 10 Sek.', async () => {
+  const setup = helper('live-setup', String(IMAP_PORT));
+  assert.equal(setup.init, true, JSON.stringify(setup));
+  assert.equal(setup.uid.v, '777');
+  assert.ok(setup.uid.uid >= 107, JSON.stringify(setup.uid));
+
+  // Eigene Person mit Push-Gerät (keine Aufgaben oder Termine, nur Mails)
+  const u = await admin.req('POST', '/admin/users', { name: 'Lia', email: 'lia.live@example.de', password: 'lialialia1' });
+  assert.equal(u.status, 200, JSON.stringify(u.data));
+  const lea = new Client();
+  assert.equal((await lea.req('POST', '/auth/login', { email: 'lia.live@example.de', password: 'lialialia1' })).status, 200);
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  const keys = { p256dh: ecdh.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') };
+  assert.equal((await lea.req('POST', '/push/subscribe', { endpoint: `http://127.0.0.1:${pushPort}/ok/lia`, keys })).status, 200);
+  const leaHits = () => pushHits.filter((h) => h.path === '/ok/lia');
+
+  const live = () => {
+    const v = helper('sql', "SELECT v FROM settings WHERE k = 'live'")[0]?.v;
+    return v ? JSON.parse(v) : null;
+  };
+  const boxState = () => live()?.boxes?.['live@perfumecloud.de']?.state;
+  const cron = (seconds) => {
+    const p = spawn('php', [join(serverDir, 'app/bin/cron.php'), `--seconds=${seconds}`], { env });
+    let out = '';
+    p.stdout.on('data', (d) => (out += d));
+    p.stderr.on('data', (d) => (out += d));
+    return new Promise((resolve) => p.on('exit', () => resolve(out)));
+  };
+  const deliver = async (mail) => {
+    const added = waitFor(imap, 'ADDED');
+    imap.stdin.write(`ADD ${JSON.stringify(mail)}\n`);
+    await added;
+  };
+
+  // 1) Läuft: Der Server meldet die neue Mail per IDLE, der Push ist nach Sekundenbruchteilen raus
+  const run1 = cron(8);
+  assert.ok(await eventually(() => boxState() === 'idle', 6000), 'Postfach im IDLE: ' + JSON.stringify(live()));
+  const second = JSON.parse(execFileSync('php', [join(serverDir, 'app/bin/cron.php'), '--seconds=5'], { env }).toString());
+  assert.equal(second.live, 'läuft bereits', 'ein zweiter Cronjob beendet sich sofort');
+  const before = leaHits().length;
+  const t0 = Date.now();
+  await deliver({ from: 'Lea Kundin <lea.kundin@example.de>', subject: 'Frage zu Bestellung #2001', body: 'Wo ist mein Paket?' });
+  assert.ok(await eventually(() => leaHits().length > before, 5000), 'Push kam nicht');
+  const ms = Date.now() - t0;
+  assert.ok(ms < 3000, `Push erst nach ${ms} ms`);
+  assert.equal(leaHits().at(-1).headers.urgency, 'high');
+  const row = helper('sql', "SELECT notified, mailbox, important FROM emails WHERE subject = 'Frage zu Bestellung #2001'");
+  assert.deepEqual(row, [{ notified: 1, mailbox: 'live@perfumecloud.de', important: 1 }]);
+  assert.ok(await eventually(() => live()?.last_mail?.delay < 5000, 3000), 'Verzögerung gemessen: ' + JSON.stringify(live()?.last_mail));
+  const integ = await admin.req('GET', '/admin/integrations');
+  assert.equal(integ.data.cron.live.active, true);
+  assert.equal(integ.data.cron.live.boxes['live@perfumecloud.de'].state, 'idle');
+  assert.match(integ.data.cron.script, /app\/bin\/cron\.php$/);
+  const out1 = JSON.parse((await run1).trim().split('\n').at(-1));
+  assert.equal(out1.live, 'beendet');
+  assert.ok(out1.new >= 1 && out1.pushed >= 1, JSON.stringify(out1));
+
+  // 2) Mail kommt, während kein Abruf läuft: der nächste holt sie sofort beim Start
+  await deliver({ from: 'Max <max@example.de>', subject: 'Retoure aus der Lücke', body: 'Hallo' });
+  const b2 = leaHits().length;
+  const run2 = cron(3);
+  assert.ok(await eventually(() => leaHits().length > b2, 4000), 'Mail aus der Lücke nicht gemeldet');
+  await run2;
+  assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM emails WHERE subject = 'Retoure aus der Lücke'")[0].n, 1);
+
+  // 3) Server ohne IDLE: Nachfragen per NOOP, die Mail aus der Lücke kommt trotzdem sofort
+  const off = waitFor(imap, 'OK NOIDLE');
+  imap.stdin.write('NOIDLE\n');
+  await off;
+  await deliver({ from: 'Ida <ida@example.de>', subject: 'Ohne IDLE', body: 'Hallo' });
+  const b3 = leaHits().length;
+  const run3 = cron(3);
+  assert.ok(await eventually(() => leaHits().length > b3, 4000), 'ohne IDLE nicht gemeldet');
+  assert.ok(await eventually(() => boxState() === 'poll', 3000));
+  await run3;
+  const on = waitFor(imap, 'OK IDLE');
+  imap.stdin.write('IDLE\n');
+  await on;
+  // Jede Mail genau einmal gemeldet
+  assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM emails WHERE notified = 0")[0].n, 0);
+});
+
 test('Login-Sperre nach zu vielen Versuchen', async () => {
   const c = new Client();
   let last;

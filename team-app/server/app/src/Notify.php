@@ -91,7 +91,8 @@ final class Notify
     private static function sendTo(array $s, array $payload, string $subject): array
     {
         try {
-            $res = WebPush::send($s, $payload, $subject);
+            // „high“: Apple und Google stellen sofort zu, auch im Stromsparmodus
+            $res = WebPush::send($s, $payload, $subject, 86400, 'high');
         } catch (\Throwable $e) {
             Util::log('Push-Fehler: ' . $e->getMessage());
             $res = ['status' => 0, 'reason' => $e->getMessage()];
@@ -160,9 +161,16 @@ final class Notify
         );
     }
 
-    public static function quietHours(): bool
+    /** Ruhezeit für Mail- und Bestell-Push (Standard 22–7 Uhr; gleicher Beginn und Ende = keine Ruhezeit). */
+    public static function quietHours(?int $hour = null): bool
     {
-        $h = (int) date('G');
-        return $h >= 22 || $h < 7;
+        $q = Settings::get('quiet_hours');
+        $start = is_array($q) && isset($q['start']) ? (int) $q['start'] : 22;
+        $end = is_array($q) && isset($q['end']) ? (int) $q['end'] : 7;
+        $h = $hour ?? (int) date('G');
+        if ($start === $end) {
+            return false;
+        }
+        return $start > $end ? ($h >= $start || $h < $end) : ($h >= $start && $h < $end);
     }
 }

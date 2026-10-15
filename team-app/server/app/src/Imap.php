@@ -14,6 +14,10 @@ final class Imap
     private int $tagNo = 0;
     /** Anzahl Mails im zuletzt geöffneten Ordner (EXISTS). */
     public int $exists = 0;
+    /** UID, die die nächste neue Mail im zuletzt geöffneten Ordner bekommt (0 = unbekannt). */
+    public int $uidNext = 0;
+    /** Tag des laufenden IDLE-Befehls (null = kein IDLE). */
+    private ?string $idleTag = null;
 
     public function __construct(
         private string $host,
@@ -74,9 +78,12 @@ final class Imap
         $res = $this->command('EXAMINE ' . self::quote($folder));
         $validity = '0';
         $this->exists = 0;
+        $this->uidNext = 0;
         foreach ($res as $line) {
             if (preg_match('/\[UIDVALIDITY (\d+)\]/i', $line, $m)) {
                 $validity = $m[1];
+            } elseif (preg_match('/\[UIDNEXT (\d+)\]/i', $line, $m)) {
+                $this->uidNext = (int) $m[1];
             } elseif (preg_match('/^\* (\d+) EXISTS/i', $line, $m)) {
                 $this->exists = (int) $m[1];
             }
@@ -134,6 +141,110 @@ final class Imap
         return $out;
     }
 
+    /** Fähigkeiten des Servers in Großbuchstaben, z. B. IDLE. @return string[] */
+    public function capabilities(): array
+    {
+        foreach ($this->command('CAPABILITY') as $line) {
+            if (preg_match('/^\* CAPABILITY (.*)$/i', $line, $m)) {
+                return array_map('strtoupper', preg_split('/\s+/', trim($m[1])) ?: []);
+            }
+        }
+        return [];
+    }
+
+    /** NOOP: der Server meldet dabei Änderungen im geöffneten Ordner (EXISTS, EXPUNGE, FETCH). */
+    public function noop(): array
+    {
+        return $this->command('NOOP');
+    }
+
+    /**
+     * IDLE (RFC 2177): Der Server meldet neue Mails von sich aus, sobald sie ankommen.
+     * Danach mit pending() lesen, was der Server schickt, und mit idleDone() beenden.
+     */
+    public function idle(): void
+    {
+        $tag = 'A' . (++$this->tagNo);
+        $this->write("$tag IDLE\r\n");
+        while (true) {
+            $line = $this->readLine();
+            if (str_starts_with($line, '+')) {
+                $this->idleTag = $tag;
+                return;
+            }
+            if (str_starts_with($line, $tag . ' ')) {
+                throw new \RuntimeException('IMAP: ' . trim(substr($line, strlen($tag) + 1)));
+            }
+        }
+    }
+
+    /** IDLE beenden. @return string[] ungetaggte Zeilen, die noch kamen */
+    public function idleDone(): array
+    {
+        $tag = $this->idleTag;
+        if ($tag === null) {
+            return [];
+        }
+        $this->idleTag = null;
+        $this->write("DONE\r\n");
+        $untagged = [];
+        while (true) {
+            $line = $this->readLine();
+            if (str_starts_with($line, $tag . ' ')) {
+                if (strtoupper(substr($line, strlen($tag) + 1, 2)) !== 'OK') {
+                    throw new \RuntimeException('IMAP: ' . trim(substr($line, strlen($tag) + 1)));
+                }
+                return $untagged;
+            }
+            $untagged[] = rtrim($line, "\r\n");
+        }
+    }
+
+    public function idling(): bool
+    {
+        return $this->idleTag !== null;
+    }
+
+    /**
+     * Liest alle Zeilen, die schon da sind, ohne zu warten (nach stream_select).
+     * Endet die Verbindung, wird eine Ausnahme geworfen.
+     * @return string[]
+     */
+    public function pending(): array
+    {
+        $lines = [];
+        do {
+            $line = $this->readLine();
+            $lines[] = rtrim($line, "\r\n");
+            if (preg_match('/^\* BYE\b/i', $line)) {
+                throw new \RuntimeException('Der Mailserver hat die Verbindung beendet.');
+            }
+        } while ($this->fp && (int) (stream_get_meta_data($this->fp)['unread_bytes'] ?? 0) > 0);
+        return $lines;
+    }
+
+    /** Liegen schon gelesene, aber noch nicht abgeholte Daten im Puffer? (stream_select sieht die nicht) */
+    public function buffered(): bool
+    {
+        return $this->fp !== null && (int) (stream_get_meta_data($this->fp)['unread_bytes'] ?? 0) > 0;
+    }
+
+    /** Die Verbindung selbst (für stream_select). @return resource|null */
+    public function stream()
+    {
+        return $this->fp;
+    }
+
+    /** Verbindung ohne LOGOUT schließen (z. B. nach einem Fehler). */
+    public function close(): void
+    {
+        if ($this->fp) {
+            @fclose($this->fp);
+            $this->fp = null;
+        }
+        $this->idleTag = null;
+    }
+
     /** @return array<int, array{name:string, flags:string[]}> */
     public function listFolders(): array
     {
@@ -154,6 +265,9 @@ final class Imap
     {
         if ($this->fp) {
             try {
+                if ($this->idleTag !== null) {
+                    $this->idleDone();
+                }
                 $this->command('LOGOUT');
             } catch (\Throwable) {
             }

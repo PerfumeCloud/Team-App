@@ -22,6 +22,19 @@ switch ($cmd) {
         echo Util::json(['summary' => $summary, 'emails' => $rows, 'status' => Settings::get('mail_status_mb1')]);
         break;
 
+    case 'live-setup':
+        // Ein frisches Team-Postfach auf dem Test-IMAP-Server, Ruhezeit aus, erster Abgleich
+        Settings::set('mailboxes', [[
+            'id' => 'live1', 'email' => 'live@perfumecloud.de', 'label' => 'live',
+            'host' => '127.0.0.1', 'port' => (int) $arg, 'security' => 'none', 'user' => 'live@perfumecloud.de', 'visible_to' => [],
+        ]]);
+        Settings::setSecret('mailbox_pw_live1', 'secret');
+        Settings::set('quiet_hours', ['start' => 0, 'end' => 0]);
+        Db::exec('UPDATE emails SET notified = 2 WHERE notified = 0');
+        $summary = MailJob::run();
+        echo Util::json(['summary' => $summary, 'uid' => Settings::get('mail_uid_live1'), 'init' => Settings::get('mail_init_live1')]);
+        break;
+
     case 'personal-run':
         // Alle Postfächer auf den Test-IMAP-Server (unverschlüsselt) umbiegen und abrufen
         $list = Settings::get('mailboxes', []);

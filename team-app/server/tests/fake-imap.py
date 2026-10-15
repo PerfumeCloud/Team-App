@@ -1,6 +1,8 @@
-"""Mini-IMAP-Server (unverschlüsselt, nur lesend) und Mini-SMTP-Server für Tests.
+"""Mini-IMAP-Server (unverschlüsselt, nur lesend, mit IDLE) und Mini-SMTP-Server für Tests.
 Aufruf: python3 fake-imap.py IMAP-PORT [SMTP-PORT]
-Angenommene Mails stehen als Zeile „MAIL {json}“ auf stdout."""
+Angenommene Mails stehen als Zeile „MAIL {json}“ auf stdout.
+Neue Mail zustellen: Zeile „ADD {"from": …, "subject": …, "body": …}“ auf stdin – wer gerade IDLE wartet,
+bekommt sofort „* n EXISTS“. „NOIDLE“ / „IDLE“ auf stdin schaltet die IDLE-Fähigkeit aus bzw. an."""
 import base64
 import json
 import socket
@@ -89,6 +91,32 @@ SENT = [
 ]
 
 
+# Verbindungen im IDLE-Zustand: Liste von send-Funktionen
+IDLERS = []
+LOCK = threading.Lock()
+STATE = {'idle': True}
+
+
+def add_mail(data):
+    """Neue Mail in den Posteingang legen und alle IDLE-Verbindungen benachrichtigen."""
+    with LOCK:
+        uid = max(m['uid'] for m in INBOX) + 1
+        headers = {
+            'From': data.get('from', 'Neu <neu@example.de>'),
+            'Subject': data.get('subject', 'Neue Mail'),
+            'Message-ID': f'<live{uid}@example.de>',
+            'Content-Type': 'text/plain; charset=utf-8',
+        }
+        INBOX.append(msg(uid, data.get('flags', []), -((datetime.now(timezone.utc) - NOW).total_seconds() / 3600), headers, data.get('body', 'Hallo')))
+        count = len(INBOX)
+        for send in list(IDLERS):
+            try:
+                send(f'* {count} EXISTS\r\n* 1 RECENT\r\n')
+            except OSError:
+                pass
+    return uid
+
+
 # Passwörter, die der Test-Server annimmt (auch mit Umlauten/€ → kommt per IMAP-Literal)
 PASSWORDS = {'secret', 'sécret€'}
 
@@ -133,13 +161,38 @@ def handle(conn):
             send('* LIST (\\HasNoChildren \\Sent) "." "Sent"\r\n')
             send('* LIST (\\HasNoChildren \\Trash) "." "Trash"\r\n')
             send(f'{tag} OK LIST completed\r\n')
+        elif cmd == 'CAPABILITY':
+            send('* CAPABILITY IMAP4rev1' + (' IDLE' if STATE['idle'] else '') + f'\r\n{tag} OK CAPABILITY completed\r\n')
+        elif cmd == 'NOOP':
+            send(f'* {len(folder or INBOX)} EXISTS\r\n{tag} OK NOOP completed\r\n')
+        elif cmd == 'IDLE':
+            out = lambda b: send(b)
+            with LOCK:
+                IDLERS.append(out)
+            send('+ idling\r\n')
+            done = f.readline()
+            with LOCK:
+                IDLERS.remove(out)
+            if not done:
+                break
+            if done.strip().upper() == b'DONE':
+                send(f'{tag} OK IDLE terminated\r\n')
+            else:
+                send(f'{tag} BAD expected DONE\r\n')
         elif cmd == 'EXAMINE':
             folder = SENT if 'Sent' in arg else INBOX
-            send(f'* {len(folder)} EXISTS\r\n* OK [UIDVALIDITY 777] UIDs valid\r\n{tag} OK [READ-ONLY] EXAMINE completed\r\n')
+            uidnext = max(m['uid'] for m in folder) + 1
+            send(f'* {len(folder)} EXISTS\r\n* OK [UIDVALIDITY 777] UIDs valid\r\n* OK [UIDNEXT {uidnext}] Predicted next UID\r\n{tag} OK [READ-ONLY] EXAMINE completed\r\n')
         elif cmd == 'UID':
             sub = arg.split(' ', 1)
             if sub[0].upper() == 'SEARCH':
-                send('* SEARCH ' + ' '.join(str(m['uid']) for m in folder) + '\r\n')
+                uids = [m['uid'] for m in folder]
+                crit = sub[1] if len(sub) > 1 else ''
+                if crit.upper().startswith('UID '):
+                    # „UID n:*“ – wie echte Server: mindestens die höchste UID
+                    low = int(crit.split(' ', 1)[1].split(':')[0])
+                    uids = [u for u in uids if u >= low] or [max(uids)]
+                send('* SEARCH ' + ' '.join(str(u) for u in uids) + '\r\n')
                 send(f'{tag} OK SEARCH completed\r\n')
             elif sub[0].upper() == 'FETCH':
                 uidset, items = sub[1].split(' ', 1)
@@ -246,6 +299,17 @@ def main():
     threading.Thread(target=serve, args=(int(sys.argv[1]), handle), daemon=True).start()
     time.sleep(0.2)
     print('ready', flush=True)
+    for line in sys.stdin:
+        line = line.strip()
+        if line.startswith('ADD '):
+            uid = add_mail(json.loads(line[4:]))
+            print(f'ADDED {uid}', flush=True)
+        elif line == 'NOIDLE':
+            STATE['idle'] = False
+            print('OK NOIDLE', flush=True)
+        elif line == 'IDLE':
+            STATE['idle'] = True
+            print('OK IDLE', flush=True)
     while True:
         time.sleep(3600)
 

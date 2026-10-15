@@ -37,6 +37,22 @@ final class Db
         return $pdo;
     }
 
+    /**
+     * Für lang laufende Prozesse (Sofort-Abruf): Hat der Datenbankserver die Verbindung nach einer
+     * Pause geschlossen („MySQL server has gone away“), beim nächsten Zugriff neu verbinden.
+     */
+    public static function keepAlive(): void
+    {
+        if (self::$pdo === null || self::$driver === 'sqlite') {
+            return;
+        }
+        try {
+            @self::$pdo->query('SELECT 1');
+        } catch (\Throwable) {
+            self::$pdo = null;
+        }
+    }
+
     public static function pdo(): PDO
     {
         if (self::$pdo === null) {

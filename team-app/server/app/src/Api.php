@@ -198,6 +198,15 @@ final class Api
                 if ($key === '' || !hash_equals($key, (string) (Http::query('key') ?? ''))) {
                     throw new HttpError(403, 'Falscher Schlüssel.');
                 }
+                // Mit PHP-FPM: Antwort sofort, danach eine Minute Sofort-Abruf (Cronjob jede Minute)
+                if (Live::background()) {
+                    Settings::set('cron_last_run', Util::now());
+                    if (Live::running()) {
+                        return ['trigger' => 'cron', 'live' => 'läuft'];
+                    }
+                    Http::defer(static fn () => Live::run('url', Live::URL_SECONDS));
+                    return ['trigger' => 'cron', 'live' => 'gestartet'];
+                }
                 return Jobs::run('cron');
             }],
 
@@ -488,6 +497,8 @@ final class Api
                 'url' => Util::baseUrl() . '/api/cron?key=' . $cronKey,
                 'lastRun' => (int) Settings::get('cron_last_run', 0),
                 'jobsLastRun' => (int) Settings::get('jobs_last_run', 0),
+                'script' => APP_ROOT . '/app/bin/cron.php',
+                'live' => Live::status(),
             ],
             'settings' => [
                 'low_stock_threshold' => (int) Settings::get('low_stock_threshold', 5),

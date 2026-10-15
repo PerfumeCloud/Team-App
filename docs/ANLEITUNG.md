@@ -116,15 +116,19 @@ Kommt die Mail nicht an (z. B. weil info@ noch nicht verbunden ist, siehe A8), z
 6. In der Team-App auf **Einstellungen**, dann **Integrationen** und zu **Shopify**. Die myshopify-Adresse `ks8yin-mg.myshopify.com` ist schon eingetragen. Client-ID und Secret einfügen und **Speichern & testen** klicken.
 7. Nach etwa einer Minute füllt sich die **Statistik**.
 
-### A10 · Cronjob (für Push-Nachrichten bei geschlossener App)
-1. In der App auf **Einstellungen**, dann **Integrationen** und zu **Cronjob**. Dort auf **Kopieren** klicken.
-2. In Plesk auf **Geplante Aufgaben** und dann **Aufgabe hinzufügen**.
+### A10 · Cronjob und Sofort-Abruf (Push wenige Sekunden nach einer neuen Mail)
+Ab Version 1.4 hält die App die Verbindung zu euren Postfächern offen. Der Mailserver meldet jede neue Mail in dem Moment, in dem sie ankommt (IMAP IDLE), und die Push-Nachricht ist nach wenigen Sekunden auf dem Handy. Neue Bestellungen holt sie alle 20 Sekunden. Gestartet und am Laufen gehalten wird das von einer geplanten Aufgabe in Plesk, **jede Minute**.
+
+1. In der App auf **Einstellungen**, dann **Integrationen** und zu **Sofort-Abruf & Cronjob**. Beim **Skript** auf **Kopieren** klicken.
+2. In Plesk auf **Geplante Aufgaben**. Gibt es schon eine Aufgabe für die Team-App (z. B. „URL abrufen“ alle 5 Minuten), sie **bearbeiten**, sonst **Aufgabe hinzufügen**.
 3. Eintragen:
-   - **Aufgabentyp:** URL abrufen
-   - **URL:** die kopierte Adresse
-   - **Ausführen:** Cron-Stil `*/5 * * * *` (alle 5 Minuten)
+   - **Aufgabentyp:** PHP-Skript ausführen
+   - **Skriptpfad:** der kopierte Pfad (endet auf `app/bin/cron.php`), PHP-Version **8.3**
+   - **Ausführen:** Cron-Stil `* * * * *` (jede Minute)
    - **Benachrichtigung:** keine
-4. Mit **OK** speichern. Nach ein paar Minuten steht in der App „Cronjob lief zuletzt vor … Min.“
+4. Mit **OK** speichern. Nach ein bis zwei Minuten steht in der App ein grüner Kasten **Sofort-Abruf aktiv**, bei jedem Postfach **sofort**. Nach der ersten neuen Mail steht dort auch, wie viele Sekunden es bis zur Meldung gedauert hat.
+
+**Statt „PHP-Skript ausführen“** geht auch **URL abrufen** mit der Adresse darunter, ebenfalls jede Minute. Das klappt aber nur, wenn PHP bei euch als FPM läuft (Plesk → PHP-Einstellungen → „FPM-Anwendung“). Sonst holt die App die Mails dabei nur einmal pro Minute.
 
 ✅ **Teil A ist erledigt, die App ist online.**
 
@@ -277,7 +281,8 @@ Die Team-App zeigt die Kunden-App „Perfume Cloud Club“ (`app.perfumecloud.de
 | Weiße Seite oder „Interner Fehler“ ohne `app.log` | In den **PHP-Einstellungen** bei **open_basedir** die Option mit `{WEBSPACEROOT}` wählen (A3). |
 | Let's Encrypt schlägt fehl | Der DNS-Eintrag ist noch nicht aktiv. 30 Minuten warten. |
 | „Interner Fehler“ | Die Details stehen in `team.perfumecloud.de/httpdocs/storage/app.log` (Plesk-Dateimanager). Den Inhalt Claude zeigen. |
-| Keine Push-Nachricht auf dem iPhone | Die App über das **Home-Bildschirm-Icon** öffnen, nicht über Safari. Mindestens iOS 16.4. In den iPhone-Einstellungen unter **Mitteilungen**, **PC Team** erlauben. Ohne Cronjob (A10) gibt es bei geschlossener App keine Push-Nachrichten. |
+| Keine Push-Nachricht auf dem iPhone | Die App über das **Home-Bildschirm-Icon** öffnen, nicht über Safari. Mindestens iOS 16.4. In den iPhone-Einstellungen unter **Mitteilungen**, **PC Team** erlauben. Ohne Cronjob (A10) gibt es bei geschlossener App keine Push-Nachrichten. Zwischen 22 und 7 Uhr kommen Mail-Pushs gesammelt am Morgen. |
+| Push kommt erst nach Minuten | **Integrationen → Sofort-Abruf & Cronjob**: Steht dort nicht „Sofort-Abruf aktiv“, läuft die geplante Aufgabe nicht jede Minute oder ist noch „URL abrufen“ ohne FPM – auf „PHP-Skript ausführen“ mit `* * * * *` umstellen (A10). Steht bei einem Postfach „Fehler“, das Passwort unter **Postfächer** prüfen. |
 | „Zum Home-Bildschirm“ fehlt | Die Seite in **Safari** öffnen, nicht in einer anderen App. |
 | Passwort vergessen | Marius setzt unter **Einstellungen**, **Team**, **Passwort** ein neues. |
 | Mail-Test rot | IMAP-Server und Postfach-Passwort prüfen, Port 993. |

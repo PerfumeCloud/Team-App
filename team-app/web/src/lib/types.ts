@@ -284,7 +284,7 @@ export interface Integrations {
     smtpPort: number;
     sender: string | null;
   };
-  cron: { url: string; lastRun: number; jobsLastRun: number };
+  cron: { url: string; lastRun: number; jobsLastRun: number; script: string; live: LiveStatus };
   settings: { low_stock_threshold: number; base_url: string; holiday_state: string; holidays_on: boolean; shop_days_on: boolean };
   pushDevices: number;
   tests?: Record<string, MailCheck>;
@@ -388,4 +388,14 @@ export interface BroadcastOverview {
   quiet: { start: number; end: number };
   app_url: string;
   me: { id: string; name: string; email: string };
+}
+
+/** Sofort-Abruf (IMAP IDLE): Zustand für die Einstellungen */
+export interface LiveStatus {
+  active: boolean;
+  mode: 'cli' | 'url' | null;
+  started: number;
+  beat: number;
+  boxes: Record<string, { state: 'idle' | 'poll' | 'connecting' | 'error'; message: string | null }>;
+  lastMail: { at: number; delay: number } | null;
 }
