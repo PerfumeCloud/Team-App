@@ -39,6 +39,9 @@ final class Jobs
                 if (Shopify::configured()) {
                     $summary['shipping'] = self::safe(static fn () => Shipping::remind(), null);
                 }
+                if (Club::configured()) {
+                    $summary['club_alerts'] = self::safe(static fn () => Club::pullAlerts(), null);
+                }
                 $summary['weekly'] = self::safe(static fn () => Reports::weeklyIfDue(), null);
                 $summary['backup'] = self::safe(static fn () => Backup::nightly(), null);
                 $summary['cleanup'] = self::safe(static fn () => self::cleanup(), null);

@@ -50,7 +50,8 @@ const pushServer = http.createServer((req, res) => {
 // Nachbau des Clubs (Kunden-App): /api/internal/… mit X-Club-Key
 const CLUB_KEY = 'club-test-schluessel-123';
 const clubCalls = [];
-const club = { broadcasts: [], denySso: new Set(), fourEyes: true };
+const club = { broadcasts: [], denySso: new Set(), fourEyes: true, alerts: [], trial: null };
+const TRIAL_STEPS = ['ordered', 'pending', 'shipped', 'delivered', 'survey', 'credited', 'referral', 'tier'];
 const CLUB_LABELS = { draft: 'Entwurf', review: 'Zur Prüfung', approved: 'Freigegeben', sending: 'Wird verschickt', sent: 'Verschickt' };
 let clubUrl = '';
 const clubServer = http.createServer((req, res) => {
@@ -77,6 +78,33 @@ const clubServer = http.createServer((req, res) => {
       });
     }
     if (route === 'POST /api/internal/kick') return send(200, { push: '1 Push-Nachrichten verschickt' });
+    if (route === 'POST /api/internal/alerts/claim') return send(200, { alerts: club.alerts.splice(0) });
+    // Probelauf (vereinfacht): Zustand im Speicher
+    const trialView = () => club.trial ?? { active: false, amount_cents: 5900, steps: TRIAL_STEPS.map((key) => ({ key, label: key, done: false })) };
+    if (route === 'GET /api/internal/trial') return send(200, trialView());
+    if (route === 'POST /api/internal/trial/start') {
+      if (club.trial) return send(409, { error: 'Es läuft schon ein Probelauf. Bitte erst aufräumen.' });
+      club.trial = { active: true, mode: body.mode, by: body.user, amount_cents: body.amount_cents, codes: body.mode === 'real' ? ['PROBE-AB12C', 'PROBE-AB12C-VERSAND'] : [], order: null, device_member: false, steps: TRIAL_STEPS.map((key) => ({ key, label: key, done: false })) };
+      return send(200, club.trial);
+    }
+    if (route === 'POST /api/internal/trial/step') {
+      if (!club.trial) return send(404, { error: 'Es läuft kein Probelauf.' });
+      if (club.trial.mode === 'real' && ['ordered', 'pending', 'shipped'].includes(body.step)) return send(409, { error: 'Die echte Testbestellung bitte in der Team-App unter „Versand“ als versendet markieren.' });
+      club.trial.steps.find((x) => x.key === body.step).done = true;
+      return send(200, club.trial);
+    }
+    if (route === 'POST /api/internal/trial/sync') {
+      if (club.trial?.mode === 'real') {
+        club.trial.order = { id: 'gid://shopify/Order/9001', name: '#9001', real: true };
+        club.alerts.push({ id: 'a-test', kind: 'low_rating', test: true, created_at: Date.now(), payload: { survey_id: 's-test', order_id: 'gid://shopify/Order/9001', order_name: '#9001', email: 'probelauf+ab12@club.invalid', name: 'Probelauf', member: true, tier: 'Bronze', stars: 1, avg: 1, items: [{ title: 'Sunset Dune', stars: 1 }], questions: [], comment: null } });
+      }
+      return send(200, trialView());
+    }
+    if (route === 'POST /api/internal/trial/cleanup') {
+      const order = club.trial?.order?.real ? { id: club.trial.order.id, name: club.trial.order.name } : null;
+      club.trial = null;
+      return send(200, { ok: true, order, message: 'Testkonto, Punkte, Befragung und Codes sind gelöscht.' });
+    }
     if (route === 'POST /api/internal/migrate') return send(200, { ok: true, version: '1.4.0', schema: '1.4.0' });
     if (route === 'POST /api/internal/sso') {
       if (club.denySso.has(body.user?.email)) return send(403, { error: 'Kein Zugriff auf den Club-Admin. Ein Admin der Team-App kann ihn unter „Team“ freischalten.' });
@@ -976,6 +1004,84 @@ test('Club: Adresse und Schlüssel aus der gemeinsamen Datenbank erkennen', asyn
   assert.equal(manual.data.test.ok, false);
   await admin.req('PUT', '/admin/club', { clear_key: true });
   assert.equal((await admin.req('GET', '/admin/club')).data.club.keySource, 'auto');
+});
+
+test('Club: schlechte Bewertung wird zur Aufgabe mit Push, Probelauf nur für Admins', async () => {
+  assert.equal((await admin.req('GET', '/admin/club')).data.club.configured, true);
+  const integ = await admin.req('GET', '/admin/integrations');
+  const cronKey = new URL(integ.data.cron.url).searchParams.get('key');
+  const runCron = () => new Client().req('GET', `/cron?key=${cronKey}`);
+  club.alerts.push({
+    id: 'a1', kind: 'low_rating', test: false, created_at: Date.now(),
+    payload: {
+      survey_id: 's1', order_id: 'gid://shopify/Order/1042', order_name: '#1042', email: 'anna@example.de', name: 'Anna', member: true, tier: 'Gold', stars: 2, avg: 2.5,
+      items: [{ title: 'Sunset Dune (50 ml)', stars: 2 }, { title: 'Amber Nights', stars: 3 }],
+      questions: [{ question: 'Wie zufrieden bist du mit Versand und Verpackung?', answer: '1', type: 'stars' }, { question: 'Würdest du ihn wieder kaufen?', answer: 'Nein', type: 'choice' }],
+      comment: 'Der Flakon kam beschädigt an.',
+    },
+  });
+  const okHits = () => pushHits.filter((h) => h.path.startsWith('/ok/')).length;
+  const hitsBefore = okHits();
+  const r1 = await runCron();
+  assert.equal(r1.data.club_alerts, '1 Hinweis', JSON.stringify(r1.data));
+  const [t] = helper('sql', "SELECT * FROM tasks WHERE title = '2 ★ für #1042 – Anna melden'");
+  assert.ok(t, 'Aufgabe angelegt');
+  assert.equal(t.priority, 'high');
+  assert.equal(t.category, 'Kundenservice');
+  assert.equal(t.assignee_id, null);
+  assert.match(t.description, /Bewertung nach der Lieferung \(Ø 2,5 ★\)/);
+  assert.match(t.description, /• Sunset Dune \(50 ml\): ★★☆☆☆/);
+  assert.match(t.description, /• Wie zufrieden bist du mit Versand und Verpackung\? 1 ★/);
+  assert.match(t.description, /Kommentar: „Der Flakon kam beschädigt an\.“/);
+  assert.match(t.description, /anna@example\.de> · Club-Mitglied \(Gold\)/);
+  assert.match(t.description, /Vorschlag für die Antwort:\nHallo Anna,/);
+  assert.match(t.description, /#1042/);
+  assert.equal(JSON.parse(t.checklist).length, 3);
+  assert.ok(await eventually(() => okHits() > hitsBefore), 'Push „Unzufriedene Kundin“ ans Team');
+  // Abgeholt ist abgeholt: kein zweites Mal
+  await runCron();
+  assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM tasks WHERE title LIKE '%#1042%'")[0].n, 1);
+
+  // Probelauf: nur Admins
+  assert.equal((await kim.req('GET', '/club/trial')).status, 403);
+  assert.equal((await kim.req('POST', '/club/trial/start', { mode: 'sim' })).status, 403);
+  let r = await admin.req('GET', '/club/trial');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.active, false);
+  assert.deepEqual(r.data.cancel, { shopify: false, allowed: false });
+  assert.equal((await admin.req('POST', '/club/trial/start', { mode: 'real', amount_cents: 50 })).status, 422);
+  r = await admin.req('POST', '/club/trial/start', { mode: 'real', amount_cents: 4000 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.codes.length, 2);
+  const startCall = clubCalls.filter((c) => c.path === '/api/internal/trial/start').at(-1);
+  assert.equal(startCall.body.user.email, 'marius@example.de');
+  assert.equal(startCall.body.amount_cents, 4000);
+  assert.equal((await admin.req('POST', '/club/trial/start', { mode: 'sim' })).status, 409);
+  r = await admin.req('POST', '/club/trial/step', { step: 'shipped' });
+  assert.equal(r.status, 409);
+  assert.match(r.data.error, /Versand/);
+
+  // Testbestellung kommt an: gemerkt (zählt nicht), Hinweis aus dem Probelauf nur an den Admin
+  const kimHits = () => pushHits.filter((h) => h.path === '/ok/1').length;
+  const kimBefore = kimHits();
+  r = await admin.req('POST', '/club/trial/sync');
+  assert.equal(r.data.order.name, '#9001');
+  assert.deepEqual(helper('sql', "SELECT v FROM settings WHERE k = 'test_orders'").map((x) => JSON.parse(x.v))[0], ['9001']);
+  const [tt] = helper('sql', "SELECT * FROM tasks WHERE title = 'Probelauf: 1 ★ für #9001 – Probelauf melden'");
+  assert.ok(tt, 'Aufgabe aus dem Probelauf');
+  const adminId = helper('sql', "SELECT id FROM users WHERE email = 'marius@example.de'")[0].id;
+  assert.equal(tt.assignee_id, adminId);
+  await new Promise((res) => setTimeout(res, 300));
+  assert.equal(kimHits(), kimBefore, 'Probelauf-Hinweis nicht ans ganze Team');
+
+  // Aufräumen: ohne Shopify-Verbindung verständlicher Hinweis zum Stornieren
+  r = await admin.req('POST', '/club/trial/cleanup');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.order.name, '#9001');
+  assert.equal(r.data.order.cancelled, false);
+  assert.match(r.data.order.note, /Shopify ist in der Team-App nicht verbunden/);
+  assert.equal(r.data.active, false);
+  assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM settings WHERE k = 'club_trial'")[0].n, 0);
 });
 
 test('Sofort-Abruf: neue Mail per IDLE in Sekunden gemeldet, Lücken nachgeholt, ohne IDLE alle 10 Sek.', async () => {

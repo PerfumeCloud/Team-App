@@ -258,6 +258,112 @@ final class Club
         return ['id' => $me['id'], 'name' => $me['name'], 'email' => $me['email']];
     }
 
+    // ---------- Hinweise aus dem Club ----------
+
+    /** Hinweise abholen (z. B. 1–2 Sterne nach der Lieferung) und daraus Aufgaben mit Push machen. */
+    public static function pullAlerts(): string
+    {
+        if (!self::configured()) {
+            return '–';
+        }
+        $r = self::request('POST', '/internal/alerts/claim', []);
+        $n = 0;
+        foreach ((array) ($r['alerts'] ?? []) as $a) {
+            if (!is_array($a) || ($a['kind'] ?? '') !== 'low_rating' || !is_array($a['payload'] ?? null)) {
+                continue;
+            }
+            self::lowRatingTask($a['payload'], !empty($a['test']));
+            $n++;
+        }
+        return $n === 1 ? '1 Hinweis' : "$n Hinweise";
+    }
+
+    /** Aufgabe „2 ★ für #1042 – Anna melden“ mit Bewertung, Kommentar und Antwortvorschlag. */
+    public static function lowRatingTask(array $p, bool $test = false): string
+    {
+        $str = static fn ($v): string => is_scalar($v) ? trim((string) $v) : '';
+        $first = $str($p['name'] ?? '');
+        $email = $str($p['email'] ?? '');
+        $order = $str($p['order_name'] ?? '');
+        $stars = max(1, min(5, (int) ($p['stars'] ?? 1)));
+        $who = $first !== '' ? $first : ($email !== '' ? $email : 'Kundin/Kunde');
+        $title = ($test ? 'Probelauf: ' : '') . "$stars ★ für " . ($order !== '' ? $order : 'eine Bestellung') . " – $who melden";
+
+        $lines = [];
+        $avg = is_numeric($p['avg'] ?? null) ? number_format((float) $p['avg'], 1, ',', '') : null;
+        $lines[] = 'Bewertung nach der Lieferung' . ($avg !== null ? " (Ø $avg ★)" : '') . ':';
+        foreach ((array) ($p['items'] ?? []) as $it) {
+            if (is_array($it)) {
+                $s = max(0, min(5, (int) ($it['stars'] ?? 0)));
+                $lines[] = '• ' . $str($it['title'] ?? '') . ': ' . str_repeat('★', $s) . str_repeat('☆', 5 - $s);
+            }
+        }
+        foreach ((array) ($p['questions'] ?? []) as $q) {
+            if (is_array($q)) {
+                $answer = $str($q['answer'] ?? '');
+                $lines[] = '• ' . $str($q['question'] ?? '') . ' ' . (($q['type'] ?? '') === 'stars' ? $answer . ' ★' : $answer);
+            }
+        }
+        if ($str($p['comment'] ?? '') !== '') {
+            $lines[] = '';
+            $lines[] = 'Kommentar: „' . $str($p['comment']) . '“';
+        }
+        $lines[] = '';
+        $lines[] = 'Kontakt: ' . ($first !== '' ? $first . ' ' : '') . ($email !== '' ? "<$email>" : '') . ' · '
+            . (!empty($p['member']) ? 'Club-Mitglied' . ($str($p['tier'] ?? '') !== '' ? ' (' . $str($p['tier']) . ')' : '') : 'kein Club-Mitglied');
+        $gid = $str($p['order_id'] ?? '');
+        if (str_starts_with($gid, 'gid://shopify/Order/') && Shopify::configured()) {
+            $lines[] = 'Bestellung ' . $order . ': ' . Shopify::adminUrl('orders/' . Shopify::numericId($gid));
+        }
+        $lines[] = '';
+        $lines[] = 'Vorschlag für die Antwort:';
+        $lines[] = self::apologyText($first, $order);
+
+        $now = Util::now();
+        $trialUser = $test ? (string) (Settings::get('club_trial')['user_id'] ?? '') : '';
+        $id = Util::uuid();
+        Db::insert('tasks', [
+            'id' => $id,
+            'title' => mb_substr($title, 0, 300),
+            'description' => implode("\n", $lines),
+            'status' => 'todo',
+            'priority' => 'high',
+            'category' => 'Kundenservice',
+            'assignee_id' => $trialUser !== '' ? $trialUser : null,
+            'due_date' => date('Y-m-d'),
+            'position' => (float) $now,
+            'checklist' => Util::json([
+                ['id' => Util::uuid(), 'text' => 'Kundin/Kunden anschreiben', 'done' => false],
+                ['id' => Util::uuid(), 'text' => 'Lösung anbieten (Ersatz, Gutschein oder Erstattung)', 'done' => false],
+                ['id' => Util::uuid(), 'text' => 'Ergebnis als Kundennotiz festhalten', 'done' => false],
+            ]),
+            'source_email_id' => null,
+            'completed_at' => null,
+            'created_by' => null,
+            'updated_by' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted' => 0,
+        ]);
+        $comment = $str($p['comment'] ?? '');
+        Notify::users($trialUser !== '' ? [$trialUser] : null, 'feedback', [
+            'title' => ($test ? 'Probelauf · ' : '') . "$stars ★ von $who",
+            'body' => trim(($order !== '' ? $order . ' · ' : '') . ($comment !== '' ? '„' . mb_substr($comment, 0, 120) . '“' : 'Bitte kurz melden – Aufgabe ist angelegt.')),
+            'url' => '/planung/' . $id,
+            'tag' => 'feedback-' . $str($p['survey_id'] ?? $id),
+        ]);
+        return $id;
+    }
+
+    /** Baustein „Entschuldigung (unzufrieden)“ (falls vorhanden) mit Vorname und Bestellnummer. */
+    private static function apologyText(string $first, string $order): string
+    {
+        $body = Db::value("SELECT body FROM reply_templates WHERE deleted = 0 AND title LIKE 'Entschuldigung%' ORDER BY position LIMIT 1");
+        $text = is_string($body) && trim($body) !== '' ? $body
+            : "Hallo {vorname},\n\nes tut uns wirklich leid, dass du mit deiner Bestellung {bestellnummer} nicht zufrieden bist. Das ist nicht unser Anspruch. Magst du uns kurz schreiben, was nicht gepasst hat? Wir finden gemeinsam eine Lösung – versprochen.";
+        return strtr($text, ['{vorname}' => $first !== '' ? $first : '', '{bestellnummer}' => $order]);
+    }
+
     // ---------- Nachrichten an Mitglieder ----------
 
     public static function broadcasts(array $me): array

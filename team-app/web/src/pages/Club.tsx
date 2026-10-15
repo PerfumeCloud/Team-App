@@ -24,6 +24,7 @@ import { BarList, StatTile } from '../components/charts';
 import { AutoTextarea, Button, Chip, cx, EmptyState, IconButton, Segmented, Sheet, Spinner } from '../components/ui';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
+import ClubTrial from './ClubTrial';
 import { dateTime, euro, int, relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
 import { toast } from '../lib/toast';
@@ -49,6 +50,8 @@ export default function Club() {
   const meta = useStore((s) => s.meta);
   const me = useStore((s) => s.me);
   const [opening, setOpening] = useState(false);
+  const isAdmin = me?.role === 'admin';
+  const current: 'statistik' | 'nachrichten' | 'probelauf' = tab === 'nachrichten' ? 'nachrichten' : tab === 'probelauf' && isAdmin ? 'probelauf' : 'statistik';
 
   if (meta && !meta.clubConfigured) {
     return (
@@ -96,16 +99,18 @@ export default function Club() {
           </Button>
         }
       />
-      <Segmented
-        className="mb-6"
-        value={tab === 'nachrichten' ? 'nachrichten' : 'statistik'}
-        onChange={(v) => navigate(v === 'statistik' ? '/club' : `/club/${v}`)}
-        options={[
-          { value: 'statistik', label: 'Statistik' },
-          { value: 'nachrichten', label: 'Nachricht an Mitglieder' },
-        ]}
-      />
-      {tab === 'nachrichten' ? <Messages /> : <ClubStatistics />}
+      <div className="-mx-1 mb-6 overflow-x-auto px-1">
+        <Segmented
+          value={current}
+          onChange={(v) => navigate(v === 'statistik' ? '/club' : `/club/${v}`)}
+          options={[
+            { value: 'statistik', label: 'Statistik' },
+            { value: 'nachrichten', label: 'Nachricht an Mitglieder' },
+            ...(isAdmin ? [{ value: 'probelauf' as const, label: 'Probelauf' }] : []),
+          ]}
+        />
+      </div>
+      {current === 'nachrichten' ? <Messages /> : current === 'probelauf' ? <ClubTrial /> : <ClubStatistics />}
     </>
   );
 }

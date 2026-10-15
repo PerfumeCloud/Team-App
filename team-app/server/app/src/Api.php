@@ -225,6 +225,24 @@ final class Api
                 Auth::requireClub();
                 return Club::request('DELETE', "/internal/broadcasts/$id");
             }],
+            // Probelauf: kompletter Bestellverlauf im Club – nur Admins
+            ['GET', '/club/trial', static function () {
+                Auth::requireAdmin();
+                return ClubTrial::view();
+            }],
+            ['POST', '/club/trial/start', static fn () => ClubTrial::start(Auth::requireAdmin(), Http::body())],
+            ['POST', '/club/trial/step', static function () {
+                Auth::requireAdmin();
+                return ClubTrial::step(Http::body());
+            }],
+            ['POST', '/club/trial/sync', static function () {
+                Auth::requireAdmin();
+                return ClubTrial::sync();
+            }],
+            ['POST', '/club/trial/cleanup', static function () {
+                Auth::requireAdmin();
+                return ClubTrial::cleanup();
+            }],
             // Einmal-Link (60 Sekunden) in den Club-Admin
             ['POST', '/club/sso', static fn () => Club::request('POST', '/internal/sso', ['user' => Club::user(Auth::requireClub())])],
 
