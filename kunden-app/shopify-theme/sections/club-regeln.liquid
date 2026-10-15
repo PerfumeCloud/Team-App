@@ -1,0 +1,180 @@
+{%- comment -%}
+  So funktioniert der Perfume Cloud Club. Alle Zahlen kommen aus dem Shop-Metafeld club.programm, das die Club-App
+  nach jeder Änderung im Admin-Bereich neu schreibt: Punkte je Euro, Stufen und Vorteile, Boni, Verfall, Aktionen.
+  Im Theme muss deshalb nichts von Hand angepasst werden.
+{%- endcomment -%}
+{%- liquid
+  assign prog = shop.metafields.club.programm.value
+  assign mitglied = false
+  if customer and customer.tags contains 'club'
+    assign mitglied = true
+  endif
+  assign meine = ''
+  if mitglied and prog.tiers_enabled
+    assign meine = customer.metafields.club.stufe.value | default: 'bronze'
+  endif
+  assign app = prog.app_url | default: 'https://app.perfumecloud.de'
+
+  assign jetzt = 'now' | date: '%s' | plus: 0
+  assign aktion = nil
+  assign aktion_faktor = 1
+  assign naechste = nil
+  assign naechste_beginn = 0
+  for a in prog.promos
+    assign beginn = a.start | date: '%s' | plus: 0
+    assign ende = a.end | date: '%s' | plus: 0
+    if beginn <= jetzt and jetzt < ende and a.factor > aktion_faktor
+      assign aktion = a
+      assign aktion_faktor = a.factor
+    elsif beginn > jetzt
+      if naechste == nil or beginn < naechste_beginn
+        assign naechste = a
+        assign naechste_beginn = beginn
+      endif
+    endif
+  endfor
+
+  assign grund = prog.rate | default: 1
+  if prog.tiers_enabled and prog.tiers.size > 0
+    assign grund = prog.tiers.first.rate
+  endif
+  assign grund_ganz = grund | floor
+  if grund_ganz == grund
+    assign grund_text = grund_ganz
+  else
+    assign grund_text = grund | append: '' | replace: '.', ','
+  endif
+-%}
+{%- if prog != blank -%}
+<section class="club-regeln" id="club" aria-labelledby="h-club-{{ section.id }}">
+  <div class="club-regeln-innen">
+    <div class="club-kopfzeile">
+      <p class="club-label">{{ prog.name | default: 'Perfume Cloud Club' | escape }}</p>
+      <h2 id="h-club-{{ section.id }}">{{ section.settings.titel }}</h2>
+      {%- if section.settings.text != blank -%}<p>{{ section.settings.text }}</p>{%- endif -%}
+    </div>
+
+    {%- liquid
+      assign band = aktion | default: naechste
+      if band
+        assign f_ganz = band.factor | floor
+        if f_ganz == band.factor
+          assign f_text = f_ganz
+        else
+          assign f_text = band.factor | append: '' | replace: '.', ','
+        endif
+        case f_ganz
+          when 2
+            assign f_wort = 'Doppelte'
+          when 3
+            assign f_wort = 'Dreifache'
+          when 4
+            assign f_wort = 'Vierfache'
+          else
+            assign f_wort = f_text | append: '-fache'
+        endcase
+        if f_ganz != band.factor
+          assign f_wort = f_text | append: '-fache'
+        endif
+      endif
+    -%}
+    {%- if aktion -%}
+      <p class="club-aktion-band"><span class="club-punkte-aktion">{{ f_text }}×</span><span><b>{{ f_wort }} Punkte</b> zur Aktion „{{ aktion.name | escape }}“, noch bis {{ aktion.end | date: '%d.%m.%Y, %H:%M' }} Uhr</span></p>
+    {%- elsif naechste -%}
+      <p class="club-aktion-band"><span>Bald: <b>{{ f_text }}× Punkte</b> zur Aktion „{{ naechste.name | escape }}“ ab {{ naechste.start | date: '%d.%m.%Y' }}</span></p>
+    {%- endif -%}
+
+    <ol class="club-schritte">
+      <li class="club-schritt">
+        <span class="nr" aria-hidden="true">01</span>
+        <p class="club-schritt-titel">Punkte sammeln</p>
+        <p>Für jeden Euro Einkaufswert bekommst du {{ grund_text }} {% if grund == 1 %}Punkt{% else %}Punkte{% endif %}{% if prog.tiers_enabled and prog.tiers.size > 1 %}, ab {{ prog.tiers[1].name | escape }} mehr{% endif %}. {% if prog.wait_days > 0 %}Gutgeschrieben {{ prog.wait_days }} Tage nach dem Versand.{% else %}Gutgeschrieben, sobald dein Paket unterwegs ist.{% endif %}</p>
+      </li>
+      <li class="club-schritt">
+        <span class="nr" aria-hidden="true">02</span>
+        <p class="club-schritt-titel">Rabatt einlösen</p>
+        <p>{{ prog.redeem_points }} Punkte sind {{ prog.redeem_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Rabatt. Den Code erstellst du in der Club-App{% if prog.code_days > 0 %}, er gilt {{ prog.code_days }} Tage{% endif %}{% if prog.max_cents > 0 %}, bis {{ prog.max_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} je Bestellung{% endif %}.</p>
+      </li>
+      <li class="club-schritt">
+        <span class="nr" aria-hidden="true">03</span>
+        <p class="club-schritt-titel">Bonus obendrauf</p>
+        <p>{% if prog.welcome_points > 0 %}{{ prog.welcome_points }} Punkte zum Beitritt, dazu {% endif %}Punkte zum Geburtstag, für Bewertungen und wenn du Freunde einlädst.</p>
+      </li>
+    </ol>
+
+    {%- if section.settings.stufen and prog.tiers_enabled and prog.tiers.size > 0 -%}
+      <p class="club-label">Stufen</p>
+      <ul class="club-stufen">
+        {%- for t in prog.tiers -%}
+          {%- liquid
+            assign t_ganz = t.rate | floor
+            if t_ganz == t.rate
+              assign t_text = t_ganz
+            else
+              assign t_text = t.rate | append: '' | replace: '.', ','
+            endif
+          -%}
+          <li class="club-stufe{% if t.key == meine %} ist-meine{% endif %}">
+            <div class="club-stufe-kopf">
+              <p class="club-stufe-name">{{ t.name | escape }}</p>
+              {%- if t.key == meine -%}<span class="club-marke">Deine Stufe</span>{%- endif -%}
+            </div>
+            <p class="club-stufe-satz"><b>{{ t_text }}</b> {% if t.rate == 1 %}Punkt{% else %}Punkte{% endif %} je Euro</p>
+            <p class="club-stufe-ab">{% if t.min_cents > 0 %}ab {{ t.min_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Einkauf in {{ prog.tier_months }} Monaten{% else %}für alle Mitglieder{% endif %}</p>
+            {%- if t.benefits.size > 0 -%}
+              <ul>{% for b in t.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
+            {%- endif -%}
+          </li>
+        {%- endfor -%}
+      </ul>
+    {%- endif -%}
+
+    {%- if section.settings.boni -%}
+      <div class="club-boni">
+        <p class="club-label">Bonuspunkte</p>
+        <ul>
+          {%- if prog.welcome_points > 0 -%}<li><span>Beitritt zum Club</span><b>{{ prog.welcome_points }} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.birthday > 0 -%}<li><span>Zum Geburtstag</span><b>{{ prog.bonus.birthday }} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.newsletter > 0 -%}<li><span>Newsletter-Anmeldung</span><b>{{ prog.bonus.newsletter }} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.review > 0 -%}<li><span>Bewertung eines Dufts</span><b>{{ prog.bonus.review }} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.referrer > 0 -%}<li><span>Freund eingeladen, für dich</span><b>{{ prog.bonus.referrer }} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.referred > 0 -%}<li><span>Freund eingeladen, für deinen Freund</span><b>{{ prog.bonus.referred }} Punkte</b></li>{%- endif -%}
+        </ul>
+      </div>
+    {%- endif -%}
+
+    <p class="club-klein">
+      Punkte gibt es auf den Warenwert nach Rabatten, ohne Versand.
+      {%- if prog.expiry_months > 0 %} Nicht eingelöste Punkte verfallen {{ prog.expiry_months }} Monate nach der Gutschrift.{% endif -%}
+      {%- if prog.code_days > 0 %} Nicht eingelöste Rabattcodes verfallen nach {{ prog.code_days }} Tagen.{% endif -%}
+      {%- if section.settings.bedingungen != blank %} <a href="{{ section.settings.bedingungen }}">Teilnahmebedingungen</a>{% endif -%}
+    </p>
+
+    <div class="club-aktion-knopf">
+      {%- if mitglied -%}
+        <a class="hb hb-klein" href="{{ app }}"><span class="hb-text">Zum Club</span><span class="hb-hover" aria-hidden="true"><span>Zum Club</span><svg aria-hidden="true"><use href="#i-person"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
+        <span class="leise">Du hast {{ customer.metafields.club.punkte.value | default: 0 }} Punkte.</span>
+      {%- else -%}
+        <a class="hb hb-klein" href="{{ app }}"><span class="hb-text">Kostenlos beitreten</span><span class="hb-hover" aria-hidden="true"><span>Kostenlos beitreten</span><svg aria-hidden="true"><use href="#i-person"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
+        <span class="leise">Mit deinem Kundenkonto, in einer Minute.</span>
+      {%- endif -%}
+    </div>
+  </div>
+</section>
+{%- elsif request.design_mode -%}
+<section class="club-regeln"><p class="club-klein">Die Club-Regeln erscheinen hier, sobald die Club-App mit dem Shop verbunden ist (Shop-Metafeld club.programm).</p></section>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Club-Regeln",
+  "settings": [
+    { "type": "inline_richtext", "id": "titel", "label": "Überschrift", "default": "Sammeln, einlösen, <em>aufsteigen</em>" },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Im Perfume Cloud Club bekommst du für jede Bestellung Punkte und tauschst sie gegen Rabatt." },
+    { "type": "checkbox", "id": "stufen", "label": "Stufen zeigen", "default": true },
+    { "type": "checkbox", "id": "boni", "label": "Bonuspunkte zeigen", "default": true },
+    { "type": "url", "id": "bedingungen", "label": "Link zu den Teilnahmebedingungen" }
+  ],
+  "presets": [{ "name": "Club-Regeln" }]
+}
+{% endschema %}

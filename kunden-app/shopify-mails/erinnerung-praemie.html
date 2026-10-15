@@ -1,0 +1,27 @@
+<!-- Perfume Cloud Club: Erinnerung „Du hast 5 € Rabatt bereit“ für Shopify Messaging
+     (Automatisierung „Kunde ist einem Segment beigetreten“ → Club: Prämie einlösbar).
+     In Shopify Messaging einen Abschnitt „Benutzerdefiniertes Liquid“ einfügen und diesen Block hineinkopieren.
+     Das Segment folgt automatisch der Einlöse-Schwelle aus der Club-App; den Betrag im Text bei Änderungen mit anpassen. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4EFE6;padding:32px 12px;font-family:Georgia,'Times New Roman',serif;color:#2E2A27">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:24px;border:1px solid #CDBFAD;padding:34px 30px">
+        <tr><td style="font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#80562F">Perfume Cloud Club</td></tr>
+        <tr><td style="padding-top:12px;font-size:27px;line-height:1.2;color:#232120">Du hast <i style="color:#80562F">5&nbsp;€ Rabatt</i> bereit</td></tr>
+        <tr>
+          <td style="padding-top:16px;font-size:16px;line-height:1.6">
+            <p style="margin:0">{% if customer.first_name != blank %}Hallo {{ customer.first_name }}{% else %}Hallo{% endif %}, auf deinem Club-Konto liegen genug Punkte für deinen nächsten Einkauf.</p>
+            <p style="margin:14px 0 0">So geht's: Öffne im Club „Prämien“, erstell deinen persönlichen Code und tipp auf „Im Shop einlösen“. Dann ist er an der Kasse schon hinterlegt.</p>
+            <p style="margin:18px 0 0;padding:14px 16px;background:#F4EFE6;border-radius:14px;font-size:15px">Je 100 Punkte gibt es 5&nbsp;€ Rabatt. Hast du mehr gesammelt, kannst du auch einen größeren Code erstellen.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:26px">
+            <a href="https://app.perfumecloud.de/praemien" style="display:inline-block;background:#232120;color:#F4EFE6;text-decoration:none;border-radius:999px;padding:14px 26px;font-size:16px;font-family:Georgia,serif"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8BC49E;margin-right:10px;vertical-align:1px"></span>Rabatt holen</a>
+          </td>
+        </tr>
+      </table>
+      <p style="max-width:520px;margin:18px auto 0;font-size:12px;line-height:1.5;color:#6b625b;text-align:center">Perfume Cloud · Punkte verfallen 24 Monate nach der Gutschrift, Codes gelten 90 Tage.</p>
+    </td>
+  </tr>
+</table>

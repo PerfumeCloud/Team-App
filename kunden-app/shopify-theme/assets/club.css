@@ -1,0 +1,90 @@
+/* Perfume Cloud Club im Shop: Punkteanzeige, Punktestand im Kopf, Warenkorb und Club-Regeln.
+   Nur Farben aus der Theme-Palette (Elfenbein, Holz, Amber), feste 1px-Linien statt Schatten für scharfe Kanten. */
+
+/* ===== Zeile „Mit dieser Bestellung sammelst du 59 Punkte“ ===== */
+.club-punkte{display:flex;align-items:flex-start;gap:.75rem;width:100%;padding:.9rem 1rem;border:1px solid rgba(128,86,47,.35);border-radius:1rem;background:rgba(255,255,255,.45);color:var(--amber,#232120)}
+.club-punkte[hidden]{display:none}
+.club-punkte-zeichen{width:1.25rem;height:1.25rem;flex:none;margin-top:.15rem;fill:var(--wood,#80562F)}
+.club-punkte-text{display:grid;gap:.15rem;min-width:0}
+.club-punkte-text p{margin:0;line-height:1.4}
+.club-punkte-text b{font-weight:700;white-space:nowrap}
+.club-punkte-unter{font-size:.875rem;color:rgba(35,33,32,.72)}
+.club-punkte-unter a{color:var(--wood,#80562F);text-decoration:underline}
+.club-punkte-aktion{display:inline-block;padding:.05rem .45rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.75rem;letter-spacing:.06em;vertical-align:.08em}
+
+/* ===== Punktestand im Kopf (Dock) ===== */
+.club-kopf{gap:.4rem}
+.club-kopf[hidden]{display:none}
+.club-kopf-punkt{width:.5rem;height:.5rem;border-radius:999px;background:var(--wood,#80562F);flex:none}
+.club-kopf-plus{display:inline-block;padding:.05rem .4rem;border-radius:999px;border:1px solid var(--wood,#80562F);color:var(--wood,#80562F);font-size:.75rem;line-height:1.3}
+.club-kopf-plus[hidden]{display:none}
+/* Auf schmalen Handys ist im Dock kein Platz – dort zeigt der Warenkorb die Punkte */
+@media (max-width:559px){.club-kopf{display:none}}
+
+/* ===== Warenkorb ===== */
+.warenkorb-innen{max-width:58rem}
+.warenkorb-innen h1{margin-bottom:0}
+.warenkorb[aria-busy="true"] .warenkorb-raster{opacity:.55;pointer-events:none;transition:opacity .2s}
+.warenkorb-raster{display:grid;gap:clamp(1.5rem,4vw,2.5rem);width:100%}
+@media (min-width:900px){.warenkorb-raster{grid-template-columns:minmax(0,1fr) 21rem;align-items:start}}
+.warenkorb-liste{list-style:none;margin:0;padding:0;display:grid;border-top:1px solid rgba(35,33,32,.22)}
+.warenkorb-zeile{display:grid;grid-template-columns:4.5rem minmax(0,1fr) auto;gap:.6rem 1rem;align-items:center;padding:1rem 0;border-bottom:1px solid rgba(35,33,32,.22)}
+.warenkorb-bild{width:4.5rem;height:4.5rem;border-radius:.9rem;overflow:hidden;background:var(--carbon,#DDD3C5);border:1px solid rgba(35,33,32,.14)}
+.warenkorb-bild img{width:100%;height:100%;object-fit:cover}
+.warenkorb-name{display:grid;gap:.1rem;min-width:0}
+.warenkorb-name a{text-decoration:none;font-style:italic;font-size:1.1875rem;line-height:1.2}
+.warenkorb-name small{font-size:.875rem;color:rgba(35,33,32,.72)}
+.warenkorb-preis{text-align:right;white-space:nowrap}
+.warenkorb-preis s{display:block;font-size:.875rem;color:rgba(35,33,32,.6)}
+.warenkorb-menge{grid-column:2 / -1;display:flex;align-items:center;gap:.75rem}
+.menge{display:inline-flex;align-items:center;border:1px solid rgba(35,33,32,.45);border-radius:999px;height:2.4rem}
+.menge a{display:grid;place-items:center;width:2.4rem;height:100%;border-radius:999px;text-decoration:none;font-size:1.125rem;color:var(--amber,#232120)}
+.menge a:hover{background:rgba(35,33,32,.08)}
+.menge output{min-width:1.8rem;text-align:center;font-variant-numeric:tabular-nums}
+.warenkorb-weg{font-size:.875rem;color:rgba(35,33,32,.72)}
+.warenkorb-summe{--rr:1.5rem;--rb:1px;width:100%}
+.warenkorb-summe-innen{background:var(--styx,#F4EFE6);padding:1.4rem;display:grid;gap:.9rem}
+.warenkorb-betrag{display:flex;justify-content:space-between;gap:1rem;margin:0}
+.warenkorb-betrag b{font-size:1.375rem}
+.warenkorb-rabatt{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.9375rem;color:var(--wood,#80562F)}
+.warenkorb-hinweis{margin:0;font-size:.8125rem;color:rgba(35,33,32,.72)}
+.warenkorb-summe .hb{width:100%;margin-top:.2rem}
+.warenkorb-leer{display:grid;gap:1rem;justify-items:start}
+
+/* ===== Club-Regeln (Startseite und Club-Seite) ===== */
+.club-regeln{position:relative;padding:clamp(4.5rem,9vw,8.5rem) var(--rand,1.25rem)}
+.club-regeln-innen{max-width:76rem;margin:0 auto;display:grid;gap:clamp(1.6rem,3.5vw,2.6rem)}
+.club-label{margin:0;font-family:"Tenor Sans",sans-serif;font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;color:var(--wood,#80562F)}
+.club-kopfzeile{display:grid;gap:.9rem;max-width:44rem}
+.club-kopfzeile h2{font-size:clamp(2.5rem,1.5rem + 3.6vw,4.4rem);line-height:1}
+.club-kopfzeile p{font-size:1.1875rem}
+.club-aktion-band{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.8rem 1.1rem;border-radius:1rem;border:1px solid var(--wood,#80562F);background:rgba(128,86,47,.08)}
+.club-aktion-band b{font-weight:700}
+.club-schritte{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+@media (min-width:760px){.club-schritte{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.club-schritt{display:grid;align-content:start;gap:.5rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:1px solid rgba(35,33,32,.22);background:rgba(255,255,255,.35)}
+.club-schritt .nr{font-family:"Tenor Sans",sans-serif;font-size:.8125rem;letter-spacing:.16em;color:var(--wood,#80562F)}
+.club-schritt-titel{margin:0;font-style:italic;font-size:clamp(1.25rem,1rem + .6vw,1.5rem);line-height:1.2}
+.club-schritt p{margin:0}
+.club-stufen{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+@media (min-width:760px){.club-stufen{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.club-stufe{display:grid;align-content:start;gap:.7rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:1px solid rgba(35,33,32,.22);background:var(--styx,#F4EFE6)}
+.club-stufe.ist-meine{border-color:var(--wood,#80562F);box-shadow:inset 0 0 0 1px var(--wood,#80562F)}
+.club-stufe-kopf{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.club-stufe-name{margin:0;font-size:1.625rem;line-height:1.1}
+.club-stufe-satz{margin:0;font-size:1.0625rem}
+.club-stufe-satz b{font-size:1.5rem;font-weight:400;color:var(--wood,#80562F)}
+.club-stufe-ab{margin:0;font-size:.875rem;color:rgba(35,33,32,.72)}
+.club-stufe ul{margin:0;padding:0;list-style:none;display:grid;gap:.4rem;border-top:1px solid rgba(35,33,32,.18);padding-top:.8rem}
+.club-stufe li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
+.club-stufe li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
+.club-marke{display:inline-block;padding:.1rem .55rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase}
+.club-boni{display:grid;gap:.8rem}
+.club-boni h3{font-size:1.5rem}
+.club-boni ul{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:1px solid rgba(35,33,32,.22)}
+@media (min-width:760px){.club-boni ul{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:2.5rem}}
+.club-boni li{display:flex;justify-content:space-between;gap:1rem;padding:.75rem 0;border-bottom:1px solid rgba(35,33,32,.22)}
+.club-boni li b{font-weight:400;color:var(--wood,#80562F);white-space:nowrap}
+.club-klein{margin:0;font-size:.875rem;color:rgba(35,33,32,.72);max-width:52rem}
+.club-aktion-knopf{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.4rem}
+.club-aktion-knopf .leise{color:rgba(35,33,32,.72)}

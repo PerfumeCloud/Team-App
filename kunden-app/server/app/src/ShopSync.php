@@ -117,6 +117,52 @@ final class ShopSync
         Settings::set('shop_program_dirty', false);
         Settings::set('shop_program_at', Util::now());
         Settings::set('shop_program_status', ['ok' => true, 'at' => Util::now(), 'message' => 'Regeln im Shop aktualisiert']);
+        try {
+            self::syncSegment((int) $payload['redeem_points']);
+        } catch (\Throwable $e) {
+            Util::log('Segment „' . self::SEGMENT . '“: ' . $e->getMessage());
+        }
         return 'Regeln im Shop aktualisiert';
+    }
+
+    public const SEGMENT = 'Club: Prämie einlösbar';
+
+    /** Segmentbedingung für Mitglieder, die genug Punkte für eine Prämie haben. */
+    public static function segmentQuery(int $points): string
+    {
+        return "customer_tags CONTAINS 'club' AND metafields.club.punkte >= " . max(1, $points);
+    }
+
+    /**
+     * Das Segment „Club: Prämie einlösbar“ (Empfänger der Erinnerung „Du hast 5 € Rabatt bereit“ in Shopify Messaging)
+     * folgt der Einlöse-Schwelle aus dem Admin-Bereich – fehlt es, wird es angelegt.
+     */
+    private static function syncSegment(int $points): void
+    {
+        $query = self::segmentQuery($points);
+        if (Settings::get('shop_segment_query') === $query) {
+            return;
+        }
+        $d = Shopify::graphql('query ClubSegments { segments(first: 100) { nodes { id name query } } }');
+        $segment = null;
+        foreach ($d['segments']['nodes'] ?? [] as $s) {
+            if (($s['name'] ?? '') === self::SEGMENT) {
+                $segment = $s;
+            }
+        }
+        if ($segment === null) {
+            $r = Shopify::graphql(
+                'mutation ClubSegmentCreate($name: String!, $query: String!) { segmentCreate(name: $name, query: $query) { segment { id } userErrors { field message } } }',
+                ['name' => self::SEGMENT, 'query' => $query]
+            );
+            Shopify::check($r['segmentCreate'] ?? [], 'Segment');
+        } elseif (($segment['query'] ?? '') !== $query) {
+            $r = Shopify::graphql(
+                'mutation ClubSegmentUpdate($id: ID!, $query: String) { segmentUpdate(id: $id, query: $query) { segment { id } userErrors { field message } } }',
+                ['id' => $segment['id'], 'query' => $query]
+            );
+            Shopify::check($r['segmentUpdate'] ?? [], 'Segment');
+        }
+        Settings::set('shop_segment_query', $query);
     }
 }

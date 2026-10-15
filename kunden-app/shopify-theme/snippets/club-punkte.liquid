@@ -1,0 +1,84 @@
+{%- comment -%}
+  Voraussichtliche Club-Punkte, z. B. „Mit dieser Bestellung sammelst du 59 Punkte.“
+  Regeln aus dem Shop-Metafeld club.programm, Stufe und Kontostand aus den Kunden-Metafeldern club.stufe und club.punkte.
+  club.js rechnet die Zeile neu, sobald sich der Warenkorb ändert (oder bei Produkten der Preis).
+
+  Warenkorb: {% render 'club-punkte', modus: 'warenkorb', cents: cart.total_price %}
+  Produkt:   {% render 'club-punkte', modus: 'produkt', cents: product.selected_or_first_available_variant.price %}
+             (Variante gewechselt: am Element data-cents setzen oder das Ereignis „club:preis“ mit detail.cents auslösen)
+{%- endcomment -%}
+{%- liquid
+  assign prog = shop.metafields.club.programm.value
+  assign modus = modus | default: 'warenkorb'
+  assign cents = cents | default: 0
+  assign mitglied = false
+  if customer and customer.tags contains 'club'
+    assign mitglied = true
+  endif
+
+  if prog != blank
+    assign satz = prog.rate | default: 1
+    assign stufe_name = ''
+    if prog.tiers_enabled
+      assign stufe_key = 'bronze'
+      if mitglied
+        assign stufe_key = customer.metafields.club.stufe.value | default: 'bronze'
+      endif
+      for t in prog.tiers
+        if t.key == stufe_key
+          assign satz = t.rate
+          assign stufe_name = t.name
+        endif
+      endfor
+    endif
+
+    assign faktor = 1
+    assign aktion = ''
+    assign jetzt = 'now' | date: '%s' | plus: 0
+    for a in prog.promos
+      assign beginn = a.start | date: '%s' | plus: 0
+      assign ende = a.end | date: '%s' | plus: 0
+      if beginn <= jetzt and jetzt < ende and a.factor > faktor
+        assign faktor = a.factor
+        assign aktion = a.name
+      endif
+    endfor
+
+    assign punkte = cents | times: satz | times: faktor | divided_by: 100.0 | plus: 0.000000001 | floor
+    assign satz_ganz = satz | floor
+    if satz_ganz == satz
+      assign satz_text = satz_ganz
+    else
+      assign satz_text = satz | append: '' | replace: '.', ','
+    endif
+    assign faktor_ganz = faktor | floor
+    if faktor_ganz == faktor
+      assign faktor_text = faktor_ganz | append: '×'
+    else
+      assign faktor_text = faktor | append: '' | replace: '.', ',' | append: '×'
+    endif
+  endif
+-%}
+{%- if prog != blank -%}
+<div class="club-punkte" data-club-punkte="{{ modus }}" data-cents="{{ cents }}"{% if punkte <= 0 %} hidden{% endif %}>
+  <svg class="club-punkte-zeichen" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.5 4.6 2.4 7.4 9.5 9.5-7.1 2.1-9 4.9-9.5 9.5-.5-4.6-2.4-7.4-9.5-9.5 7.1-2.1 9-4.9 9.5-9.5Z"/></svg>
+  <div class="club-punkte-text" aria-live="polite" data-club-text>
+    <p>
+      {%- if mitglied -%}Mit {% if modus == 'produkt' %}diesem Duft{% else %}dieser Bestellung{% endif %} sammelst du{%- else -%}Im Club sammelst du mit {% if modus == 'produkt' %}diesem Duft{% else %}dieser Bestellung{% endif %}{%- endif %} <b>{{ punkte }} {% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}</b>.
+    </p>
+    <p class="club-punkte-unter">
+      {%- if aktion != blank -%}<span class="club-punkte-aktion">{{ faktor_text }}</span> {{ aktion | escape }} · {% endif -%}
+      {%- if mitglied -%}
+        {%- if stufe_name != blank -%}{{ stufe_name | escape }}: {% endif %}{{ satz_text }} {% if satz == 1 %}Punkt{% else %}Punkte{% endif %} je Euro
+        {%- if modus == 'warenkorb' and prog.redeem_points > 0 -%}
+          {%- assign stand = customer.metafields.club.punkte.value | default: 0 -%}
+          {%- assign danach = stand | plus: punkte -%}
+          {%- if stand < prog.redeem_points and danach >= prog.redeem_points %} · danach reicht es für {{ prog.redeem_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Rabatt{% endif -%}
+        {%- endif -%}
+      {%- else -%}
+        <a href="{{ prog.app_url | default: 'https://app.perfumecloud.de' }}">Kostenlos beitreten</a>{% if prog.welcome_points > 0 %}, dazu {{ prog.welcome_points }} Punkte Willkommensbonus{% endif %}
+      {%- endif -%}
+    </p>
+  </div>
+</div>
+{%- endif -%}

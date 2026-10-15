@@ -18,6 +18,8 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Artikel pro Bestellung, bester Tag, Stornos, Erstattungen, Top-Düfte, knapper Bestand – jeweils mit Veränderung in % (grün = besser, rot = schlechter) (Shopify Admin API)
 - **Push-Nachrichten:** neue wichtige Mail, neue Bestellung, zugewiesene Aufgabe, Kommentare, Erinnerung am Morgen
 - **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm), auch als Kalender-Widget
+- **Members Club:** Statistik zum Club (Mitglieder, Bronze/Silber/Gold, Punkte, Prämien, Feedback), „Nachricht an Mitglieder senden“ mit Vorlagen, Prüfung und Freigabe, Club-Admin mit einem Klick, Club-Zugang je Person
+- **Diagnose:** Testmail über „Mails verschicken“ (Port 465/587), Push-Test je Gerät
 
 **Kosten:** keine. Die App läuft auf dem vorhandenen netcup-Webhosting (PHP + MySQL + Cronjob) und nutzt den Shopify-Zugang aus dem bestehenden Abo.
 
@@ -63,12 +65,20 @@ cd team-app/web && npx tsc -b                         # Typprüfung
 
 Web-App (PWA) für Kundinnen und Kunden im Design des Shops (Elfenbein, Dünen, Castoro, Glas-Dock).
 
-- **Anmeldung mit dem Shopify-Kundenkonto** (Customer Account API, Code per Mail, kein Passwort). Ausweichweg: E-Mail-Code über info@
+- **Anmeldung mit dem Shopify-Kundenkonto** (Customer Account API, Code per Mail, kein Passwort). Ausweichweg: E-Mail-Code über info@. Team-Mitglieder werden an der E-Mail erkannt und landen direkt im Admin-Bereich
 - **Treuepunkte:** 1 Punkt je Euro Warenwert, Willkommensbonus, Gutschrift nach der Rückgabefrist, Storno/Erstattung werden verrechnet
-- **Prämien:** Punkte gegen Rabattcodes tauschen (100 Punkte = 5 €), Code nur für das eigene Kundenkonto, „Im Shop einlösen“ legt ihn direkt in den Warenkorb, ungenutzte Codes zurückgeben, abgelaufene Codes geben die Punkte zurück
+- **Stufen Bronze, Silber, Gold:** mehr Punkte je Euro und eigene Vorteile je Stufe, nach Einkaufswert der letzten 12 Monate
+- **Bonuspunkte:** Geburtstag, Newsletter, Bewertung, Empfehlung (beide bekommen Punkte), Startbonus für die Warteliste, Aktionen mit doppelten Punkten (z. B. Black Friday) samt Push
+- **Verfall:** Punkte und Codes verfallen nach einstellbarer Frist, mit Push-Erinnerung vorher
+- **Prämien:** Punkte gegen Rabattcodes tauschen (100 Punkte = 5 €), Code nur für das eigene Kundenkonto, „Im Shop einlösen“ legt ihn direkt in den Warenkorb, ungenutzte Codes zurückgeben
 - **Bestellungen:** Status, Zeitleiste, Sendungsnummer mit Link, Artikel, Punkte je Bestellung
-- **Club-Admin** (`/admin`): Kennzahlen, Mitglieder, Punkte gutschreiben, alle Regeln einstellbar, Abgleich mit Shopify
-- **Shopify:** Tag `club`, Kunden-Metafelder `club.punkte`, `club.punkte_ausstehend`, `club.mitglied_seit` (für Theme, Segmente, Mails)
+- **Push-Mitteilungen:** Versand, Zustellung, jede Punktegutschrift und jeder Abzug mit Grund, Prämie bereit, Verfall, neue Stufe, Aktionen, Nachrichten aus der Team-App. Texte im Admin editierbar, Ruhezeit
+- **Feedback:** Gut / Neutral / Schlecht mit optionaler Begründung, Weiterleitung an info@
+- **Club-Admin** (`/admin`): Kennzahlen, Mitglieder, Punkte buchen, Regeln, Stufen, Verfall, Boni, Aktionen, Warteliste-Einladungen, Push-Texte, Feedback, Zugänge (Benutzer der Team-App), Kundenansicht
+- **Gemeinsame Datenbank** mit der Team-App (Tabellen `club_…`), Umzug per Knopf
+- **Shopify:** Tag `club`, Kunden-Metafelder `club.punkte`, `club.punkte_ausstehend`, `club.mitglied_seit`, `club.stufe`, Shop-Metafeld `club.programm` (alle Regeln für Theme und Mails), Segment „Club: Prämie einlösbar“ folgt der Einlöse-Schwelle
+- **Im Shop:** „Mit dieser Bestellung sammelst du 59 Punkte“ in Warenkorb und Header, live mit dem Warenkorb, Abschnitt „Club-Regeln“ (`kunden-app/shopify-theme/`)
+- **Mails über Shopify Messaging:** Willkommen im Club, „Du hast 5 € Rabatt bereit“ (`kunden-app/shopify-mails/`)
 
 ➡️ **Anleitung (online stellen, Shopify verbinden):** [docs/KUNDEN-APP.md](docs/KUNDEN-APP.md)
 
@@ -81,6 +91,8 @@ kunden-app/
     public/  api.php + .htaccess  → Dokumentenstamm
     app/     PHP-Backend ohne externe Abhängigkeiten (Shopify Admin API, Customer Account API, Punkte, Codes)
     tests/   Integrationstests mit Shopify-Nachbau (mock-shopify.php)
+  shopify-theme/  Punkteanzeige und Club-Regeln fürs Shop-Theme (Liquid, CSS, JS)
+  shopify-mails/  Vorlagen für Shopify Messaging (Willkommen, Prämie bereit)
   package.sh baut das Upload-Paket nach kunden-app/build/
 .github/workflows/kunden-app.yml   Tests + Build + FTP-Upload zu netcup
 ```
@@ -104,6 +116,6 @@ Einrichten mit **SQLite**, dann im Club-Admin die Zugänge des Nachbaus eintrage
 ### Tests
 
 ```bash
-node --test kunden-app/server/tests/backend.test.mjs   # Login (vertraulich + PKCE), Beitritt, Punkte, Codes, Cron, Admin, Austritt
+node --test kunden-app/server/tests/*.test.mjs   # Login, Beitritt, Punkte, Stufen, Verfall, Boni, Aktionen, Push, Warteliste, Team-DB, Admin
 cd kunden-app/web && npx tsc -b                         # Typprüfung
 ```

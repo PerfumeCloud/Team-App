@@ -1,0 +1,19 @@
+{%- comment -%}
+  Perfume Cloud Club: Regeln (Shop-Metafeld club.programm, pflegt die Club-App automatisch) und der Stand
+  der angemeldeten Person (Kunden-Metafelder club.punkte und club.stufe). Einmal im Layout vor club.js einbinden:
+  {% render 'club-daten' %}
+{%- endcomment -%}
+{%- liquid
+  assign prog = shop.metafields.club.programm.value
+  assign mitglied = false
+  if customer and customer.tags contains 'club'
+    assign mitglied = true
+  endif
+  assign punkte = 0
+  assign stufe = ''
+  if mitglied
+    assign punkte = customer.metafields.club.punkte.value | default: 0
+    assign stufe = customer.metafields.club.stufe.value | default: ''
+  endif
+-%}
+<script type="application/json" id="club-daten">{"programm":{{ prog | json }},"mitglied":{{ mitglied | json }},"stufe":{{ stufe | json }},"punkte":{{ punkte | json }},"warenkorb":{{ cart.total_price | json }},"warenkorb_url":{{ routes.cart_url | json }}}</script>

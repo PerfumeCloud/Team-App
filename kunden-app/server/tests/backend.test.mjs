@@ -638,6 +638,15 @@ test('Aktion: doppelte Punkte mit Push zum Start und Regeln im Shop', async () =
   });
   assert.deepEqual(prog.tiers.map((t) => [t.key, t.rate, t.min_cents]), [['bronze', 1, 0], ['silber', 1.5, 15000], ['gold', 2, 40000]]);
   assert.equal(prog.promos[0].factor, 2);
+  // Segment „Club: Prämie einlösbar“ wird angelegt und folgt der Einlöse-Schwelle
+  const segment = async (q) => waitFor2(async () => Object.values((await getMock()).segments || {}).find((s) => s.name === 'Club: Prämie einlösbar' && s.query === q));
+  assert.ok(await segment("customer_tags CONTAINS 'club' AND metafields.club.punkte >= 100"));
+  await admin.req('PUT', '/admin/settings', { program: { redeem_points: 150 } });
+  const seg = await segment("customer_tags CONTAINS 'club' AND metafields.club.punkte >= 150");
+  assert.ok(seg, 'Segment folgt der neuen Schwelle');
+  assert.equal(Object.values((await getMock()).segments).length, 1, 'kein zweites Segment');
+  await admin.req('PUT', '/admin/settings', { program: { redeem_points: 100 } });
+  await segment("customer_tags CONTAINS 'club' AND metafields.club.punkte >= 100");
   r = await admin.req('GET', '/admin/dashboard');
   assert.equal(r.data.shop_program.ok, true);
   assert.equal(r.data.promotion.name, 'Launch-Woche');

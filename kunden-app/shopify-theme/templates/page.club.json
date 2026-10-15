@@ -1,0 +1,16 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-seite",
+      "settings": {}
+    },
+    "club": {
+      "type": "club-regeln",
+      "settings": {}
+    }
+  },
+  "order": [
+    "main",
+    "club"
+  ]
+}

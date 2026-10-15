@@ -1,0 +1,38 @@
+<header class="kopf" id="kopf">
+  <div class="rand glas dock-rand">
+    <nav class="dock" aria-label="Hauptnavigation" data-dock=".22">
+      <span class="dock-schweber" aria-hidden="true"></span>
+      <a class="dock-punkt dock-logo" href="{{ routes.root_url }}#top" aria-label="Perfume Cloud, zur Startseite" data-dock-punkt><img src="{{ 'zeichen-amber.svg' | asset_url }}" alt="" width="28" height="29"></a>
+      <span class="dock-trenner" aria-hidden="true"></span>
+      <a class="dock-punkt dock-text" href="{{ routes.root_url }}#idee" data-schweber="idee">Idee</a>
+      <button class="dock-punkt dock-text" type="button" aria-expanded="false" aria-controls="aufklapp" data-aufklapp data-schweber="kollektion">Kollektion <svg class="pfeil-klein" aria-hidden="true"><use href="#i-runter"/></svg></button>
+      <a class="dock-punkt dock-text" href="{{ routes.root_url }}#fragen" data-schweber="fragen">Fragen</a>
+      <span class="dock-trenner" aria-hidden="true"></span>
+      <a class="dock-punkt rund nur-breit" href="https://www.instagram.com/perfumecloud.de/" aria-label="Instagram" data-dock-punkt><svg class="icon" aria-hidden="true"><use href="#i-instagram"/></svg><span class="dock-tipp" aria-hidden="true">Instagram</span></a>
+      <a class="dock-punkt rund nur-breit" href="mailto:info@perfume-cloud.de" aria-label="E-Mail an info@perfume-cloud.de" data-dock-punkt><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg><span class="dock-tipp" aria-hidden="true">E-Mail</span></a>
+      {% render 'club-kopf' %}
+      <a class="dock-punkt rund" href="{% if customer %}{{ routes.account_url }}{% else %}{{ routes.account_login_url }}{% endif %}" aria-label="{% if customer %}Mein Kundenkonto{% else %}Anmelden oder Kundenkonto anlegen{% endif %}" data-dock-punkt><svg class="icon" aria-hidden="true"><use href="#i-person"/></svg><span class="dock-tipp" aria-hidden="true">{% if customer %}Mein Konto{% else %}Kundenkonto{% endif %}</span></a>
+      <a class="dock-punkt rund dock-warte nur-schmal" href="{{ routes.root_url }}#warteliste" aria-label="Auf die Warteliste"><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg></a>
+      <a class="hb hb-mini nur-breit" href="{{ routes.root_url }}#warteliste"><span class="hb-text">Warteliste</span><span class="hb-hover" aria-hidden="true"><span>Warteliste</span><svg aria-hidden="true"><use href="#i-mail"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
+    </nav>
+  </div>
+  <div class="aufklapp" id="aufklapp" hidden>
+    <div class="rand glas aufklapp-rand">
+      <div class="aufklapp-innen">
+        <div class="mini-liste" style="display:contents"></div>
+        <div class="aufklapp-mehr">
+          <a href="{{ routes.root_url }}#kollektion">Zur Kollektion</a>
+          <a href="{{ routes.root_url }}#h-aufbau">So ist ein Duft aufgebaut</a>
+          <a href="{{ routes.root_url }}#warteliste">Auf die Warteliste</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+{% schema %}
+{
+  "name": "Kopfzeile",
+  "settings": []
+}
+{% endschema %}

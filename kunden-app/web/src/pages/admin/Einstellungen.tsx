@@ -382,7 +382,7 @@ function Verbindungen({ data, speichern }: { data: Settings; speichern: Speicher
   const [mail, setMail] = useState({ ...data.smtp, password: '' });
   const [mailAn, setMailAn] = useState(data.login_email);
   const [links, setLinks] = useState({ account_url: data.account_url, terms_url: data.terms_url });
-  const [mitteilung, setMitteilung] = useState({ welcome_mail: data.welcome_mail, feedback_email: data.feedback_email, push_contact: data.push_contact });
+  const [mitteilung, setMitteilung] = useState({ welcome_mail: data.welcome_mail, feedback_email: data.feedback_email, push_contact: data.push_contact, four_eyes: data.broadcast_four_eyes });
 
   return (
     <>
@@ -503,7 +503,12 @@ function Verbindungen({ data, speichern }: { data: Settings; speichern: Speicher
       <Abschnitt
         titel="Mails und Mitteilungen"
         onSave={async () =>
-          void (await speichern({ welcome_mail: mitteilung.welcome_mail, feedback_email: mitteilung.feedback_email.trim(), push_contact: mitteilung.push_contact.trim() }))
+          void (await speichern({
+            welcome_mail: mitteilung.welcome_mail,
+            broadcast_four_eyes: mitteilung.four_eyes,
+            feedback_email: mitteilung.feedback_email.trim(),
+            push_contact: mitteilung.push_contact.trim(),
+          }))
         }
         extra={
           <button
@@ -527,6 +532,12 @@ function Verbindungen({ data, speichern }: { data: Settings; speichern: Speicher
           text="Im Design der App. Aus lassen, wenn die Willkommensmail über Shopify Flow kommt (Anleitung in der Doku)."
           an={mitteilung.welcome_mail}
           onChange={(v) => setMitteilung({ ...mitteilung, welcome_mail: v })}
+        />
+        <Schalter
+          titel="Nachrichten an Mitglieder: Vier-Augen-Prinzip"
+          text="Eine Nachricht aus der Team-App gibt jemand anderes frei als die Person, die sie geschrieben hat."
+          an={mitteilung.four_eyes}
+          onChange={(v) => setMitteilung({ ...mitteilung, four_eyes: v })}
         />
         <div className="formular-reihe">
           <Feld titel="Feedback geht an" hilfe="Jede Antwort der Mitglieder wird hierhin weitergeleitet.">

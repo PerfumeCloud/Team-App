@@ -9,6 +9,7 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 | **C – Windows-PC / Mac** | wer möchte | ca. 1 Min. |
 | **D – iPhone-Widget** | optional | ca. 3 Min. |
 | **E – Updates automatisch** | optional, einmalig | ca. 10 Min. |
+| **J – Members Club** | Marius, wenn der Club läuft | ca. 10 Min. |
 
 **Bereitlegen:**
 - Zugang zum netcup **Customer Control Panel (CCP)**: <https://www.customercontrolpanel.de>
@@ -103,6 +104,8 @@ Kommt die Mail nicht an (z. B. weil info@ noch nicht verbunden ist, siehe A8), z
 5. Auf **Speichern & testen** klicken. Erscheint ein grüner Haken, holt die App ab jetzt die Mails.
 
 Über **info@** verschickt die App auch die Einladungs-Mails (A7). Dafür muss das Passwort von info@ hier eingetragen sein.
+
+**Mails verschicken** (gleiche Seite, weiter unten): Hier steht, über welches Postfach die App verschickt. Bei netcup ist der Server für den Versand derselbe wie für den Abruf, Port **465** (SSL/TLS) oder **587** (STARTTLS). Feld leer lassen = wie beim Abruf. Mit **Testmail an …** prüfen, ob der Versand klappt. Beim Postfach zeigt **Prüfen**, ob Abruf und Versand funktionieren, und schickt eine Testmail an das Postfach selbst.
 
 ### A9 · Shopify verbinden
 1. <https://dev.shopify.com> öffnen und mit deinem Shopify-Konto (Shop-Inhaber) anmelden.
@@ -251,6 +254,19 @@ Bekommt jemand keine Mails oder Push-Nachrichten oder sieht veraltete Daten, geh
 - **Datenbank aktualisieren** bringt die Datenbank auf den neuesten Stand und löst hängende Abgleiche. Außerdem entfernt es kaputte Push-Anmeldungen und lädt auf allen Geräten die Daten komplett neu. Es geht nichts verloren.
 - Fehlen bei einer Person die Push-Geräte, muss sie auf ihrem iPhone unter **Einstellungen → Benachrichtigungen** einmal **Aktivieren** tippen (App vom Home-Bildschirm aus öffnen).
 
+## Teil J – Members Club
+
+Die Team-App zeigt die Kunden-App „Perfume Cloud Club“ (`app.perfumecloud.de`) mit an. Einrichtung des Clubs: [KUNDEN-APP.md](KUNDEN-APP.md), Verbindung dort in **Teil H**.
+
+1. **Verbinden:** Liegt der Club in derselben Datenbank (Club-Admin → Einstellungen → System → **In die Team-Datenbank umziehen**), ist er automatisch verbunden. Sonst unter **Einstellungen → Integrationen → Members Club** Adresse und Schlüssel aus dem Club-Admin eintragen und **Speichern & testen**.
+2. **Wer darf was:** Admins sehen den Members Club immer und sind auch im Club-Admin Admin. Für andere unter **Einstellungen → Team** bei der Person **Club-Zugang** tippen.
+3. Im Menü (am Computer links) steht jetzt **Members Club**:
+   - **Statistik:** Mitglieder, Verteilung auf Bronze, Silber und Gold, gesammelte und eingelöste Punkte, eingelöste Prämien, offene Punkte, Beitritte je Monat, Extra-Punkte, Bestellungen von Mitgliedern, Feedback.
+   - **Nachricht an Mitglieder senden:** Push an alle Mitglieder, an Silber und Gold oder nur an Gold. Vorlagen: **Neuer Duft**, **Früher Zugang (Gold)**, **Wieder da**, **Probe zur Bestellung**, **Feedback-Anfrage** (Gut / Neutral / Schlecht) und **Freie Nachricht**. Ablauf: schreiben (mit Vorschau) → **Zur Prüfung geben** → **Freigeben & senden** oder zu einem Zeitpunkt planen. Ist im Club-Admin das Vier-Augen-Prinzip an, gibt jemand anderes frei.
+   - **Club-Admin öffnen:** öffnet den Admin-Bereich des Clubs in einem neuen Fenster, ohne erneute Anmeldung.
+
+**Push testen:** Unter **Einstellungen → Benachrichtigungen** stehen alle deine Geräte. **Test senden** zeigt je Gerät „Test angekommen beim Push-Dienst“ oder den Fehler. Steht dort „Dieses Gerät ist beim Server nicht angemeldet“, auf **Neu anmelden** tippen.
+
 ## Wenn etwas hakt
 
 | Problem | Lösung |
@@ -269,3 +285,6 @@ Bekommt jemand keine Mails oder Push-Nachrichten oder sieht veraltete Daten, geh
 | „E-Mail existiert bereits“ beim Anlegen | Mit dieser Adresse gab es schon ein Konto. Neu anlegen holt es zurück. Oder **Integrationen → Wartung → Wiederherstellen**. |
 | Einladungs-Mail kommt nicht an | Den angezeigten **Einladungslink** per WhatsApp schicken. Prüfen, ob info@ unter **Postfächer** mit Passwort verbunden ist. Auch im Spam-Ordner nachsehen. |
 | Jemand bekommt keine Push-Nachrichten oder Mails | **Integrationen → Wartung**: Geräte-Status prüfen, dann **Datenbank aktualisieren** (Teil I). |
+| Testmail kommt nicht an | **Integrationen → Mails verschicken**: Server leer lassen (wie beim Abruf) oder den Server des Postfachs eintragen, Port 465 oder 587. Beim Postfach **Prüfen** zeigt die genaue Fehlermeldung. |
+| Members Club fehlt im Menü | Nur Admins und Personen mit **Club-Zugang** sehen ihn (Teil J). |
+| Members Club: „Club noch nicht verbunden“ | Teil J, Schritt 1. Im Club-Admin muss die Adresse der App gespeichert sein (dort einmal Einstellungen speichern). |

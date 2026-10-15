@@ -40,6 +40,7 @@ $state = load($stateFile) + [
     'orders' => [],
     'discounts' => [],
     'metafields' => [],
+    'segments' => [],
     'nextId' => 1000,
     'login' => ['customer' => null, 'deny' => false],
     'codes' => [],
@@ -193,6 +194,18 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
                 $state['metafields'][$mf['ownerId'] . '|' . $mf['namespace'] . '.' . $mf['key']] = $mf['value'];
             }
             $data = ['metafieldsSet' => ['metafields' => [], 'userErrors' => []]];
+            break;
+        case 'ClubSegments':
+            $data = ['segments' => ['nodes' => array_values($state['segments'] ?? [])]];
+            break;
+        case 'ClubSegmentCreate':
+            $id = 'gid://shopify/Segment/' . (++$state['nextId']);
+            $state['segments'][$id] = ['id' => $id, 'name' => $v['name'], 'query' => $v['query']];
+            $data = ['segmentCreate' => ['segment' => ['id' => $id], 'userErrors' => []]];
+            break;
+        case 'ClubSegmentUpdate':
+            $state['segments'][$v['id']]['query'] = $v['query'];
+            $data = ['segmentUpdate' => ['segment' => ['id' => $v['id']], 'userErrors' => []]];
             break;
         case 'ClubCode':
             $in = $v['input'];
