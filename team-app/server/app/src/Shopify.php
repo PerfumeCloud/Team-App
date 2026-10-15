@@ -168,10 +168,10 @@ final class Shopify
             if ($missing) {
                 return ['ok' => false, 'message' => $msg . ' – es fehlen Berechtigungen: ' . implode(', ', $missing)];
             }
-            // Für Kundeninfos und Versand (seit 1.5) – ohne sie läuft der Rest trotzdem
-            $optional = self::missing(['read_customers', 'write_merchant_managed_fulfillment_orders']);
+            // Für Kundeninfos und Versand (seit 1.5) und den Club-Probelauf (1.6) – ohne sie läuft der Rest trotzdem
+            $optional = self::missing(['read_customers', 'write_merchant_managed_fulfillment_orders', 'write_orders']);
             if ($optional) {
-                return ['ok' => true, 'message' => $msg . ' · Für Kundeninfos und Versand noch freigeben: ' . implode(', ', $optional)];
+                return ['ok' => true, 'message' => $msg . ' · Für Kundeninfos, Versand und Probelauf noch freigeben: ' . implode(', ', $optional)];
             }
             return ['ok' => true, 'message' => $msg];
         } catch (\Throwable $e) {

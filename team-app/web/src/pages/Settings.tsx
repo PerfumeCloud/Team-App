@@ -1537,7 +1537,8 @@ function IntegrationsPanel() {
           <>
             Lesezugriff auf Bestellungen, Produkte und Lager über eine eigene App im <b>Shopify Dev Dashboard</b> (kostenlos). Benötigte Berechtigungen: <code className="rounded bg-surface-2 px-1">read_orders</code>,{' '}
             <code className="rounded bg-surface-2 px-1">read_products</code>, <code className="rounded bg-surface-2 px-1">read_inventory</code>. Für Kundeninfos und „Versenden“ zusätzlich{' '}
-            <code className="rounded bg-surface-2 px-1">read_customers</code> und <code className="rounded bg-surface-2 px-1">write_merchant_managed_fulfillment_orders</code>. Schritt-für-Schritt-Anleitung: siehe{' '}
+            <code className="rounded bg-surface-2 px-1">read_customers</code> und <code className="rounded bg-surface-2 px-1">write_merchant_managed_fulfillment_orders</code>, für den Probelauf im Members Club{' '}
+            <code className="rounded bg-surface-2 px-1">write_orders</code>. Schritt-für-Schritt-Anleitung: siehe{' '}
             <b>docs/ANLEITUNG.md</b>.
           </>
         }

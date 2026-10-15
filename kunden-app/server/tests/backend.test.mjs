@@ -1319,6 +1319,22 @@ test('Probelauf: echte 0-€-Bestellung mit Einmal-Codes', async () => {
   assert.equal(sql("SELECT COUNT(*) AS n FROM club_surveys WHERE order_id = 'gid://shopify/Order/6001'")[0].n, 0);
 });
 
+test('Abgleich: ohne Freigabe für Name und E-Mail laufen die Punkte weiter', async () => {
+  await setMock({ denyCustomerData: true });
+  await addOrders([order(4100, { ago: 4 * DAY, amount: 30, shippedAgo: 3 * DAY, delivered: true })]);
+  let r = await cron();
+  assert.match(JSON.stringify(r), /nicht alle Kundendaten/);
+  const row = sql("SELECT * FROM club_orders WHERE order_id = 'gid://shopify/Order/4100'")[0];
+  assert.ok(row && row.points > 0, 'Bestellung trotz fehlender Kundendaten übernommen');
+  r = await admin.req('GET', '/admin/dashboard');
+  assert.equal(r.data.checklist.find((x) => x.key === 'customer_data').ok, false, 'Hinweis im Admin');
+  await setMock({ denyCustomerData: false });
+  await addOrders([order(4101, { ago: 2 * DAY, amount: 20 })]);
+  await cron();
+  r = await admin.req('GET', '/admin/dashboard');
+  assert.equal(r.data.checklist.find((x) => x.key === 'customer_data').ok, true, 'Hinweis verschwindet wieder');
+});
+
 test('Abmelden und Austreten', async () => {
   let r = await anna.req('POST', '/auth/logout');
   assert.equal(r.status, 200);

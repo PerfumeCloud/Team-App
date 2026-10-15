@@ -120,6 +120,7 @@ final class Admin
         $login = Settings::get('login_test');
         $cron = (int) (Settings::get('cron_last_run') ?? 0);
         $shop = Settings::get('shop_program_status');
+        $denied = Settings::get('sync_denied');
         return [
             ['key' => 'shopify', 'label' => 'Shopify-App verbunden', 'ok' => Shopify::configured() && is_array($shopify) && !empty($shopify['ok'])],
             ['key' => 'login', 'label' => 'Anmeldung eingerichtet (Shopify-Kundenkonto oder E-Mail-Code)', 'ok' => (CustomerAccount::configured() && is_array($login) && !empty($login['ok'])) || Auth::emailLoginEnabled()],
@@ -128,6 +129,8 @@ final class Admin
             ['key' => 'mail', 'label' => 'E-Mail-Versand eingerichtet (Codes, Willkommen, Feedback)', 'ok' => Mailer::configured()],
             ['key' => 'shop_program', 'label' => 'Regeln im Shop (Metafeld club.programm)', 'ok' => is_array($shop) && !empty($shop['ok'])],
             ['key' => 'team_db', 'label' => 'Gemeinsame Datenbank mit der Team-App', 'ok' => Db::team()],
+            // Nur sichtbar, wenn es hakt: Für Befragung und Empfehlungen braucht der Abgleich Name und E-Mail
+            ['key' => 'customer_data', 'label' => 'Shopify gibt Name und E-Mail zu Bestellungen frei (für Befragung und Empfehlungslinks: in der Shopify-App „Geschützte Kundendaten“ freigeben, Anleitung Teil B)', 'ok' => !is_array($denied) || (int) ($denied['at'] ?? 0) < Util::now() - 2 * Points::DAY_MS],
         ];
     }
 

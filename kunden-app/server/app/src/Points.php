@@ -419,12 +419,20 @@ final class Points
         $seen = 0;
         $changed = 0;
         $newest = $cursor;
+        $extra = Surveys::orderExtra();
+        $denied = [];
         for ($page = 0; $page < 20; $page++) {
-            $d = Shopify::graphql(
+            // Fehlen Rechte für Kundendaten, kommen diese Felder leer – Punkte laufen trotzdem weiter
+            $d = Shopify::graphqlPartial(
                 'query ClubSync($q: String!, $after: String) { orders(first: 50, after: $after, query: $q, sortKey: UPDATED_AT) {
-                    pageInfo { hasNextPage endCursor } nodes { updatedAt ' . Surveys::ORDER_EXTRA . ' ' . self::ORDER_FIELDS . ' } } }',
-                ['q' => "updated_at:>='$cursor'", 'after' => $after]
+                    pageInfo { hasNextPage endCursor } nodes { updatedAt ' . $extra . ' ' . self::ORDER_FIELDS . ' } } }',
+                ['q' => "updated_at:>='$cursor'", 'after' => $after],
+                $pageDenied
             );
+            if (!is_array($d['orders'] ?? null)) {
+                throw new \RuntimeException('Shopify: ' . ($pageDenied ? implode(' | ', $pageDenied) : 'keine Bestellungen erhalten'));
+            }
+            $denied = array_values(array_unique([...$denied, ...$pageDenied]));
             $orders = $d['orders']['nodes'] ?? [];
             $ids = array_values(array_unique(array_filter(array_map(static fn ($o) => $o['customer']['id'] ?? null, $orders))));
             $members = [];
@@ -466,7 +474,13 @@ final class Points
             $after = $d['orders']['pageInfo']['endCursor'];
         }
         Settings::set('sync_cursor', $newest);
-        return $seen . ($seen === 1 ? ' Bestellung' : ' Bestellungen') . " geprüft, $changed geändert";
+        if ($denied) {
+            Settings::set('sync_denied', ['at' => Util::now(), 'messages' => array_slice($denied, 0, 3)]);
+            Util::log('Abgleich ohne alle Kundendaten: ' . implode(' | ', $denied));
+        } elseif (Settings::get('sync_denied')) {
+            Settings::delete('sync_denied');
+        }
+        return $seen . ($seen === 1 ? ' Bestellung' : ' Bestellungen') . " geprüft, $changed geändert" . ($denied ? ' (Shopify gibt nicht alle Kundendaten frei)' : '');
     }
 
     /**

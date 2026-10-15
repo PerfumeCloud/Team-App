@@ -140,6 +140,18 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
                 }
                 return $o;
             }, $list);
+            // Geschützte Kundendaten nicht freigegeben: Shopify liefert die Felder leer und meldet es unter errors
+            if (!empty($state['denyCustomerData'])) {
+                $list = array_map(static function ($o) {
+                    $o['email'] = null;
+                    if (is_array($o['customer'] ?? null)) {
+                        $o['customer']['firstName'] = null;
+                        $o['customer']['defaultEmailAddress'] = null;
+                    }
+                    return $o;
+                }, $list);
+                $partial = [['message' => 'This app is not approved to access the Customer object. See https://shopify.dev/docs/apps/launch/protected-customer-data for more details.', 'path' => ['orders', 'nodes', 0, 'customer', 'firstName']]];
+            }
             $data = ['orders' => ['pageInfo' => ['hasNextPage' => false, 'endCursor' => null], 'nodes' => $list]];
             break;
         case 'ClubFind':
@@ -254,7 +266,7 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
             return true;
     }
     save($stateFile, $state);
-    out(['data' => $data]);
+    out(isset($partial) ? ['data' => $data, 'errors' => $partial] : ['data' => $data]);
     return true;
 }
 

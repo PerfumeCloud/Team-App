@@ -104,6 +104,36 @@ final class Shopify
 
     public static function graphql(string $query, array $variables = []): array
     {
+        $strict = null;
+        return self::request($query, $variables, $strict);
+    }
+
+    /**
+     * Wie graphql(), aber fehlende Rechte für einzelne Felder (fehlender Scope, nicht freigegebene geschützte
+     * Kundendaten) brechen nicht ab: Shopify liefert diese Felder als null, die Meldungen landen in $denied.
+     * Für den Abgleich, damit Punkte auch dann weiterlaufen, wenn z. B. Name und E-Mail nicht freigegeben sind.
+     */
+    public static function graphqlPartial(string $query, array $variables, ?array &$denied): array
+    {
+        $denied = [];
+        return self::request($query, $variables, $denied);
+    }
+
+    /** Ist dieser Scope (oder sein write_-Gegenstück) für die App freigegeben? */
+    public static function hasScope(string $scope): bool
+    {
+        $granted = array_filter(explode(',', (string) (Settings::get('shopify_token')['scope'] ?? '')));
+        return in_array($scope, $granted, true) || in_array((string) preg_replace('/^read_/', 'write_', $scope), $granted, true);
+    }
+
+    private static function accessError(mixed $e): bool
+    {
+        return is_array($e) && (($e['extensions']['code'] ?? '') === 'ACCESS_DENIED'
+            || (bool) preg_match('/not approved to access|access denied|access scope/i', (string) ($e['message'] ?? '')));
+    }
+
+    private static function request(string $query, array $variables, ?array &$denied): array
+    {
         $url = self::base() . '/admin/api/' . self::API_VERSION . '/graphql.json';
         $payload = Util::json(['query' => $query, 'variables' => (object) $variables]);
         $forceToken = false;
@@ -126,7 +156,11 @@ final class Shopify
                 throw new \RuntimeException("Shopify-API-Fehler ($status)");
             }
             if (!empty($data['errors'])) {
-                throw new \RuntimeException('Shopify: ' . Util::json($data['errors']));
+                $errors = is_array($data['errors']) ? $data['errors'] : [$data['errors']];
+                if ($denied === null || !is_array($data['data'] ?? null) || count(array_filter($errors, static fn ($e) => self::accessError($e))) !== count($errors)) {
+                    throw new \RuntimeException('Shopify: ' . Util::json($data['errors']));
+                }
+                $denied = array_values(array_unique(array_map(static fn ($e) => (string) ($e['message'] ?? ''), $errors)));
             }
             return $data['data'] ?? [];
         }

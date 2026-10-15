@@ -192,9 +192,20 @@ final class Surveys
 
     // ---------- Bestellungen aus dem Abgleich ----------
 
-    /** Felder, die der Abgleich zusätzlich holt (Kundendaten, Einwilligung, Düfte). */
-    public const ORDER_EXTRA = 'email tags customer { id firstName numberOfOrders defaultEmailAddress { emailAddress marketingState } }
-        lineItems(first: 20) { nodes { title variantTitle currentQuantity isGiftCard image { url } product { id handle onlineStoreUrl } } }';
+    /**
+     * Felder, die der Abgleich zusätzlich holt – nur, was gerade gebraucht wird (Datensparsamkeit, weniger Rechte):
+     * Befragung (oder Probelauf): Kundendaten, Einwilligung, Düfte; nur Empfehlungslinks: E-Mail und Anzahl Bestellungen.
+     * Produktlinks nur mit read_products, sonst führt die Nachkauf-Erinnerung in den Shop.
+     */
+    public static function orderExtra(): string
+    {
+        if (!self::config()['enabled'] && Trial::state() === null) {
+            return Referrals::config()['enabled'] ? 'email customer { id numberOfOrders }' : 'customer { id }';
+        }
+        $product = Shopify::hasScope('read_products') ? ' product { id handle onlineStoreUrl }' : '';
+        return 'email tags customer { id firstName numberOfOrders defaultEmailAddress { emailAddress marketingState } }
+        lineItems(first: 20) { nodes { title variantTitle currentQuantity isGiftCard image { url }' . $product . ' } }';
+    }
 
     /** Düfte einer Bestellung (je Produkt einmal, ohne Gutscheine). */
     public static function items(array $o): array
