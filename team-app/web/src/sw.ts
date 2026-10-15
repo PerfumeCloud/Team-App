@@ -64,3 +64,24 @@ self.addEventListener('notificationclick', (event) => {
     })(),
   );
 });
+
+// Der Browser hat das Abo erneuert (z. B. abgelaufen) → neues Abo beim Server speichern.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const e = event as ExtendableEvent & { oldSubscription?: PushSubscription | null };
+  e.waitUntil(
+    (async () => {
+      const res = await fetch('/api/push/key', { credentials: 'same-origin' });
+      const { publicKey } = (await res.json()) as { publicKey: string };
+      const pad = '='.repeat((4 - (publicKey.length % 4)) % 4);
+      const raw = atob((publicKey + pad).replace(/-/g, '+').replace(/_/g, '/'));
+      const key = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+      const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-PC': '1' },
+        body: JSON.stringify(sub.toJSON()),
+      });
+    })().catch(() => undefined),
+  );
+});

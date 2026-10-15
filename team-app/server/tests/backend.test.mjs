@@ -123,6 +123,16 @@ const clubServer = http.createServer((req, res) => {
 
 const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
 
+/** Text einer Mail (alle base64-Teile dekodiert). */
+function mailText(data) {
+  return data
+    .split(/\r?\n\r?\n/)
+    .map((part) => part.replace(/\r?\n--pc[\s\S]*$/, '').replace(/\s/g, ''))
+    .filter((part) => /^[A-Za-z0-9+/=]+$/.test(part))
+    .map((part) => Buffer.from(part, 'base64').toString())
+    .join('\n');
+}
+
 /** Wartet, bis fn etwas liefert (z. B. eine Mail beim Test-SMTP-Server). */
 async function eventually(fn, ms = 3000) {
   const end = Date.now() + ms;
@@ -677,6 +687,290 @@ test('Team: Einladung per Link, löschen und wieder anlegen, Wartung', async () 
   await admin.req('DELETE', `/admin/users/${benId}`);
   const res = await admin.req('POST', `/admin/users/${benId}/restore`);
   assert.equal(res.data.user.name, 'Ben B.');
+});
+
+test('Datenbank-Aktualisierung 1.3 läuft mehrfach ohne Fehler', () => {
+  const r = helper('migrate');
+  assert.ok(r.users.includes('club_access'));
+  assert.ok(r.push.includes('last_status') && r.push.includes('last_error'));
+});
+
+test('Push-Test: Ergebnis je Gerät, abgemeldete Geräte weg, Fehler bleiben sichtbar', async () => {
+  // Gerät aus dem älteren Test (ohne echte Schlüssel) entfernen
+  const old = crypto.createHash('sha256').update('https://web.push.apple.com/abc').digest('hex');
+  assert.equal((await kim.req('DELETE', `/push/devices/${old}`)).status, 200);
+  // Unsichere Adressen außerhalb des Tests bleiben verboten
+  assert.equal((await kim.req('POST', '/push/subscribe', { endpoint: 'http://example.com/x', keys: { p256dh: 'x', auth: 'y' } })).status, 422);
+
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  const sub = async (path) => {
+    const ua = crypto.createECDH('prime256v1');
+    ua.generateKeys();
+    const keys = { p256dh: ua.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') };
+    const r = await kim.req('POST', '/push/subscribe', { endpoint: `http://127.0.0.1:${pushPort}${path}`, keys }, { 'User-Agent': iphone });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    return r.data.id;
+  };
+  const okId = await sub('/ok/1');
+  await sub('/gone/1');
+  const jwtId = await sub('/jwt/1');
+  // Ungültige Kontaktadresse wird nicht an den Push-Dienst geschickt (Apple: BadJwtToken)
+  helper('setting', 'push_contact', JSON.stringify('keine-adresse'));
+
+  const t = await kim.req('POST', '/push/test');
+  assert.equal(t.status, 200, JSON.stringify(t.data));
+  assert.equal(t.data.devices, 3);
+  assert.equal(t.data.sent, 1);
+  const by = Object.fromEntries(t.data.results.map((x) => [x.id, x]));
+  assert.equal(by[okId].ok, true);
+  assert.equal(by[okId].device, 'iPhone Safari');
+  assert.equal(by[jwtId].ok, false);
+  assert.equal(by[jwtId].status, 403);
+  assert.equal(by[jwtId].reason, 'BadJwtToken');
+  assert.ok(t.data.results.some((x) => x.reason === 'Gerät abgemeldet'));
+
+  // Anfrage an den Push-Dienst: verschlüsselt, mit VAPID und gültiger mailto-Adresse
+  const hit = pushHits.find((h) => h.path === '/ok/1');
+  assert.equal(hit.headers['content-encoding'], 'aes128gcm');
+  assert.ok(Number(hit.headers.ttl) > 0);
+  const m = /^vapid t=([^,]+), k=(.+)$/.exec(hit.headers.authorization);
+  assert.ok(m, hit.headers.authorization);
+  const claims = JSON.parse(Buffer.from(m[1].split('.')[1], 'base64url').toString());
+  assert.equal(claims.sub, 'mailto:kim@example.de');
+  assert.equal(claims.aud, `http://127.0.0.1:${pushPort}`);
+  assert.ok(claims.exp > Date.now() / 1000);
+
+  // Geräteliste: abgemeldetes Gerät entfernt, 403 bleibt mit Grund stehen
+  const d = await kim.req('GET', '/push/devices');
+  assert.equal(d.data.devices.length, 2);
+  const jwt = d.data.devices.find((x) => x.id === jwtId);
+  assert.equal(jwt.last_status, 403);
+  assert.equal(jwt.last_error, 'BadJwtToken');
+  assert.equal(jwt.fail_count, 1);
+  assert.ok(d.data.devices.find((x) => x.id === okId).last_ok_at > 0);
+
+  // Admin sieht den Fehler in der Diagnose
+  const diag = await admin.req('GET', '/admin/maintenance');
+  assert.equal(diag.data.people.find((p) => p.id === kimId).pushError, 'BadJwtToken');
+
+  // Gerät entfernen – nur eigene
+  assert.equal((await admin.req('DELETE', `/push/devices/${jwtId}`)).data.devices.length, 0);
+  assert.equal((await kim.req('GET', '/push/devices')).data.devices.length, 2);
+  const del = await kim.req('DELETE', `/push/devices/${jwtId}`);
+  assert.deepEqual(del.data.devices.map((x) => x.id), [okId]);
+  helper('setting', 'push_contact', 'null');
+});
+
+test('Postfach prüfen: Schritt für Schritt, Testmail per SMTP, verständliche Hinweise', async () => {
+  helper('mail', String(IMAP_PORT)); // Team-Postfach support@ mit richtigem Passwort
+  helper('setting', 'smtp_port', String(SMTP_PORT));
+  const before = smtpMails.length;
+  const r = await admin.req('POST', '/admin/mailboxes/mb1/check');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.ok, true, JSON.stringify(r.data.steps));
+  assert.equal(r.data.imap, true);
+  assert.equal(r.data.smtp, true);
+  const labels = r.data.steps.map((s) => s.label);
+  assert.ok(labels.includes('Server 127.0.0.1'));
+  assert.ok(labels.some((l) => l.startsWith('Anmeldung als support@')));
+  assert.ok(labels.includes('Ordner INBOX'));
+  assert.ok(labels.some((l) => l.startsWith('SMTP-Anmeldung')));
+  assert.ok(r.data.steps.every((s) => s.ok && s.hint === null));
+  assert.match(r.data.message, /Versand klappt/);
+  const mail = await eventually(() => smtpMails.length > before && smtpMails.at(-1));
+  assert.ok(mail, 'Testmail kam beim SMTP-Server an');
+  assert.equal(mail.from, 'support@perfumecloud.de');
+  assert.deepEqual(mail.to, ['support@perfumecloud.de']);
+  assert.match(mail.data, /Subject: Testmail der Team-App/);
+  assert.ok(!JSON.stringify(r.data).includes('secret'), 'Passwort taucht nirgends auf');
+  // Mitglieder dürfen fremde Postfächer nicht prüfen; unbekanntes Postfach
+  assert.equal((await kim.req('POST', '/admin/mailboxes/mb1/check')).status, 403);
+  assert.equal((await admin.req('POST', '/admin/mailboxes/gibtsnicht/check')).status, 404);
+  assert.equal((await kim.req('POST', '/me/mailbox/check')).status, 404);
+
+  // Einladungen gehen jetzt wirklich raus
+  const inv = await admin.req('POST', '/admin/users', { name: 'Lea', email: 'lea@example.de', invite: true });
+  assert.equal(inv.data.invite.sent, true, JSON.stringify(inv.data.invite));
+  const invMail = await eventually(() => smtpMails.find((x) => x.to.includes('lea@example.de')));
+  assert.ok(invMail);
+  assert.match(mailText(invMail.data), /einladung=pci_/);
+
+  // Falsches Passwort → Hinweis zur Anmeldung, der Versand wird gar nicht erst versucht
+  helper('mail', String(IMAP_PORT), 'falsch');
+  const wrong = await admin.req('POST', '/admin/mailboxes/mb1/check');
+  assert.equal(wrong.data.ok, false);
+  const failed = wrong.data.steps.find((s) => !s.ok);
+  assert.match(failed.label, /^Anmeldung als/);
+  assert.match(failed.hint, /Benutzername oder Passwort/);
+  assert.equal(wrong.data.smtp, false);
+  const status = (await admin.req('GET', '/admin/integrations')).data.mailboxes.find((x) => x.id === 'mb1').status;
+  assert.equal(status.ok, false);
+
+  // Abruf ok, aber SMTP-Port zu → Abruf klappt, Versand nicht
+  helper('mail', String(IMAP_PORT));
+  helper('setting', 'smtp_port', String(CLOSED_PORT));
+  const noSmtp = await admin.req('POST', '/admin/mailboxes/mb1/check');
+  assert.equal(noSmtp.data.imap, true);
+  assert.equal(noSmtp.data.smtp, false);
+  assert.match(noSmtp.data.message, /^Abruf klappt, Versand nicht/);
+  assert.match(noSmtp.data.steps.find((s) => !s.ok).hint, /keine Verbindung an|blockiert/);
+
+  // Port des Versands beim Abruf eingetragen → klarer Hinweis
+  const list = helper('sql', "SELECT v FROM settings WHERE k = 'mailboxes'");
+  const boxes = JSON.parse(list[0].v);
+  boxes[0].port = 465;
+  helper('setting', 'mailboxes', JSON.stringify(boxes));
+  const smtpPort = await admin.req('POST', '/admin/mailboxes/mb1/check');
+  assert.equal(smtpPort.data.ok, false);
+  assert.match(smtpPort.data.steps[0].hint, /993/);
+
+  // Server-Schreibweisen aus Mailprogrammen werden verstanden
+  const saved = await admin.req('PUT', '/admin/mailboxes', { mailboxes: [{ id: 'mb1', email: 'support@perfumecloud.de', host: '{mxf9a2.example.invalid:143/imap/tls}INBOX', port: 993, security: 'ssl' }] });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const mb = saved.data.mailboxes.find((x) => x.id === 'mb1');
+  assert.deepEqual([mb.host, mb.port, mb.security], ['mxf9a2.example.invalid', 143, 'starttls']);
+  assert.match(saved.data.tests.mb1.steps[0].hint ?? '', /gibt es nicht/);
+
+  // SMTP-Port in den Einstellungen: nur 465, 587 oder automatisch
+  await admin.req('PUT', '/admin/settings', { smtp_port: 2525 });
+  assert.equal((await admin.req('GET', '/admin/integrations')).data.mail.smtpPort, 0);
+  await admin.req('PUT', '/admin/settings', { smtp_port: 587 });
+  assert.equal((await admin.req('GET', '/admin/integrations')).data.mail.smtpPort, 587);
+  await admin.req('PUT', '/admin/settings', { smtp_port: 0 });
+  helper('mail', String(IMAP_PORT));
+});
+
+test('Club: Verbindung, Rechte, Statistik, Nachricht an Mitglieder, Club-Admin-Link', async () => {
+  // Noch nicht verbunden
+  const s0 = await admin.req('GET', '/admin/club');
+  assert.equal(s0.data.club.configured, false);
+  assert.equal((await admin.req('GET', '/club/stats')).status, 409);
+  assert.equal((await kim.req('GET', '/club/stats')).status, 403, 'Mitglied ohne Club-Zugang');
+  assert.equal((await kim.req('GET', '/admin/club')).status, 403);
+  assert.equal((await admin.req('GET', '/sync?since=0')).data.meta.clubConfigured, false);
+
+  // Adresse prüfen
+  assert.equal((await admin.req('PUT', '/admin/club', { url: 'http://club.example.de' })).status, 422);
+  // Falscher Schlüssel → verständliche Meldung
+  const bad = await admin.req('PUT', '/admin/club', { url: `${clubUrl}/api/`, key: 'falsch' });
+  assert.equal(bad.status, 200, JSON.stringify(bad.data));
+  assert.equal(bad.data.club.url, clubUrl, '/api am Ende wird entfernt');
+  assert.equal(bad.data.test.ok, false);
+  assert.match(bad.data.test.message, /Schlüssel stimmt nicht/);
+  // Richtiger Schlüssel
+  const ok = await admin.req('PUT', '/admin/club', { key: CLUB_KEY });
+  assert.equal(ok.data.test.ok, true, ok.data.test.message);
+  assert.match(ok.data.test.message, /Version 1\.4\.0/);
+  assert.equal(ok.data.club.configured, true);
+  assert.equal(ok.data.club.hasKey, true);
+  assert.ok(!JSON.stringify(ok.data).includes(CLUB_KEY), 'Schlüssel geht nie an den Browser');
+  assert.equal((await admin.req('POST', '/admin/club/ping')).data.club.status.ok, true);
+  assert.equal((await admin.req('GET', '/sync?since=0')).data.meta.clubConfigured, true);
+  assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.clubConfigured, false);
+
+  // Statistik
+  const st = await admin.req('GET', '/club/stats');
+  assert.equal(st.status, 200, JSON.stringify(st.data));
+  assert.equal(st.data.members, 42);
+  assert.equal(st.data.tiers.length, 3);
+  assert.ok(clubCalls.every((c) => c.key === CLUB_KEY || c.key === 'falsch'));
+
+  // Kim bekommt Club-Zugang
+  const u = await admin.req('PUT', `/admin/users/${kimId}`, { club_access: true });
+  assert.equal(u.status, 200, JSON.stringify(u.data));
+  assert.equal((await kim.req('GET', '/me')).data.user.club_access, 1);
+  assert.equal((await kim.req('GET', '/club/stats')).status, 200);
+  assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.clubConfigured, true);
+  assert.equal((await admin.req('GET', '/admin/maintenance')).data.people.find((p) => p.id === kimId).clubAccess, true);
+
+  // Nachricht an Mitglieder: Vorlagen und Empfänger
+  const ov = await kim.req('GET', '/club/broadcasts');
+  assert.equal(ov.status, 200);
+  assert.equal(ov.data.templates[0].key, 'release');
+  assert.equal(ov.data.me.email, 'kim@example.de');
+  // Platzhalter nicht ausgefüllt
+  const tpl = ov.data.templates[0];
+  const unfilled = await kim.req('POST', '/club/broadcasts', { template: 'release', title: tpl.title, body: tpl.body, audience: 'all' });
+  assert.equal(unfilled.status, 422);
+  assert.match(unfilled.data.error, /Platzhalter/);
+  const draft = await kim.req('POST', '/club/broadcasts', { template: 'release', title: 'Neu: Ambre Soir', body: '{vorname}, unser neuer Duft Ambre Soir ist da.', audience: 'all', url: 'https://perfumecloud.de/products/ambre-soir', scheduled_at: 'morgen' });
+  assert.equal(draft.status, 200, JSON.stringify(draft.data));
+  assert.equal(draft.data.status, 'draft');
+  const id = draft.data.id;
+  const sent = clubCalls.at(-1);
+  assert.deepEqual(sent.body.user, { id: kimId, name: 'Kim K.', email: 'kim@example.de' }, 'Person kommt vom Server, nicht aus dem Browser');
+  assert.equal(sent.body.scheduled_at, null);
+
+  // Zur Prüfung, eigene Freigabe verboten (Vier-Augen-Prinzip), Admin gibt zurück
+  assert.equal((await kim.req('POST', `/club/broadcasts/${id}/submit`)).data.status, 'review');
+  const self = await kim.req('POST', `/club/broadcasts/${id}/approve`);
+  assert.equal(self.status, 403);
+  assert.match(self.data.error, /Vier-Augen/);
+  const back = await admin.req('POST', `/club/broadcasts/${id}/reject`, { note: 'Bitte Link prüfen' });
+  assert.equal(back.data.status, 'draft');
+  assert.equal(back.data.review_note, 'Marius: Bitte Link prüfen');
+  // Überarbeiten, erneut einreichen, Admin gibt frei → wird sofort verschickt
+  assert.equal((await kim.req('PUT', `/club/broadcasts/${id}`, { template: 'release', title: 'Neu: Ambre Soir', body: 'Unser neuer Duft ist da.', audience: 'silber' })).data.audience, 'silber');
+  await kim.req('POST', `/club/broadcasts/${id}/submit`);
+  const kicks = clubCalls.filter((c) => c.path === '/api/internal/kick').length;
+  const appr = await admin.req('POST', `/club/broadcasts/${id}/approve`);
+  assert.equal(appr.status, 200, JSON.stringify(appr.data));
+  assert.equal(appr.data.status, 'sent');
+  assert.equal(appr.data.approved_by_name, 'Marius');
+  assert.equal(clubCalls.filter((c) => c.path === '/api/internal/kick').length, kicks + 1, 'Versand sofort angestoßen');
+  // Test an eigene Geräte: Meldung des Clubs kommt durch
+  const tst = await kim.req('POST', `/club/broadcasts/${id}/test`);
+  assert.equal(tst.status, 409);
+  assert.match(tst.data.error, /kein Gerät/);
+  // Ungültige ID, Löschen
+  assert.equal((await kim.req('POST', '/club/broadcasts/abc/submit')).status, 404);
+  const d2 = await kim.req('POST', '/club/broadcasts', { kind: 'feedback', template: 'feedback', title: 'Wie gefällt dir der Club?', body: 'Sag es uns.', audience: 'all' });
+  assert.equal(d2.data.kind, 'feedback');
+  assert.equal((await kim.req('DELETE', `/club/broadcasts/${d2.data.id}`)).status, 200);
+
+  // Club-Admin per Einmal-Link
+  const sso = await kim.req('POST', '/club/sso');
+  assert.equal(sso.status, 200, JSON.stringify(sso.data));
+  assert.match(sso.data.url, /\/api\/admin\/sso\?t=/);
+  club.denySso.add('kim@example.de');
+  const denied = await kim.req('POST', '/club/sso');
+  assert.equal(denied.status, 403);
+  assert.match(denied.data.error, /Kein Zugriff/);
+
+  // Zugang wieder entziehen
+  await admin.req('PUT', `/admin/users/${kimId}`, { club_access: false });
+  assert.equal((await kim.req('GET', '/club/broadcasts')).status, 403);
+  assert.equal((await kim.req('POST', '/club/sso')).status, 403);
+
+  // „Datenbank aktualisieren“ bringt auch den Club auf den neuesten Stand
+  const fix = await admin.req('POST', '/admin/maintenance');
+  assert.ok(fix.data.log.some((l) => /Club-Datenbank auf Version 1\.4\.0/.test(l)), fix.data.log.join('\n'));
+
+  // Club nicht erreichbar → klare Meldung
+  await admin.req('PUT', '/admin/club', { url: `http://127.0.0.1:${CLOSED_PORT}` });
+  const down = await admin.req('GET', '/club/stats');
+  assert.equal(down.status, 502);
+  assert.match(down.data.error, /nicht erreichbar/);
+});
+
+test('Club: Adresse und Schlüssel aus der gemeinsamen Datenbank erkennen', async () => {
+  await admin.req('PUT', '/admin/club', { url: '', clear_key: true });
+  assert.equal((await admin.req('GET', '/admin/club')).data.club.configured, false);
+  helper('sql', 'CREATE TABLE club_settings (k VARCHAR(100) PRIMARY KEY, v TEXT, updated_at BIGINT)');
+  helper('sql', `INSERT INTO club_settings (k, v, updated_at) VALUES ('internal_key', '${JSON.stringify(CLUB_KEY)}', 1), ('app_url', '${JSON.stringify(clubUrl)}', 1)`);
+  const s = await admin.req('GET', '/admin/club');
+  assert.equal(s.data.club.configured, true);
+  assert.equal(s.data.club.urlSource, 'auto');
+  assert.equal(s.data.club.keySource, 'auto');
+  assert.equal(s.data.club.effectiveUrl, clubUrl);
+  assert.equal((await admin.req('POST', '/admin/club/ping')).data.test.ok, true);
+  assert.equal((await admin.req('GET', '/club/stats')).data.members, 42);
+  // Eigene Angaben haben Vorrang
+  const manual = await admin.req('PUT', '/admin/club', { key: 'eigener-schluessel' });
+  assert.equal(manual.data.club.keySource, 'manual');
+  assert.equal(manual.data.test.ok, false);
+  await admin.req('PUT', '/admin/club', { clear_key: true });
+  assert.equal((await admin.req('GET', '/admin/club')).data.club.keySource, 'auto');
 });
 
 test('Login-Sperre nach zu vielen Versuchen', async () => {

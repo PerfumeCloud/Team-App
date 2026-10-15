@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowDownRight, ArrowUpRight, Ban, ChartLine, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, Trophy, TriangleAlert, Truck, Undo2 } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Ban, ChartLine, Crown, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, Trophy, TriangleAlert, Truck, Undo2 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { AreaChart, BarList, StatTile, Trend } from '../components/charts';
 import { Button, Chip, cx, EmptyState, IconButton, Segmented, Spinner } from '../components/ui';
@@ -76,9 +76,16 @@ export default function Statistics() {
         title="Statistik"
         subtitle={s?.lastSync ? `Daten aus Shopify · Stand ${relative(s.lastSync, now)}` : 'Daten aus Shopify'}
         actions={
-          <IconButton label="Aktualisieren" onClick={() => load(days)}>
-            <RefreshCw className={cx('h-[18px] w-[18px]', loading[days] && 'animate-spin')} />
-          </IconButton>
+          <>
+            {meta?.clubConfigured && (
+              <Button size="sm" variant="soft" icon={<Crown className="h-3.5 w-3.5" />} onClick={() => navigate('/club')}>
+                Members Club
+              </Button>
+            )}
+            <IconButton label="Aktualisieren" onClick={() => load(days)}>
+              <RefreshCw className={cx('h-[18px] w-[18px]', loading[days] && 'animate-spin')} />
+            </IconButton>
+          </>
         }
       />
 

@@ -5,6 +5,7 @@ import { Logo, Spinner, Toasts } from './components/ui';
 import { useStore } from './lib/store';
 import Home from './pages/Home';
 import { Invite, Login, Setup } from './pages/Auth';
+import { refreshPush } from './lib/push';
 
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Notes = lazy(() => import('./pages/Notes'));
@@ -13,6 +14,7 @@ const Calendar = lazy(() => import('./pages/Calendar'));
 const Inbox = lazy(() => import('./pages/Inbox'));
 const Statistics = lazy(() => import('./pages/Statistics'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Club = lazy(() => import('./pages/Club'));
 
 const SYNC_MS = 4000;
 
@@ -20,6 +22,10 @@ const SYNC_MS = 4000;
 function SyncLoop() {
   const sync = useStore((s) => s.sync);
   const navigate = useNavigate();
+  useEffect(() => {
+    // Push-Abo dieses Geräts beim Server auffrischen (falls es dort fehlt oder der Schlüssel neu ist)
+    void refreshPush().catch(() => undefined);
+  }, []);
   useEffect(() => {
     const tick = () => document.visibilityState === 'visible' && sync();
     const t = window.setInterval(tick, SYNC_MS);
@@ -91,6 +97,8 @@ export default function App() {
                 <Route path="/notizen/:id" element={<Notes />} />
                 <Route path="/postfach" element={<Inbox />} />
                 <Route path="/statistik" element={<Statistics />} />
+                <Route path="/club" element={<Club />} />
+                <Route path="/club/:tab" element={<Club />} />
                 <Route path="/einstellungen" element={<Settings />} />
                 <Route path="/einstellungen/:tab" element={<Settings />} />
                 <Route path="*" element={<Home />} />

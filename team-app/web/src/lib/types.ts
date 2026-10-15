@@ -34,6 +34,8 @@ export interface User {
   email: string;
   color: UserColor;
   role: 'admin' | 'member';
+  /** Zugang zum Members Club (Admins haben ihn immer) */
+  club_access?: number;
   updated_at: number;
   deleted: number;
 }
@@ -140,6 +142,9 @@ export interface Meta {
   jobsLastRun: number;
   ordersLastSync: number;
   mailLastFetch: number;
+  /** Members Club verbunden und diese Person darf ihn sehen */
+  clubConfigured?: boolean;
+  version?: string;
 }
 
 export interface SyncResponse {
@@ -173,7 +178,41 @@ export interface MyMailbox {
   } | null;
   suggestedHost: string;
   lastFetch: number;
-  test?: { ok: boolean; message: string };
+  test?: MailCheck;
+}
+
+/** Ein Schritt der Verbindungsprüfung, z. B. „Anmeldung als info@…“ */
+export interface MailCheckStep {
+  label: string;
+  ok: boolean;
+  detail: string;
+  hint: string | null;
+}
+
+export interface MailCheck {
+  ok: boolean;
+  /** Abruf (IMAP) klappt */
+  imap: boolean;
+  /** Versand (SMTP) klappt – null = nicht geprüft */
+  smtp: boolean | null;
+  message: string;
+  steps: MailCheckStep[];
+}
+
+export interface PushDevice {
+  id: string;
+  device: string;
+  created_at: number;
+  last_ok_at: number | null;
+  last_status: number | null;
+  last_error: string | null;
+  fail_count: number;
+}
+
+export interface PushTestResult {
+  devices: number;
+  sent: number;
+  results: { id: string; device: string; ok: boolean; status: number; reason: string }[];
 }
 
 export interface StatusResponse {
@@ -237,10 +276,116 @@ export interface Integrations {
     apiVersion: string;
   };
   mailboxes: MailboxConfig[];
+  mail?: {
+    lastFetch: number;
+    lastError: { at: number; mailbox: string; message: string } | null;
+    smtpHost: string;
+    /** 0 = automatisch (465, sonst 587) */
+    smtpPort: number;
+    sender: string | null;
+  };
   cron: { url: string; lastRun: number; jobsLastRun: number };
   settings: { low_stock_threshold: number; base_url: string; holiday_state: string; holidays_on: boolean; shop_days_on: boolean };
   pushDevices: number;
-  tests?: Record<string, { ok: boolean; message: string }>;
+  tests?: Record<string, MailCheck>;
   test?: { ok: boolean; message: string };
   summary?: Record<string, unknown>;
+}
+
+// ---------------- Members Club ----------------
+
+export interface ClubSettings {
+  club: {
+    url: string;
+    hasKey: boolean;
+    /** Aus der gemeinsamen Datenbank erkannt (club_settings) */
+    detected: { url: string; hasKey: boolean } | null;
+    effectiveUrl: string;
+    urlSource: 'manual' | 'auto' | '';
+    keySource: 'manual' | 'auto' | '';
+    configured: boolean;
+    status: { ok: boolean; message: string; at: number } | null;
+  };
+  test?: { ok: boolean; message: string } | null;
+}
+
+export interface ClubStats {
+  members: number;
+  new_7: number;
+  new_30: number;
+  active_30: number;
+  joins_by_month: { month: string; count: number }[];
+  tiers: { key: string; name: string; count: number }[];
+  points: {
+    earned: number;
+    earned_30: number;
+    redeemed: number;
+    redeemed_30: number;
+    expired: number;
+    available: number;
+    available_value_cents: number;
+    pending: number;
+    locked: number;
+  };
+  bonus: Record<string, { count: number; points: number; title: string }> | [];
+  codes: Partial<Record<'active' | 'used' | 'expired' | 'cancelled' | 'creating', { count: number; cents: number }>> | [];
+  codes_used_30: { count: number; cents: number };
+  orders: { count: number; revenue_cents: number };
+  orders_30: { count: number; revenue_cents: number };
+  push_members: number;
+  feedback: { gut: number; neutral: number; schlecht: number };
+  promotion: { name: string; factor: number; ends_at: number } | null;
+  open_claims: number;
+  app_url: string;
+  at: number;
+}
+
+export type BroadcastStatus = 'draft' | 'review' | 'approved' | 'sending' | 'sent';
+
+export interface Broadcast {
+  id: string;
+  kind: 'news' | 'feedback';
+  template: string | null;
+  title: string;
+  body: string;
+  url: string | null;
+  audience: string;
+  status: BroadcastStatus;
+  status_label: string;
+  scheduled_at: number | null;
+  created_by: string;
+  created_by_name: string;
+  approved_by_name: string | null;
+  approved_at: number | null;
+  sent_at: number | null;
+  recipients: number;
+  delivered?: number;
+  queued?: number;
+  answers?: number;
+  review_note: string | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BroadcastTemplate {
+  key: string;
+  label: string;
+  kind: 'news' | 'feedback';
+  title: string;
+  body: string;
+  url: string;
+  audience: string;
+  /** Platzhalter, die das Team ausfüllt, z. B. { duft: 'Name des Dufts' } */
+  fields: Record<string, string> | [];
+}
+
+export interface BroadcastOverview {
+  broadcasts: Broadcast[];
+  templates: BroadcastTemplate[];
+  audiences: { key: string; label: string; count: number }[];
+  four_eyes: boolean;
+  quiet: { start: number; end: number };
+  app_url: string;
+  me: { id: string; name: string; email: string };
 }

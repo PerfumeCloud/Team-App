@@ -8,7 +8,9 @@ import {
   CircleCheck,
   Clock,
   Copy,
+  Crown,
   Download,
+  ExternalLink,
   LayoutGrid,
   Lock,
   LogOut,
@@ -17,18 +19,22 @@ import {
   Moon,
   Plus,
   RefreshCw,
+  Send,
   Share,
   ShoppingBag,
+  Smartphone,
+  Stethoscope,
   SquarePlus,
   Sun,
   Trash2,
 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
-import { Avatar, Button, Chip, cx, Segmented, Spinner, Toggle } from '../components/ui';
+import { Avatar, Button, Chip, cx, IconButton, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
-import type { Integrations, MailboxConfig, MyMailbox, Prefs, PushKind, User, UserColor } from '../lib/types';
-import { disablePush, enablePush, isIos, isStandalone, pushState, type PushState } from '../lib/push';
+import type { ClubSettings, Integrations, MailboxConfig, MailCheck, MyMailbox, Prefs, PushDevice, PushKind, PushTestResult, User, UserColor } from '../lib/types';
+import { disablePush, enablePush, isIos, isStandalone, pushState, thisDeviceId, type PushState } from '../lib/push';
+import { openClubAdmin } from './Club';
 import { STATES } from '../lib/holidays';
 import { getThemePref, setThemePref, type ThemePref } from '../lib/theme';
 import widgetTemplate from '../lib/widget-template.js?raw';
@@ -46,9 +52,9 @@ const PUSH_KINDS: { key: PushKind; label: string; hint: string }[] = [
   { key: 'events', label: 'Termine', hint: 'Erinnerung vor Terminen und wenn dich jemand einträgt' },
 ];
 
-function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+function Section({ title, description, children, id }: { title: string; description?: ReactNode; children: ReactNode; id?: string }) {
   return (
-    <section className="card p-5 md:p-6">
+    <section className="card scroll-mt-24 p-5 md:p-6" id={id}>
       <h2 className="font-display text-[23px] font-semibold text-ink">{title}</h2>
       {description && <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">{description}</p>}
       <div className="mt-5">{children}</div>
@@ -86,6 +92,7 @@ function General() {
   const prefs = useStore((s) => s.prefs);
   const setMe = useStore((s) => s.setMe);
   const logout = useStore((s) => s.logout);
+  const version = useStore((s) => s.meta?.version);
   const [name, setName] = useState(me.name);
   const [theme, setTheme] = useState<ThemePref>(getThemePref());
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '' });
@@ -175,7 +182,7 @@ function General() {
       </Section>
 
       <div className="flex items-center justify-between px-1 pb-4">
-        <span className="text-[12px] text-ink-3">Perfume Cloud Team-App · Version 1.0</span>
+        <span className="text-[12px] text-ink-3">Perfume Cloud Team-App{version ? ` · Version ${version}` : ''}</span>
         <Button variant="danger" icon={<LogOut className="h-4 w-4" />} onClick={() => logout()}>
           Abmelden
         </Button>
@@ -187,9 +194,50 @@ function General() {
 function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Prefs) => void }) {
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [devices, setDevices] = useState<PushDevice[] | null>(null);
+  const [thisId, setThisId] = useState<string | null>(null);
+  const [results, setResults] = useState<PushTestResult | null>(null);
+  const loadDevices = () =>
+    api<{ devices: PushDevice[] }>('GET', '/push/devices')
+      .then((r) => setDevices(r.devices))
+      .catch(() => undefined);
   useEffect(() => {
     pushState().then(setState).catch(() => setState('unsupported'));
   }, []);
+  useEffect(() => {
+    void loadDevices();
+    thisDeviceId().then(setThisId).catch(() => setThisId(null));
+  }, [state]);
+
+  async function test() {
+    setTesting(true);
+    try {
+      const r = await api<PushTestResult>('POST', '/push/test');
+      setResults(r);
+      if (r.devices === 0) toast('Kein Gerät angemeldet – tippe auf „Aktivieren“.', 'error');
+      else if (r.sent === r.devices) toast(r.devices === 1 ? 'Test gesendet – kommt gleich an' : `Test an ${r.devices} Geräte gesendet`, 'success');
+      else toast(`${r.devices - r.sent} von ${r.devices} Geräten nicht erreicht – Details unten`, 'error');
+      await loadDevices();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function removeDevice(d: PushDevice) {
+    if (d.id === thisId) {
+      await disablePush();
+      setState('off');
+    } else {
+      await api('DELETE', `/push/devices/${d.id}`).catch((e) => toast((e as Error).message, 'error'));
+    }
+    setResults(null);
+    await loadDevices();
+  }
+
+  const missingHere = state === 'subscribed' && devices !== null && thisId !== null && !devices.some((d) => d.id === thisId);
 
   async function enable() {
     setBusy(true);
@@ -236,14 +284,7 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
               <CircleCheck className="h-4 w-4" /> Aktiv auf diesem Gerät
             </span>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={async () => {
-                  const r = await api<{ sent: number }>('POST', '/push/test').catch(() => ({ sent: 0 }));
-                  toast(r.sent ? 'Test gesendet – kommt gleich an' : 'Senden fehlgeschlagen', r.sent ? 'success' : 'error');
-                }}
-              >
+              <Button size="sm" variant="secondary" icon={<Send className="h-3.5 w-3.5" />} loading={testing} onClick={test}>
                 Test senden
               </Button>
               <Button
@@ -260,6 +301,53 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
           </div>
         )}
       </div>
+      {missingHere && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-warn/10 p-3 text-[13.5px] text-warn">
+          <span className="flex items-start gap-2">
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> Dieses Gerät ist beim Server nicht angemeldet und bekommt deshalb nichts.
+          </span>
+          <Button size="sm" variant="secondary" loading={busy} onClick={enable}>
+            Neu anmelden
+          </Button>
+        </div>
+      )}
+      {devices && devices.length > 0 && (
+        <div className="mt-4">
+          <p className="eyebrow mb-1">Deine Geräte</p>
+          <ul className="divide-y divide-line/70">
+            {devices.map((d) => {
+              const r = results?.results.find((x) => x.id === d.id);
+              const failing = r ? !r.ok : d.fail_count > 0;
+              const reason = r ? r.reason : d.last_error;
+              const status = r ? r.status : d.last_status;
+              return (
+                <li key={d.id} className="flex items-start gap-3 py-2.5">
+                  <Smartphone className={cx('mt-0.5 h-4 w-4 shrink-0', failing ? 'text-bad' : 'text-ink-3')} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5 text-[14px] text-ink">
+                      {d.device}
+                      {d.id === thisId && <Chip tone="accent">Dieses Gerät</Chip>}
+                      {r && (r.ok ? <Chip tone="good">Test angekommen beim Push-Dienst</Chip> : <Chip tone="bad">Test fehlgeschlagen</Chip>)}
+                    </div>
+                    <div className="text-[12.5px] text-ink-3">
+                      {failing
+                        ? `${status ? `HTTP ${status} · ` : ''}${reason || 'Fehler'}${d.fail_count > 1 ? ` · ${d.fail_count}× in Folge` : ''}`
+                        : d.last_ok_at
+                          ? `Zuletzt zugestellt ${relative(d.last_ok_at)}`
+                          : `Angemeldet ${relative(d.created_at)}`}
+                    </div>
+                    {failing && <p className="mt-1 text-[12.5px] text-ink-2">{pushHint(reason ?? '', status ?? 0)}</p>}
+                  </div>
+                  <IconButton label={`${d.device} entfernen`} className="h-8 w-8 hover:text-bad" onClick={() => removeDevice(d)}>
+                    <Trash2 className="h-4 w-4" />
+                  </IconButton>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-1 text-[12px] text-ink-3">„Angekommen beim Push-Dienst“ heißt: Apple, Google oder Mozilla haben die Nachricht angenommen. Kommt trotzdem nichts, prüfe Fokus/Nicht stören und die Mitteilungs-Einstellungen des Geräts.</p>
+        </div>
+      )}
       {prefs && (
         <ul className="mt-4 divide-y divide-line/70">
           {PUSH_KINDS.map((k) => (
@@ -303,6 +391,20 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
       </p>
     </Section>
   );
+}
+
+/** Verständlicher Hinweis zu einer Fehlermeldung des Push-Dienstes. */
+function pushHint(reason: string, status: number): string {
+  const r = reason.toLowerCase();
+  if (r.includes('jwt') || r.includes('vapid') || status === 401 || status === 403) {
+    return 'Der Push-Dienst lehnt die Anmeldung ab (Schlüssel passt nicht zum Gerät). Auf diesem Gerät „Ausschalten“ und wieder „Aktivieren“ tippen – dann klappt es mit dem aktuellen Schlüssel.';
+  }
+  if (r.includes('keine verbindung') || status === 0) {
+    return 'Der Server erreicht den Push-Dienst nicht. Meist nur kurz – sonst beim Hoster prüfen, ob ausgehende Verbindungen (HTTPS) erlaubt sind.';
+  }
+  if (status === 413) return 'Die Nachricht war zu lang für den Push-Dienst.';
+  if (status === 429) return 'Zu viele Nachrichten in kurzer Zeit – der Push-Dienst bremst. Das gibt sich von selbst.';
+  return 'Gerät entfernen und auf dem Gerät Push neu aktivieren.';
 }
 
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
@@ -507,7 +609,11 @@ function Team() {
     <>
       <Section
         title="Team"
-        description={admin ? 'Jede Person bekommt ein eigenes Konto. Am einfachsten per Einladung: Die Person bekommt eine Mail mit einem Link und legt ihr Passwort selbst fest.' : undefined}
+        description={
+          admin
+            ? 'Jede Person bekommt ein eigenes Konto. Am einfachsten per Einladung: Die Person bekommt eine Mail mit einem Link und legt ihr Passwort selbst fest. Admins haben immer Zugang zum Members Club, andere nur mit „Club-Zugang“.'
+            : undefined
+        }
       >
         {inviteResult && <InviteBox r={inviteResult} onClose={() => setInviteResult(null)} />}
         <ul className="divide-y divide-line/70">
@@ -521,6 +627,9 @@ function Team() {
                 <div className="truncate text-[12.5px] text-ink-3">{u.email}</div>
               </div>
               {u.role === 'admin' && <Chip tone="accent">Admin</Chip>}
+              {u.role !== 'admin' && !!u.club_access && (
+                <Chip icon={<Crown className="h-3 w-3" />}>Club</Chip>
+              )}
               {admin && u.id !== me.id && (
                 <div className="flex flex-wrap gap-1">
                   <Button size="sm" variant="ghost" icon={<Mail className="h-3.5 w-3.5" />} onClick={() => invite(u)}>
@@ -539,6 +648,20 @@ function Team() {
                   >
                     {u.role === 'admin' ? 'Kein Admin' : 'Zum Admin'}
                   </Button>
+                  {u.role !== 'admin' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<Crown className="h-3.5 w-3.5" />}
+                      title="Zugang zum Members Club: Statistik, Nachrichten an Mitglieder, Club-Admin"
+                      onClick={async () => {
+                        await api('PUT', `/admin/users/${u.id}`, { club_access: !u.club_access }).catch((e) => toast(e.message, 'error'));
+                        await sync();
+                      }}
+                    >
+                      {u.club_access ? 'Kein Club' : 'Club-Zugang'}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -689,6 +812,8 @@ interface Diagnostics {
     lastSeen: number | null;
     pushDevices: number;
     pushLastOk: number | null;
+    pushError?: string | null;
+    clubAccess?: boolean;
     mailPush: boolean;
     mailboxes: string[];
     invitePending: boolean;
@@ -781,9 +906,15 @@ function MaintenanceSection() {
                       {p.pushDevices} Push-Gerät{p.pushDevices === 1 ? '' : 'e'}
                       {p.pushLastOk ? ` · zuletzt ${relative(p.pushLastOk, now)}` : ''}
                     </Chip>
+                    {p.pushError && (
+                      <Chip tone="bad" icon={<CircleAlert className="h-3 w-3" />}>
+                        Push-Fehler: {p.pushError}
+                      </Chip>
+                    )}
                     <Chip>
                       {p.mailboxes.length} Postf{p.mailboxes.length === 1 ? 'ach' : 'ächer'} sichtbar
                     </Chip>
+                    {p.clubAccess && <Chip icon={<Crown className="h-3 w-3" />}>Club</Chip>}
                     {problems.map((x) => (
                       <Chip key={x} tone="warn" icon={<CircleAlert className="h-3 w-3" />}>
                         {x}
@@ -817,6 +948,131 @@ function MaintenanceSection() {
           </p>
         </>
       )}
+    </Section>
+  );
+}
+
+// ---------------- Members Club ----------------
+
+function ClubSection() {
+  const navigate = useNavigate();
+  const sync = useStore((s) => s.sync);
+  const now = useNow();
+  const [data, setData] = useState<ClubSettings | null>(null);
+  const [form, setForm] = useState({ url: '', key: '' });
+  const [busy, setBusy] = useState<'' | 'save' | 'ping' | 'open'>('');
+  useEffect(() => {
+    api<ClubSettings>('GET', '/admin/club')
+      .then((d) => {
+        setData(d);
+        setForm({ url: d.club.url, key: '' });
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    // Link „Club verbinden“ führt hierher (#club)
+    if (data && window.location.hash === '#club') document.getElementById('club')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [data]);
+
+  async function call(kind: 'save' | 'ping', fn: () => Promise<ClubSettings>) {
+    setBusy(kind);
+    try {
+      const d = await fn();
+      setData(d);
+      setForm({ url: d.club.url, key: '' });
+      if (d.test) toast(d.test.message, d.test.ok ? 'success' : 'error');
+      void sync();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  if (!data) return null;
+  const c = data.club;
+  return (
+    <Section
+      id="club"
+      title="Members Club"
+      description="Verbindung zur Club-App (Kunden-App). Damit zeigt die Team-App die Club-Statistik, ihr könnt Nachrichten an Mitglieder schicken und den Club-Admin mit einem Klick öffnen. Adresse und Schlüssel stehen im Club-Admin unter Einstellungen → System → „Verbindung zur Team-App“."
+    >
+      {c.detected && (
+        <p className="mb-4 flex items-start gap-2 rounded-xl bg-good/10 p-3 text-[13px] text-good">
+          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Gemeinsame Datenbank erkannt: {c.detected.url || 'Adresse fehlt'} · Schlüssel {c.detected.hasKey ? 'gefunden' : 'fehlt'}. Eigene Angaben unten haben Vorrang.
+          </span>
+        </p>
+      )}
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void call('save', () => api<ClubSettings>('PUT', '/admin/club', { url: form.url, ...(form.key.trim() ? { key: form.key } : {}) }));
+        }}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="club-url">
+              Adresse des Clubs {c.urlSource === 'auto' && <span className="text-ink-3">(automatisch)</span>}
+            </label>
+            <input id="club-url" className="field" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={c.detected?.url || 'https://app.perfumecloud.de'} inputMode="url" />
+          </div>
+          <div>
+            <label className="label" htmlFor="club-key">
+              Schlüssel {c.hasKey ? <span className="text-ink-3">(gespeichert)</span> : c.keySource === 'auto' ? <span className="text-ink-3">(automatisch)</span> : null}
+            </label>
+            <input
+              id="club-key"
+              className="field"
+              type="password"
+              value={form.key}
+              onChange={(e) => setForm({ ...form, key: e.target.value })}
+              placeholder={c.hasKey ? '•••••••• unverändert' : c.keySource === 'auto' ? 'aus der gemeinsamen Datenbank' : ''}
+              autoComplete="new-password"
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" icon={<Crown className="h-4 w-4" />} loading={busy === 'save'}>
+            Speichern & testen
+          </Button>
+          {c.configured && (
+            <>
+              <Button type="button" variant="secondary" loading={busy === 'ping'} onClick={() => call('ping', () => api<ClubSettings>('POST', '/admin/club/ping'))}>
+                Verbindung testen
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => navigate('/club')}>
+                Zur Club-Seite
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                icon={<ExternalLink className="h-4 w-4" />}
+                loading={busy === 'open'}
+                onClick={async () => {
+                  setBusy('open');
+                  await openClubAdmin();
+                  setBusy('');
+                }}
+              >
+                Club-Admin
+              </Button>
+            </>
+          )}
+          {c.hasKey && (
+            <Button type="button" variant="ghost" onClick={() => call('save', () => api<ClubSettings>('PUT', '/admin/club', { clear_key: true }))}>
+              Schlüssel löschen
+            </Button>
+          )}
+        </div>
+        <StatusLine status={data.test ?? c.status} />
+        <p className="text-[12px] text-ink-3">
+          Der Schlüssel bleibt auf dem Server – der Browser bekommt ihn nie zu sehen. Zugang zum Club haben Admins und alle mit „Club-Zugang“ (Einstellungen → Team).
+          {c.status?.at ? ` Zuletzt geprüft: ${relative(c.status.at, now)}` : ''}
+        </p>
+      </form>
     </Section>
   );
 }
@@ -914,8 +1170,21 @@ function MyMailboxSection() {
   const [data, setData] = useState<MyMailbox | null>(null);
   const [form, setForm] = useState({ email: '', host: '', port: 993, user: '', password: '' });
   const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState<'' | 'save' | 'remove'>('');
-  const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [busy, setBusy] = useState<'' | 'save' | 'remove' | 'check'>('');
+  const [test, setTest] = useState<MailCheck | null>(null);
+
+  async function check() {
+    setBusy('check');
+    try {
+      const r = await api<MailCheck>('POST', '/me/mailbox/check');
+      setTest(r);
+      toast(r.ok ? 'Abruf und Versand funktionieren' : 'Es hakt – Details unten', r.ok ? 'success' : 'error');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy('');
+    }
+  }
 
   function apply(r: MyMailbox) {
     setData(r);
@@ -993,12 +1262,16 @@ function MyMailboxSection() {
               <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
                 Ändern
               </Button>
+              <Button size="sm" variant="secondary" icon={<Stethoscope className="h-3.5 w-3.5" />} loading={busy === 'check'} onClick={check}>
+                Prüfen
+              </Button>
               <Button size="sm" variant="ghost" loading={busy === 'remove'} onClick={remove}>
                 Entfernen
               </Button>
             </div>
           </div>
           <StatusLine status={test ?? mb.status} />
+          <CheckSteps check={test} />
         </div>
       ) : (
         <form onSubmit={save} className="space-y-3">
@@ -1047,6 +1320,7 @@ function MyMailboxSection() {
             </div>
           </div>
           <StatusLine status={test} />
+          <CheckSteps check={test && !test.ok ? test : null} />
           <div className="flex flex-wrap gap-2 pt-1">
             <Button type="submit" icon={<Mail className="h-4 w-4" />} loading={busy === 'save'}>
               Speichern & testen
@@ -1078,6 +1352,26 @@ function StatusLine({ status }: { status?: { ok: boolean; message: string; at?: 
   );
 }
 
+/** Ergebnis der Verbindungsprüfung Schritt für Schritt – mit Hinweis, was zu tun ist. */
+function CheckSteps({ check }: { check?: MailCheck | null }) {
+  if (!check?.steps?.length) return null;
+  return (
+    <ol className="mt-3 space-y-1.5 rounded-xl bg-surface-2/70 p-3" aria-label="Verbindungsprüfung">
+      {check.steps.map((st, i) => (
+        <li key={i} className="text-[13px]">
+          <div className="flex items-start gap-2">
+            {st.ok ? <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-good" /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-bad" />}
+            <span className="min-w-0 break-words">
+              <span className="font-medium text-ink">{st.label}</span> <span className="text-ink-2">– {st.detail}</span>
+            </span>
+          </div>
+          {st.hint && <p className="ml-6 mt-1 rounded-lg bg-warn/10 px-2.5 py-1.5 text-[12.5px] leading-relaxed text-warn">{st.hint}</p>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function IntegrationsPanel() {
   const [data, setData] = useState<Integrations | null>(null);
   const sync = useStore((s) => s.sync);
@@ -1087,11 +1381,14 @@ function IntegrationsPanel() {
   const [boxes, setBoxes] = useState<MailboxConfig[]>(DEFAULT_MAILBOXES);
   const [busy, setBusy] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(5);
+  const [checks, setChecks] = useState<Record<string, MailCheck>>({});
+  const [smtp, setSmtp] = useState({ host: '', port: 0 });
 
   useEffect(() => {
     api<Integrations>('GET', '/admin/integrations')
       .then((d) => {
         setData(d);
+        setSmtp({ host: d.mail?.smtpHost ?? '', port: d.mail?.smtpPort ?? 0 });
         setShop({ shop: d.shopify.shop || 'ks8yin-mg.myshopify.com', client_id: d.shopify.client_id, client_secret: '' });
         if (d.mailboxes.length) setBoxes(d.mailboxes.map((m) => ({ ...m, password: '' })));
         setThreshold(d.settings.low_stock_threshold);
@@ -1128,6 +1425,7 @@ function IntegrationsPanel() {
     void run('mail', async () => {
       const d = await api<Integrations>('PUT', '/admin/mailboxes', { mailboxes: boxes });
       setData(d);
+      setChecks({});
       setBoxes(d.mailboxes.map((m) => ({ ...m, password: '' })));
       const failed = Object.values(d.tests ?? {}).filter((t) => !t.ok).length;
       toast(failed ? `${failed} Postfach konnte nicht verbunden werden` : 'Postfächer verbunden – Mails werden abgerufen', failed ? 'error' : 'success');
@@ -1144,6 +1442,16 @@ function IntegrationsPanel() {
 
   const setBox = (i: number, patch: Partial<MailboxConfig>) => setBoxes(boxes.map((b, j) => (j === i ? { ...b, ...patch } : b)));
   const team = Object.values(usersMap).filter((u) => !u.deleted);
+
+  /** Abruf und Versand prüfen – inkl. Testmail an das Postfach selbst. */
+  const checkBox = (id: string) =>
+    void run(`check:${id}`, async () => {
+      const r = await api<MailCheck>('POST', `/admin/mailboxes/${id}/check`);
+      setChecks((c) => ({ ...c, [id]: r }));
+      toast(r.ok ? 'Abruf und Versand funktionieren – Testmail ist unterwegs' : 'Es hakt – Details beim Postfach', r.ok ? 'success' : 'error');
+    });
+  const senderBox = data.mailboxes.find((m) => m.email === data.mail?.sender);
+  const cronLate = !data.cron.lastRun || now - data.cron.lastRun > 30 * 60000;
 
   return (
     <>
@@ -1288,7 +1596,23 @@ function IntegrationsPanel() {
                   )}
                 </p>
               </div>
-              <StatusLine status={(b.id && data.tests?.[b.id]) || b.status} />
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <StatusLine status={(b.id && (checks[b.id] ?? data.tests?.[b.id])) || b.status} />
+                {b.id && b.hasPassword && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    icon={<Stethoscope className="h-3.5 w-3.5" />}
+                    loading={busy === `check:${b.id}`}
+                    onClick={() => checkBox(b.id!)}
+                  >
+                    Verbindung prüfen
+                  </Button>
+                )}
+              </div>
+              <CheckSteps check={b.id ? (checks[b.id] ?? (data.tests?.[b.id] && !data.tests[b.id].ok ? data.tests[b.id] : null)) : null} />
             </div>
           ))}
           <div className="flex flex-wrap gap-2">
@@ -1301,6 +1625,70 @@ function IntegrationsPanel() {
           </div>
         </form>
       </Section>
+
+      <Section
+        title="Mails verschicken"
+        description="Einladungen und Testmails gehen über euer Team-Postfach – mit denselben Zugangsdaten wie beim Abruf. Bei netcup ist der Server für den Versand derselbe wie für den Abruf (z. B. mxf9a2.netcup.net), Port 465 (SSL/TLS) oder 587 (STARTTLS)."
+      >
+        <p className="text-[13.5px] text-ink-2">
+          Absender:{' '}
+          <b className="text-ink">{data.mail?.sender ?? 'kein Team-Postfach mit Passwort – bitte oben info@ eintragen'}</b>
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+          <div>
+            <label className="label" htmlFor="smtp-host">
+              Server für den Versand <span className="text-ink-3">(leer = wie beim Abruf)</span>
+            </label>
+            <input id="smtp-host" className="field" value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} placeholder={senderBox?.host || 'wie beim Abruf'} />
+          </div>
+          <div>
+            <span className="label">Port</span>
+            <Segmented
+              value={String(smtp.port)}
+              onChange={(v) => setSmtp({ ...smtp, port: Number(v) })}
+              options={[
+                { value: '0', label: 'Automatisch' },
+                { value: '465', label: '465' },
+                { value: '587', label: '587' },
+              ]}
+            />
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={busy === 'smtp'}
+            onClick={() =>
+              run('smtp', async () => {
+                const d = await api<Integrations>('PUT', '/admin/settings', { smtp_host: smtp.host, smtp_port: smtp.port });
+                setData(d);
+                setSmtp({ host: d.mail?.smtpHost ?? '', port: d.mail?.smtpPort ?? 0 });
+                toast('Gespeichert', 'success');
+              })
+            }
+          >
+            Übernehmen
+          </Button>
+          {senderBox?.id && (
+            <Button size="sm" icon={<Send className="h-3.5 w-3.5" />} loading={busy === `check:${senderBox.id}`} onClick={() => checkBox(senderBox.id!)}>
+              Testmail an {senderBox.email}
+            </Button>
+          )}
+        </div>
+        {senderBox?.id && <CheckSteps check={checks[senderBox.id]} />}
+        {data.mail?.lastError && (
+          <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-3">
+            <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Letzter Fehler beim Abruf ({data.mail.lastError.mailbox}, {relative(data.mail.lastError.at, now)}): {data.mail.lastError.message}
+            </span>
+          </p>
+        )}
+        <p className="mt-3 text-[12px] text-ink-3">Automatisch probiert erst 465, dann 587, und merkt sich den Port, der klappt. Der Benutzername muss die E-Mail-Adresse des Postfachs sein – netcup lehnt sonst den Absender ab.</p>
+      </Section>
+
+      <ClubSection />
 
       <Section
         title="Kalender: Feiertage & Aktionstage"
@@ -1360,6 +1748,14 @@ function IntegrationsPanel() {
             Kopieren
           </Button>
         </div>
+        {cronLate && (
+          <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn/10 p-3 text-[13px] text-warn">
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Der Cronjob läuft nicht{data.cron.lastRun ? ` (zuletzt ${relative(data.cron.lastRun, now)})` : ''}. Ohne ihn werden Mails und Bestellungen nur abgerufen, solange jemand die App offen hat – und Push-Nachrichten kommen verspätet.
+            </span>
+          </p>
+        )}
         <p className="mt-3 flex items-center gap-2 text-[13px] text-ink-2">
           <Clock className="h-4 w-4 text-ink-3" />
           {data.cron.lastRun ? `Cronjob lief zuletzt ${relative(data.cron.lastRun, now)}` : 'Der Cronjob ist noch nicht gelaufen.'}

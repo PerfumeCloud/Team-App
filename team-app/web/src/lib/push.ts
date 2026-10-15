@@ -31,7 +31,20 @@ export async function enablePush(): Promise<PushState> {
   if (!supported()) return isIos() && !isStandalone() ? 'needs-install' : 'unsupported';
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') return perm === 'denied' ? 'denied' : 'default';
-  const reg = await navigator.serviceWorker.ready;
+  await subscribe(await ready());
+  return 'subscribed';
+}
+
+/** Wartet auf den Service Worker – höchstens 10 Sekunden (sonst hängt „Aktivieren“ für immer). */
+async function ready(): Promise<ServiceWorkerRegistration> {
+  const timeout = new Promise<never>((_, reject) =>
+    window.setTimeout(() => reject(new Error('Die App ist noch nicht fertig installiert. Bitte einmal komplett schließen, neu öffnen und nochmal versuchen.')), 10000),
+  );
+  return Promise.race([navigator.serviceWorker.ready, timeout]);
+}
+
+/** Abo anlegen (oder bei neuem Server-Schlüssel ersetzen) und beim Server speichern. */
+async function subscribe(reg: ServiceWorkerRegistration): Promise<PushSubscription> {
   const { publicKey } = await api<{ publicKey: string }>('GET', '/push/key');
   let sub = await reg.pushManager.getSubscription();
   if (sub) {
@@ -44,7 +57,28 @@ export async function enablePush(): Promise<PushState> {
   }
   sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyToBytes(publicKey) });
   await api('POST', '/push/subscribe', sub.toJSON());
-  return 'subscribed';
+  return sub;
+}
+
+/**
+ * Beim Start der App: Ist Push auf diesem Gerät an, das Abo beim Server auffrischen.
+ * So kommt ein Gerät zurück, das der Server entfernt hat, und ein neuer Server-Schlüssel wird übernommen.
+ */
+export async function refreshPush(): Promise<void> {
+  if (!supported() || Notification.permission !== 'granted') return;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg || !(await reg.pushManager.getSubscription())) return;
+  await subscribe(reg);
+}
+
+/** ID des Abos auf diesem Gerät (wie auf dem Server: SHA-256 der Push-Adresse) – oder null. */
+export async function thisDeviceId(): Promise<string | null> {
+  if (!supported()) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  if (!sub || !crypto.subtle) return null;
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint));
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function disablePush(): Promise<void> {

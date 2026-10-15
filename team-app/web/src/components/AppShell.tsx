@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { CalendarDays, ChartLine, CloudOff, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings } from 'lucide-react';
+import { CalendarDays, ChartLine, CloudOff, Crown, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings } from 'lucide-react';
 import { openImportantCount, useStore } from '../lib/store';
 import { relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
@@ -15,6 +15,8 @@ const NAV = [
   { to: '/notizen', label: 'Notizen', icon: NotebookPen },
   { to: '/postfach', label: 'Postfach', icon: Inbox },
   { to: '/statistik', label: 'Statistik', icon: ChartLine },
+  // Nur mit Club-Zugang; am Handy über Statistik erreichbar
+  { to: '/club', label: 'Members Club', icon: Crown, mobile: false, club: true },
 ];
 
 function useBadges() {
@@ -57,6 +59,8 @@ function SyncStatus({ compact }: { compact?: boolean }) {
 export function AppShell({ children }: { children: ReactNode }) {
   const me = useStore((s) => s.me);
   const badges = useBadges();
+  const club = useStore((s) => !!s.meta?.clubConfigured);
+  const nav = NAV.filter((n) => !n.club || club);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to));
@@ -73,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-col gap-1">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {nav.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -143,7 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Tab-Leiste (Handy) */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line/60 bg-surface/85 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg">
-          {NAV.filter((n) => n.mobile !== false).map(({ to, label, icon: Icon }) => (
+          {nav.filter((n) => n.mobile !== false).map(({ to, label, icon: Icon }) => (
             <button
               key={to}
               onClick={() => navigate(to)}

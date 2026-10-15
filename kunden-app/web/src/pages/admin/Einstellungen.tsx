@@ -795,7 +795,7 @@ function System({ data }: { data: Settings }) {
         <h2 className="karte-titel">Verbindung zur Team-App</h2>
         <p className="klein leise">
           Die Team-App zeigt damit die Club-Statistik, verschickt Nachrichten an Mitglieder und öffnet den Admin-Bereich mit einem Klick. Mit gemeinsamer Datenbank findet sie den Schlüssel selbst; sonst in der
-          Team-App unter Einstellungen → Club eintragen.
+          Team-App unter Einstellungen → Integrationen → „Members Club“ eintragen.
         </p>
         <Kopierfeld label="Adresse der Club-App" wert={data.base_url} />
         <Kopierfeld label="Schlüssel (X-Club-Key)" wert={data.internal_key} hilfe="Geheim halten. Nur in der Team-App eintragen." />
