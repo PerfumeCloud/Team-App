@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Check, CircleCheck, Flag, Inbox as InboxIcon, ListPlus, Lock, Mail, Newspaper, Reply, RotateCcw, Settings, UserRound } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
+import { MailSheet } from '../components/mail';
 import { Avatar, Button, Chip, cx, EmptyState, Segmented } from '../components/ui';
 import { useStore } from '../lib/store';
 import type { Email, User } from '../lib/types';
@@ -24,15 +25,19 @@ export default function Inbox() {
   const [view, setView] = useState<View>('important');
   const [box, setBox] = useState<string>(() => params.get('box') ?? 'all');
   const [showAuto, setShowAuto] = useState(false);
+  const [opened, setOpened] = useState<{ id: string; compose: boolean } | null>(null);
 
   // Aus einer Push-Nachricht: /postfach?box=marius.heub@… öffnet das eigene Postfach mit allen offenen Mails
+  // …und /postfach?mail=<id> öffnet direkt die Mail
   useEffect(() => {
     const b = params.get('box');
+    const m = params.get('mail');
     if (b) {
       setBox(b);
       if (b === meta?.myMailbox) setView('open');
-      setParams({}, { replace: true });
     }
+    if (m) setOpened({ id: m, compose: false });
+    if (b || m) setParams({}, { replace: true });
   }, [params, setParams, meta?.myMailbox]);
 
   const users = Object.values(usersMap).filter((u) => !u.deleted);
@@ -146,7 +151,7 @@ export default function Inbox() {
       ) : (
         <ul className="space-y-3">
           {list.map((m) => (
-            <MailRow key={m.id} mail={m} users={users} usersMap={usersMap} now={now} meId={me?.id} />
+            <MailRow key={m.id} mail={m} users={users} usersMap={usersMap} now={now} meId={me?.id} onOpen={(compose) => setOpened({ id: m.id, compose })} />
           ))}
         </ul>
       )}
@@ -155,11 +160,12 @@ export default function Inbox() {
         <br />
         Beantwortete Mails gelten automatisch als erledigt. Postfächer mit 🔒 sehen nur die Personen, für die sie freigegeben sind.
       </p>
+      <MailSheet mail={opened ? (emailsMap[opened.id] ?? null) : null} open={!!opened && !!emailsMap[opened.id]} compose={opened?.compose} onClose={() => setOpened(null)} />
     </>
   );
 }
 
-function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: User[]; usersMap: Record<string, User>; now: number; meId?: string }) {
+function MailRow({ mail, users, usersMap, now, meId, onOpen }: { mail: Email; users: User[]; usersMap: Record<string, User>; now: number; meId?: string; onOpen: (compose: boolean) => void }) {
   const updateEmail = useStore((s) => s.updateEmail);
   const saveTask = useStore((s) => s.saveTask);
   const navigate = useNavigate();
@@ -171,7 +177,6 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
   const assignable = restricted ? users.filter((u) => mail.visible_to!.includes(u.id)) : users;
   const assignee = mail.assignee_id ? usersMap[mail.assignee_id] : null;
   const sender = mail.from_name || mail.from_email || 'Unbekannt';
-  const replyHref = `mailto:${encodeURIComponent(mail.from_email ?? '')}?subject=${encodeURIComponent((mail.subject ?? '').match(/^re:/i) ? (mail.subject ?? '') : `Re: ${mail.subject ?? ''}`)}`;
 
   function toTask() {
     const t = saveTask({
@@ -192,12 +197,14 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
       <div className="flex items-start gap-3">
         <div className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', !mail.seen && open ? 'bg-accent' : 'bg-transparent')} aria-label={!mail.seen ? 'Ungelesen' : undefined} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className={cx('truncate text-[15px] text-ink', !mail.seen ? 'font-semibold' : 'font-medium')}>{sender}</span>
-            <span className="shrink-0 text-[12px] text-ink-3">{relative(mail.received_at, now)}</span>
-          </div>
-          <div className={cx('mt-0.5 text-[14px] leading-snug text-ink', !mail.seen && 'font-medium')}>{mail.subject}</div>
-          {mail.snippet && <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink-2">{mail.snippet}</p>}
+          <button className="block w-full text-left" onClick={() => onOpen(false)} aria-label={`Mail von ${sender} öffnen`}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className={cx('truncate text-[15px] text-ink', !mail.seen ? 'font-semibold' : 'font-medium')}>{sender}</span>
+              <span className="shrink-0 text-[12px] text-ink-3">{relative(mail.received_at, now)}</span>
+            </div>
+            <div className={cx('mt-0.5 text-[14px] leading-snug text-ink', !mail.seen && 'font-medium')}>{mail.subject}</div>
+            {mail.snippet && <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink-2">{mail.snippet}</p>}
+          </button>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {mine ? (
               <Chip tone="neutral" icon={<Lock className="h-3 w-3" />}>
@@ -270,9 +277,9 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
             </Button>
           )
         )}
-        <a href={replyHref} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-surface-2">
-          <Reply className="h-3.5 w-3.5" /> Antworten
-        </a>
+        <Button size="sm" variant="secondary" icon={<Reply className="h-3.5 w-3.5" />} onClick={() => onOpen(true)}>
+          Antworten
+        </Button>
         {open && (
           <>
             {assignable.length > 1 && (

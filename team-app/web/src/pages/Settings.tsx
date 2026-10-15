@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   BellRing,
@@ -30,6 +30,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
+import { Section } from '../components/section';
+import { CustomerTest, ReportsPanel, SignatureSection, TemplatesPanel } from './SettingsMore';
 import { Avatar, Button, Chip, cx, IconButton, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -52,17 +54,10 @@ const PUSH_KINDS: { key: PushKind; label: string; hint: string }[] = [
   { key: 'comments', label: 'Kommentare', hint: 'Zu Aufgaben, die du angelegt hast oder erledigst' },
   { key: 'reminders', label: 'Morgendliche Erinnerung', hint: 'Um 8 Uhr: heute fällige Aufgaben' },
   { key: 'events', label: 'Termine', hint: 'Erinnerung vor Terminen und wenn dich jemand einträgt' },
+  { key: 'shipping', label: 'Versand-Erinnerung', hint: 'Morgens, wenn Bestellungen zu lange auf den Versand warten' },
+  { key: 'feedback', label: 'Unzufriedene Kundin', hint: 'Sofort, wenn jemand nach der Lieferung 1–2 Sterne gibt' },
+  { key: 'weekly', label: 'Wochenrückblick', hint: 'Freitags die Zusammenfassung der Woche' },
 ];
-
-function Section({ title, description, children, id }: { title: string; description?: ReactNode; children: ReactNode; id?: string }) {
-  return (
-    <section className="card scroll-mt-24 p-5 md:p-6" id={id}>
-      <h2 className="font-display text-[23px] font-semibold text-ink">{title}</h2>
-      {description && <p className="mt-1 text-[14px] leading-relaxed text-ink-2">{description}</p>}
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
 
 export default function Settings() {
   const { tab = 'allgemein' } = useParams();
@@ -72,16 +67,31 @@ export default function Settings() {
   const tabs = [
     { value: 'allgemein', label: 'Allgemein' },
     { value: 'team', label: 'Team' },
-    ...(admin ? [{ value: 'integrationen', label: 'Integrationen' }] : []),
+    ...(admin
+      ? [
+          { value: 'integrationen', label: 'Integrationen' },
+          { value: 'vorlagen', label: 'Vorlagen' },
+          { value: 'auswertungen', label: 'Auswertungen' },
+        ]
+      : []),
   ];
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabsRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [tab]);
   return (
     <>
       <PageHeader title="Einstellungen" />
-      <Segmented className="mb-6" value={tab} onChange={(v) => navigate(v === 'allgemein' ? '/einstellungen' : `/einstellungen/${v}`)} options={tabs} />
+      {/* Am Handy seitlich scrollbar, wenn die Reiter nicht in eine Zeile passen */}
+      <div ref={tabsRef} className="no-scrollbar -mx-4 mb-6 overflow-x-auto px-4 md:mx-0 md:px-0">
+        <Segmented value={tab} onChange={(v) => navigate(v === 'allgemein' ? '/einstellungen' : `/einstellungen/${v}`)} options={tabs} />
+      </div>
       <div className="max-w-[760px] space-y-5">
         {tab === 'allgemein' && <General />}
         {tab === 'team' && <Team />}
         {tab === 'integrationen' && admin && <IntegrationsPanel />}
+        {tab === 'vorlagen' && admin && <TemplatesPanel />}
+        {tab === 'auswertungen' && admin && <ReportsPanel />}
       </div>
     </>
   );
@@ -152,6 +162,7 @@ function General() {
 
       <MyMailboxSection />
       <PushSection prefs={prefs} onPrefs={(p) => saveProfile({ prefs: p })} />
+      <SignatureSection prefs={prefs} onPrefs={(p) => saveProfile({ prefs: p })} />
       <InstallSection />
       <WidgetSection />
       <CalendarFeedSection />
@@ -1525,7 +1536,9 @@ function IntegrationsPanel() {
         description={
           <>
             Lesezugriff auf Bestellungen, Produkte und Lager über eine eigene App im <b>Shopify Dev Dashboard</b> (kostenlos). Benötigte Berechtigungen: <code className="rounded bg-surface-2 px-1">read_orders</code>,{' '}
-            <code className="rounded bg-surface-2 px-1">read_products</code>, <code className="rounded bg-surface-2 px-1">read_inventory</code>. Schritt-für-Schritt-Anleitung: siehe <b>docs/ANLEITUNG.md</b>.
+            <code className="rounded bg-surface-2 px-1">read_products</code>, <code className="rounded bg-surface-2 px-1">read_inventory</code>. Für Kundeninfos und „Versenden“ zusätzlich{' '}
+            <code className="rounded bg-surface-2 px-1">read_customers</code> und <code className="rounded bg-surface-2 px-1">write_merchant_managed_fulfillment_orders</code>. Schritt-für-Schritt-Anleitung: siehe{' '}
+            <b>docs/ANLEITUNG.md</b>.
           </>
         }
       >
@@ -1570,6 +1583,7 @@ function IntegrationsPanel() {
             Übernehmen
           </Button>
         </div>
+        {data.shopify.configured && <CustomerTest />}
       </Section>
 
       <Section

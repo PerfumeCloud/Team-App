@@ -39,6 +39,7 @@ export default defineConfig({
         // Rechtsklick aufs Icon (Windows, Mac, Android)
         shortcuts: [
           { name: 'Postfach', url: '/postfach', icons: [{ src: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: 'Versand', url: '/versand', icons: [{ src: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }] },
           { name: 'Planung', url: '/planung', icons: [{ src: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }] },
           { name: 'Kalender', url: '/kalender', icons: [{ src: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }] },
           { name: 'Idee festhalten', url: '/ideen', icons: [{ src: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' }] },

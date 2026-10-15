@@ -370,7 +370,7 @@ final class Reports
             $rows[] = ['Antwortzeit (Median)', self::hours($mc['median_hours']), $fmtPct($mc['median_hours'] !== null && $mail['previous']['median_hours'] ? self::pct($mc['median_hours'], $mail['previous']['median_hours']) : null, true), $mc['measured'] ? ($mc['within_24h'] . ' % innerhalb von 24 Std. · Ø ' . self::hours($mc['avg_hours'])) : 'noch keine Antworten gemessen'];
             $rows[] = ['Kundenmails', (string) $mc['received'], ['', '#6e7177'], $mail['open_24h'] . ' seit über 24 Std. offen'];
         }
-        $rows[] = ['Versendet', (string) $d['shop']['shipped'], ['', '#6e7177'], $d['shop']['to_ship'] . ' warten noch' . ($d['shop']['oldest_days'] ? ' (älteste ' . $d['shop']['oldest_days'] . ' Tage)' : '')];
+        $rows[] = ['Versendet', (string) $d['shop']['shipped'], ['', '#6e7177'], $d['shop']['to_ship'] . ' warten noch' . ($d['shop']['oldest_days'] ? ' (älteste seit ' . $d['shop']['oldest_days'] . ($d['shop']['oldest_days'] === 1 ? ' Tag)' : ' Tagen)') : '')];
         $rows[] = ['Aufgaben erledigt', (string) $d['tasks']['done'], ['', '#6e7177'], count($d['tasks']['overdue']) . ' überfällig'];
 
         $esc = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');

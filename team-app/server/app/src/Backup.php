@@ -373,7 +373,7 @@ final class Backup
         });
         Settings::clearCache();
         $rekeyed = self::rekey($oldKey);
-        Settings::set('sync_epoch', (int) Settings::get('sync_epoch', 0) + 1);
+        Settings::set('sync_epoch', Util::now());
         Util::log('Wiederherstellung durch ' . $me['email'] . ': ' . count($restored) . ' Tabellen');
         return ['restored' => $restored, 'before' => $before, 'rekeyed' => $rekeyed, 'created_at' => (int) ($data['created_at'] ?? 0)];
     }

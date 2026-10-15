@@ -16,6 +16,7 @@ const Statistics = lazy(() => import('./pages/Statistics'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Club = lazy(() => import('./pages/Club'));
 const Install = lazy(() => import('./pages/Install'));
+const Shipping = lazy(() => import('./pages/Shipping'));
 
 const SYNC_MS = 4000;
 
@@ -117,6 +118,7 @@ export default function App() {
                 <Route path="/notizen" element={<Notes />} />
                 <Route path="/notizen/:id" element={<Notes />} />
                 <Route path="/postfach" element={<Inbox />} />
+                <Route path="/versand" element={<Shipping />} />
                 <Route path="/statistik" element={<Statistics />} />
                 <Route path="/club" element={<Club />} />
                 <Route path="/club/:tab" element={<Club />} />

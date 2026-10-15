@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { CalendarDays, ChartLine, CloudOff, Crown, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings } from 'lucide-react';
+import { CalendarDays, ChartLine, CloudOff, Crown, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings, Truck } from 'lucide-react';
 import { openImportantCount, useStore } from '../lib/store';
 import { relative } from '../lib/format';
+import { useStats } from '../lib/stats';
 import { useNow } from '../lib/hooks';
 import { Avatar, cx, Logo } from './ui';
 
@@ -14,6 +15,8 @@ const NAV = [
   { to: '/kalender', label: 'Kalender', icon: CalendarDays },
   { to: '/notizen', label: 'Notizen', icon: NotebookPen },
   { to: '/postfach', label: 'Postfach', icon: Inbox },
+  // Nur mit Shopify; am Handy über die Übersicht („Zu versenden“) und die Statistik erreichbar
+  { to: '/versand', label: 'Versand', icon: Truck, mobile: false, shop: true },
   { to: '/statistik', label: 'Statistik', icon: ChartLine },
   // Nur mit Club-Zugang; am Handy über Statistik erreichbar
   { to: '/club', label: 'Members Club', icon: Crown, mobile: false, club: true },
@@ -23,8 +26,9 @@ function useBadges() {
   const emails = useStore((s) => s.emails);
   const tasks = useStore((s) => s.tasks);
   const me = useStore((s) => s.me);
+  const toShip = useStats((s) => s.data[7]?.toShip.count ?? 0);
   const mine = Object.values(tasks).filter((t) => t.assignee_id === me?.id && t.status !== 'done').length;
-  return { '/postfach': openImportantCount(emails), '/planung': mine } as Record<string, number>;
+  return { '/postfach': openImportantCount(emails), '/planung': mine, '/versand': toShip } as Record<string, number>;
 }
 
 function SyncStatus({ compact }: { compact?: boolean }) {
@@ -60,7 +64,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useStore((s) => s.me);
   const badges = useBadges();
   const club = useStore((s) => !!s.meta?.clubConfigured);
-  const nav = NAV.filter((n) => !n.club || club);
+  const shop = useStore((s) => !!s.meta?.shopifyConfigured);
+  const nav = NAV.filter((n) => (!n.club || club) && (!n.shop || shop));
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to));

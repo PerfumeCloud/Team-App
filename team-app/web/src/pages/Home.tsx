@@ -159,7 +159,7 @@ export default function Home() {
           icon={<Truck className="h-4 w-4" />}
           value={meta?.shopifyConfigured && stats ? stats.toShip.count : '–'}
           sub={stats?.toShip.oldest ? `Älteste ${relative(stats.toShip.oldest, now)}` : 'Bestellungen'}
-          onClick={() => navigate('/statistik')}
+          onClick={() => navigate(meta?.shopifyConfigured ? '/versand' : '/statistik')}
         />
         <StatTile
           label="Wichtige Mails"

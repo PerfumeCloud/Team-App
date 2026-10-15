@@ -152,16 +152,28 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
   );
 }
 
-export function AutoTextarea({ className, value, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+export const AutoTextarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function AutoTextarea({ className, value, ...rest }, outer) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
-  return <textarea ref={ref} value={value} rows={1} className={cx('resize-none overflow-hidden', className)} {...rest} />;
-}
+  return (
+    <textarea
+      ref={(el) => {
+        ref.current = el;
+        if (typeof outer === 'function') outer(el);
+        else if (outer) outer.current = el;
+      }}
+      value={value}
+      rows={1}
+      className={cx('resize-none overflow-hidden', className)}
+      {...rest}
+    />
+  );
+});
 
 export function Spinner({ className }: { className?: string }) {
   return <LoaderCircle className={cx('h-5 w-5 animate-spin text-ink-3', className)} />;
@@ -188,7 +200,7 @@ export function SectionHeader({ title, action, className }: { title: ReactNode; 
 }
 
 /** Unten einfahrendes Blatt (Handy) bzw. Seitenpanel (Desktop). */
-export function Sheet({ open, onClose, children, title, wide }: { open: boolean; onClose: () => void; children: ReactNode; title?: ReactNode; wide?: boolean }) {
+export function Sheet({ open, onClose, children, title, wide, xl }: { open: boolean; onClose: () => void; children: ReactNode; title?: ReactNode; wide?: boolean; xl?: boolean }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -207,7 +219,7 @@ export function Sheet({ open, onClose, children, title, wide }: { open: boolean;
       <div
         className={cx(
           'relative flex max-h-[92dvh] w-full animate-sheet-in flex-col overflow-hidden rounded-t-3xl bg-surface shadow-lift lg:m-3 lg:max-h-none lg:rounded-3xl',
-          wide ? 'lg:w-[640px]' : 'lg:w-[560px]',
+          xl ? 'lg:w-[min(1120px,calc(100vw-24px))]' : wide ? 'lg:w-[640px]' : 'lg:w-[560px]',
         )}
       >
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line lg:hidden" />

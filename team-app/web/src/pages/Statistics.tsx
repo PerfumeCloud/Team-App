@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { ArrowDownRight, ArrowUpRight, Ban, ChartLine, Crown, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, Trophy, TriangleAlert, Truck, Undo2 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router';
+import { ArrowDownRight, ArrowUpRight, Ban, CalendarCheck, ChartLine, Crown, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, Trophy, TriangleAlert, Truck, Undo2 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { AreaChart, BarList, StatTile, Trend } from '../components/charts';
+import { useWeekly, WeeklyPreview } from '../components/weekly';
 import { Button, Chip, cx, EmptyState, IconButton, Segmented, Spinner } from '../components/ui';
 import { useStats } from '../lib/stats';
 import { useStore } from '../lib/store';
@@ -34,6 +35,13 @@ export default function Statistics() {
   const navigate = useNavigate();
   const now = useNow();
   const [table, setTable] = useState(false);
+  // Push „Wochenrückblick“ öffnet /statistik?rueckblick=1
+  const [params, setParams] = useSearchParams();
+  const [weeklyOpen, setWeeklyOpen] = useState(() => params.get('rueckblick') === '1');
+  const weekly = useWeekly(weeklyOpen);
+  useEffect(() => {
+    if (params.get('rueckblick')) setParams({}, { replace: true });
+  }, [params, setParams]);
   const s = data[days];
   const best = s?.series.reduce<Stats['series'][number] | null>((b, d) => (d.revenue > 0 && (!b || d.revenue > b.revenue) ? d : b), null) ?? null;
 
@@ -77,6 +85,9 @@ export default function Statistics() {
         subtitle={s?.lastSync ? `Daten aus Shopify · Stand ${relative(s.lastSync, now)}` : 'Daten aus Shopify'}
         actions={
           <>
+            <Button size="sm" variant="secondary" icon={<CalendarCheck className="h-3.5 w-3.5" />} loading={weekly.loading} onClick={() => setWeeklyOpen(true)}>
+              Wochenrückblick
+            </Button>
             {meta?.clubConfigured && (
               <Button size="sm" variant="soft" icon={<Crown className="h-3.5 w-3.5" />} onClick={() => navigate('/club')}>
                 Members Club
@@ -219,6 +230,7 @@ export default function Statistics() {
               icon={<Truck className="h-4 w-4" />}
               value={int(s.toShip.count)}
               sub={s.toShip.oldest ? `Älteste seit ${relative(s.toShip.oldest, now)}` : 'Alles versendet'}
+              onClick={() => navigate('/versand')}
             />
           </div>
           <p className="-mt-1 text-[12px] text-ink-3">
@@ -309,6 +321,7 @@ export default function Statistics() {
           </div>
         </div>
       )}
+      <WeeklyPreview report={weeklyOpen ? weekly.report : null} onClose={() => setWeeklyOpen(false)} />
     </>
   );
 }
