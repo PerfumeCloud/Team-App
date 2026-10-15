@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Download, ExternalLink, LogOut, Share, ShoppingBag, Trash2 } from 'lucide-react';
-import { api, fehlertext } from '../lib/api';
+import { useLocation } from 'react-router';
+import { api, fehlertext, vorschauBeenden } from '../lib/api';
 import { useKunde, useStatus } from '../lib/kontext';
 import { useTitel } from '../lib/hooks';
 import { abmelden } from '../lib/konto';
 import { datum, punkteWort } from '../lib/format';
 import { Dialog, Hb, Hinweis, Seitenkopf } from '../components/ui';
+import { ExtraPunkte, FeedbackLink, Mitteilungen } from '../components/KontoExtras';
+import { StufenZeichen } from '../components/Club';
 
 interface InstallEvent extends Event {
   prompt: () => Promise<void>;
@@ -71,6 +74,12 @@ export default function Konto() {
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const t = setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+    return () => clearTimeout(t);
+  }, [hash]);
 
   async function verlassen() {
     setBusy(true);
@@ -94,6 +103,11 @@ export default function Konto() {
             <h2>{name || m.email}</h2>
             {name && <p className="leise">{m.email}</p>}
           </div>
+          {me.tier && (
+            <span className="stufe-titel klein">
+              <StufenZeichen stufe={me.tier.key} klein /> {me.tier.name}
+            </span>
+          )}
         </div>
         <ul className="verlauf">
           <li>
@@ -117,12 +131,29 @@ export default function Konto() {
         </div>
       </section>
 
+      <Mitteilungen />
+
+      <ExtraPunkte />
+
       <section className="karte">
         <h2 className="karte-titel">Als App auf dem Handy</h2>
         <p className="klein">Leg dir den Club auf den Home-Bildschirm: Punkte und Pakete sind dann nur einen Tipp entfernt.</p>
         <AppInstallieren />
       </section>
 
+      <FeedbackLink />
+
+      {me.preview ? (
+        <section className="karte">
+          <h2 className="karte-titel">Kundenansicht</h2>
+          <p className="klein">Du siehst die App so, wie dieses Mitglied sie sieht. Ändern kannst du hier nichts.</p>
+          <div>
+            <button className="knopf" onClick={() => vorschauBeenden(`/admin/mitglieder/${m.id}`)}>
+              <LogOut /> Zurück zum Admin-Bereich
+            </button>
+          </div>
+        </section>
+      ) : (
       <section className="karte">
         <h2 className="karte-titel">Abmelden</h2>
         <p className="klein">Deine Punkte bleiben erhalten. Du meldest dich auch im Shop ab.</p>
@@ -141,6 +172,7 @@ export default function Konto() {
           </button>
         </details>
       </section>
+      )}
 
       <p className="kleingedruckt">
         {status.terms_url && (

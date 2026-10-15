@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
-import { api, ApiError, fehlertext } from './lib/api';
+import { api, ApiError, fehlertext, vorschauBeenden, vorschauId } from './lib/api';
 import { KundeCtx, StatusCtx } from './lib/kontext';
 import type { Me, OrdersResponse, Status } from './lib/types';
 import { Duenen, Hinweis, Laden } from './components/ui';
@@ -11,6 +11,8 @@ import Uebersicht from './pages/Uebersicht';
 import { Bestellung, Bestellungen } from './pages/Bestellungen';
 import Praemien from './pages/Praemien';
 import Konto from './pages/Konto';
+import Feedback from './pages/Feedback';
+import { VorschauLeiste } from './components/Club';
 import Einrichtung from './pages/Einrichtung';
 import AdminApp from './pages/admin/AdminApp';
 
@@ -89,10 +91,24 @@ function KundenApp({ status }: { status: Status }) {
 
   const reloadMe = useCallback(async () => {
     try {
-      setMe(await api<Me>('GET', '/me'));
+      const neu = await api<Me>('GET', '/me');
+      // Kundenansicht abgelaufen (keine Admin-Sitzung mehr): Merker entfernen
+      if (vorschauId() && !neu.preview) {
+        try {
+          sessionStorage.removeItem('pc-als');
+        } catch {
+          /* egal */
+        }
+      }
+      setMe(neu);
       setFehler(null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
+        // Kundenansicht ohne gültige Admin-Sitzung: zurück in den Admin-Bereich
+        if (vorschauId()) {
+          vorschauBeenden('/admin/anmelden');
+          return;
+        }
         setMe(null);
         setOrders(null);
       } else {
@@ -163,6 +179,7 @@ function KundenApp({ status }: { status: Status }) {
 
   return (
     <KundeCtx.Provider value={ctx}>
+      {me.preview && <VorschauLeiste name={[me.member.first_name, me.member.last_name].filter(Boolean).join(' ') || me.member.email} />}
       <KundenShell shopUrl={me.shop_url}>
         <Routes>
           <Route path="/" element={<Uebersicht />} />
@@ -170,6 +187,7 @@ function KundenApp({ status }: { status: Status }) {
           <Route path="/bestellungen/:id" element={<Bestellung />} />
           <Route path="/praemien" element={<Praemien />} />
           <Route path="/konto" element={<Konto />} />
+          <Route path="/feedback" element={<Feedback />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </KundenShell>

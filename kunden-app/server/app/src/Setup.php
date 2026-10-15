@@ -19,13 +19,19 @@ final class Setup
         ];
     }
 
+    /** Wurde die config.php der Team-App gefunden? (für den Assistenten) */
+    public static function teamDetected(): ?string
+    {
+        return Db::teamConfigPath();
+    }
+
     public static function installed(): bool
     {
         if (!Config::exists()) {
             return false;
         }
         try {
-            return (int) Db::value('SELECT COUNT(*) FROM admins') > 0;
+            return Settings::get('schema_version') !== null && Admins::count() > 0;
         } catch (\Throwable) {
             return false;
         }
@@ -38,19 +44,19 @@ final class Setup
         }
         $db = is_array($in['db'] ?? null) ? $in['db'] : [];
         $admin = is_array($in['admin'] ?? null) ? $in['admin'] : [];
-
-        $name = Util::str($admin['name'] ?? '', 100, false);
-        $email = Util::email($admin['email'] ?? '');
-        if ($name === '') {
-            throw new HttpError(422, 'Bitte deinen Namen angeben.');
-        }
-        $hash = Auth::hashPassword((string) ($admin['password'] ?? ''));
+        $driver = (string) ($db['driver'] ?? 'mysql');
 
         $existing = Config::all();
         if (Config::exists() && is_array($existing['db'] ?? null)) {
             $dbCfg = $existing['db'];
-        } elseif (($db['driver'] ?? 'mysql') === 'sqlite') {
-            // Für Pakete mit nur einer MySQL-Datenbank (z. B. netcup Webhosting 1000, wenn die Team-App sie nutzt)
+        } elseif ($driver === 'team') {
+            // Empfohlen: dieselbe Datenbank wie die Team-App. Admins sind dann die Admins der Team-App.
+            $path = Db::teamConfigPath(Util::str($db['config'] ?? null, 300));
+            if ($path === null) {
+                throw new HttpError(422, 'Die config.php der Team-App wurde nicht gefunden. Bitte den Pfad angeben.');
+            }
+            $dbCfg = ['driver' => 'team', 'config' => $path];
+        } elseif ($driver === 'sqlite') {
             if (!extension_loaded('pdo_sqlite')) {
                 throw new HttpError(422, 'SQLite ist auf diesem Server nicht verfügbar. Bitte MySQL wählen.');
             }
@@ -65,26 +71,55 @@ final class Setup
                 'pass' => (string) ($db['pass'] ?? ''),
             ];
         }
+        $team = ($dbCfg['driver'] ?? '') === 'team';
+
+        // Ohne Team-App: erster eigener Admin-Zugang
+        if (!$team) {
+            $name = Util::str($admin['name'] ?? '', 100, false);
+            $email = Util::email($admin['email'] ?? '');
+            if ($name === '') {
+                throw new HttpError(422, 'Bitte deinen Namen angeben.');
+            }
+            $hash = Auth::hashPassword((string) ($admin['password'] ?? ''));
+        }
 
         try {
             $pdo = Db::connect($dbCfg);
+            $driverName = Db::driverOf($dbCfg);
+        } catch (HttpError $e) {
+            throw new HttpError(422, $e->getMessage());
         } catch (\Throwable $e) {
             throw new HttpError(422, 'Keine Verbindung zur Datenbank. Bitte Zugangsdaten prüfen. (' . $e->getMessage() . ')');
         }
 
-        if (!Config::exists()) {
-            Config::write([
-                'db' => $dbCfg,
-                'app_key' => Crypto::randomKey(32),
-                'cron_key' => Crypto::randomKey(24),
-                'base_url' => '',
-            ]);
-        }
-        Db::use($pdo, $dbCfg['driver'] === 'sqlite' ? 'sqlite' : 'mysql');
+        $newConfig = !Config::exists();
+        $cfg = $newConfig ? [
+            'db' => $dbCfg,
+            'app_key' => Crypto::randomKey(32),
+            'cron_key' => Crypto::randomKey(24),
+            'base_url' => '',
+        ] : $existing;
+        // Der App-Schlüssel muss stehen, bevor Geheimnisse verschlüsselt werden
+        Config::write($cfg);
+        Db::use($pdo, $driverName, $team);
         Db::migrate();
 
+        if ($team) {
+            // Anmelden mit dem Zugang aus der Team-App – beweist, dass hier jemand aus dem Team einrichtet
+            try {
+                $a = Admins::login((string) ($admin['email'] ?? ''), (string) ($admin['password'] ?? ''));
+            } catch (HttpError $e) {
+                if ($newConfig) {
+                    @unlink(Config::path());
+                }
+                throw new HttpError(401, 'Bitte mit E-Mail und Passwort eines Admins der Team-App anmelden.');
+            }
+            Auth::start('admin', $a['id']);
+            return Auth::publicAdmin($a);
+        }
+
         $id = Util::uuid();
-        Db::insert('admins', [
+        Db::insert('club_admins', [
             'id' => $id,
             'name' => $name,
             'email' => $email,
@@ -93,6 +128,6 @@ final class Setup
             'last_login_at' => Util::now(),
         ]);
         Auth::start('admin', $id);
-        return Auth::publicAdmin(Db::one('SELECT * FROM admins WHERE id = ?', [$id]));
+        return Auth::publicAdmin(Admins::find($id));
     }
 }

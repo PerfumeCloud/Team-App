@@ -72,6 +72,53 @@ final class MailJob
         return null;
     }
 
+    public static function byId(string $id): ?array
+    {
+        foreach (self::mailboxes() as $m) {
+            if ($m['id'] === $id) {
+                return $m;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * IMAP-Server, Port und Verschlüsselung aus der Eingabe. Versteht auch Schreibweisen wie
+     * „imaps://mxf9a2.netcup.net“, „mxf9a2.netcup.net:993“ oder „{mxf9a2.netcup.net:993/imap/ssl}INBOX“ (PHP-IMAP).
+     * Port 993 = SSL/TLS, Port 143 = STARTTLS.
+     * @return array{host:string, port:int, security:string}
+     */
+    public static function server(mixed $host, mixed $port, mixed $security): array
+    {
+        $h = trim((string) ($host ?? ''));
+        $p = (int) ($port ?? 0);
+        $sec = Util::oneOf($security, ['ssl', 'starttls'], 'ssl');
+        if (preg_match('/^\{([^}:\/]+)(?::(\d+))?([^}]*)\}/', $h, $m)) {
+            $h = $m[1];
+            $p = ($m[2] ?? '') !== '' ? (int) $m[2] : $p;
+            $flags = strtolower($m[3] ?? '');
+            $sec = str_contains($flags, '/ssl') ? 'ssl' : (str_contains($flags, '/tls') ? 'starttls' : $sec);
+        } else {
+            $h = (string) preg_replace('#^[a-z]+://#i', '', $h);
+            $h = explode('/', $h)[0];
+            if (preg_match('/^(.+):(\d+)$/', $h, $m)) {
+                $h = $m[1];
+                $p = (int) $m[2];
+            }
+        }
+        $h = strtolower(trim($h, " .\t"));
+        if ($h !== '' && !preg_match('/^[a-z0-9.-]+$/', $h)) {
+            throw new HttpError(422, 'Ungültiger Servername: ' . $h . ' – z. B. mxf9a2.netcup.net');
+        }
+        $p = $p > 0 && $p < 65536 ? $p : 993;
+        if ($p === 993) {
+            $sec = 'ssl';
+        } elseif ($p === 143) {
+            $sec = 'starttls';
+        }
+        return ['host' => $h, 'port' => $p, 'security' => $sec];
+    }
+
     /** Darf diese Person die Mail sehen? Entscheidet die Einstellung „Sichtbar für“ des Postfachs. */
     public static function visibleTo(array $mail, string $userId): bool
     {
@@ -121,13 +168,14 @@ final class MailJob
             $seen[$email] = true;
             $id = isset($m['id']) && isset($existing[$m['id']]) ? $m['id'] : substr(sha1($email . random_bytes(4)), 0, 12);
             $visible = array_values(array_unique(array_intersect(array_filter((array) ($m['visible_to'] ?? []), 'is_string'), $userIds)));
+            $server = self::server(Util::str($m['host'] ?? '', 190, false), $m['port'] ?? 993, $m['security'] ?? 'ssl');
             $entry = [
                 'id' => $id,
                 'email' => $email,
                 'label' => Util::str($m['label'] ?? null, 40) ?? explode('@', $email)[0],
-                'host' => Util::str($m['host'] ?? '', 190, false),
-                'port' => (int) ($m['port'] ?? 993) ?: 993,
-                'security' => Util::oneOf($m['security'] ?? 'ssl', ['ssl', 'starttls'], 'ssl'),
+                'host' => $server['host'],
+                'port' => $server['port'],
+                'security' => $server['security'],
                 'user' => Util::str($m['user'] ?? $email, 190, false) ?: $email,
                 'visible_to' => $visible,
                 'added_by' => $existing[$id]['added_by'] ?? null,
@@ -173,16 +221,17 @@ final class MailJob
                 : $email . ' ist ein Team-Postfach und wird schon für alle abgerufen.');
         }
         $host = Util::str($m['host'] ?? '', 190, false) ?: ($old['host'] ?? (self::mailboxes()[0]['host'] ?? ''));
-        if ($host === '') {
+        $server = self::server($host, $m['port'] ?? 993, $m['security'] ?? 'ssl');
+        if ($server['host'] === '') {
             throw new HttpError(422, 'Bitte den IMAP-Server angeben.');
         }
         $entry = [
             'id' => $old['id'] ?? substr(sha1($me['id'] . $email . random_bytes(4)), 0, 12),
             'email' => $email,
             'label' => explode('@', $email)[0],
-            'host' => $host,
-            'port' => (int) ($m['port'] ?? 993) ?: 993,
-            'security' => Util::oneOf($m['security'] ?? 'ssl', ['ssl', 'starttls'], 'ssl'),
+            'host' => $server['host'],
+            'port' => $server['port'],
+            'security' => $server['security'],
             'user' => Util::str($m['user'] ?? '', 190, false) ?: $email,
             'visible_to' => [$me['id']],
             'added_by' => $old['added_by'] ?? $me['id'],
@@ -257,26 +306,6 @@ final class MailJob
         Settings::set('mailboxes', $list);
     }
 
-    public static function test(array $mb): array
-    {
-        $pw = self::password($mb['id']);
-        if (!$pw) {
-            return ['ok' => false, 'message' => 'Passwort fehlt.'];
-        }
-        try {
-            $imap = new Imap($mb['host'], (int) $mb['port'], $mb['security']);
-            $imap->connect();
-            $imap->login($mb['user'], $pw);
-            $imap->examine('INBOX');
-            $count = count($imap->search('SINCE ' . date('d-M-Y', time() - self::WINDOW_DAYS * 86400)));
-            $sent = self::findSentFolder($imap);
-            $imap->logout();
-            return ['ok' => true, 'message' => "Verbunden · $count Mails der letzten 14 Tage" . ($sent ? " · Gesendet-Ordner: $sent" : '')];
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'message' => $e->getMessage()];
-        }
-    }
-
     // ---------- Abruf ----------
 
     public static function run(): array
@@ -293,6 +322,8 @@ final class MailJob
             } catch (\Throwable $e) {
                 $summary[$mb['email']] = 'Fehler: ' . $e->getMessage();
                 Settings::set('mail_status_' . $mb['id'], ['ok' => false, 'at' => Util::now(), 'message' => $e->getMessage()]);
+                // Bleibt auch nach dem nächsten erfolgreichen Abruf sichtbar (Einstellungen → Postfächer)
+                Settings::set('mail_last_error', ['at' => Util::now(), 'mailbox' => $mb['email'], 'message' => $e->getMessage()]);
                 Util::log('Mail ' . $mb['email'] . ': ' . $e->getMessage());
             }
         }

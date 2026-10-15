@@ -1,0 +1,355 @@
+<?php
+declare(strict_types=1);
+
+namespace Club;
+
+/**
+ * Bonuspunkte: Geburtstag, Newsletter, Bewertung, Empfehlung und Startbonus für die Warteliste.
+ */
+final class Bonus
+{
+    private const REF_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+    // ---------- Beitritt: Shopify-Daten, Warteliste, Empfehlung ----------
+
+    /** Tags, Bestellanzahl und Newsletter-Status eines Kundenkontos (null, wenn Shopify nicht erreichbar ist). */
+    public static function customer(string $shopifyId): ?array
+    {
+        if (!Shopify::configured()) {
+            return null;
+        }
+        try {
+            $d = Shopify::graphql(
+                'query ClubCustomer($id: ID!) { customer(id: $id) { id tags numberOfOrders defaultEmailAddress { marketingState } } }',
+                ['id' => $shopifyId]
+            );
+        } catch (\Throwable $e) {
+            Util::log('Kundendaten: ' . $e->getMessage());
+            return null;
+        }
+        $c = $d['customer'] ?? null;
+        if (!is_array($c)) {
+            return null;
+        }
+        return [
+            'tags' => array_map('strtolower', array_map('trim', (array) ($c['tags'] ?? []))),
+            'orders' => (int) ($c['numberOfOrders'] ?? 0),
+            'newsletter' => ($c['defaultEmailAddress']['marketingState'] ?? '') === 'SUBSCRIBED',
+        ];
+    }
+
+    /** Beim Beitritt: Startbonus (Warteliste), Empfehlung, Newsletter. */
+    public static function onJoin(array $member, ?string $refCode): void
+    {
+        $p = Points::program();
+        $info = self::customer((string) $member['shopify_id']);
+        if ($info === null) {
+            return;
+        }
+        $tag = mb_strtolower((string) $p['waitlist_tag']);
+        if (in_array($tag, $info['tags'], true)) {
+            Db::exec('UPDATE club_members SET waitlist = 1 WHERE id = ?', [$member['id']]);
+            $sb = Points::startBonus($p);
+            if ($sb && !Db::value("SELECT 1 FROM club_ledger WHERE member_id = ? AND kind = 'start'", [$member['id']])) {
+                $extra = $sb['requires_order']
+                    ? ['status' => 'locked', 'unlock_rule' => 'first_order', 'unlock_min_cents' => $sb['min_cents'] ?: null, 'expires_days' => $sb['days'] ?: null]
+                    : ($sb['days'] > 0 ? ['expires_at' => Util::now() + $sb['days'] * Points::DAY_MS] : []);
+                Points::book($member['id'], 'start', $sb['points'], 'Danke, dass du auf der Warteliste warst!', null, null, $extra);
+            }
+            Db::exec("UPDATE club_invites SET status = 'joined' WHERE customer_id = ?", [$member['shopify_id']]);
+        }
+        if ($refCode !== null && $refCode !== '') {
+            self::applyReferral($member, $refCode, $info['orders']);
+        }
+        if ($info['newsletter']) {
+            self::newsletterBonus($member);
+        }
+        Db::exec('UPDATE club_members SET newsletter_checked_at = ? WHERE id = ?', [Util::now(), $member['id']]);
+    }
+
+    // ---------- Empfehlung ----------
+
+    public static function refCode(array $member): string
+    {
+        if (!empty($member['ref_code'])) {
+            return (string) $member['ref_code'];
+        }
+        do {
+            $code = '';
+            for ($i = 0; $i < 6; $i++) {
+                $code .= self::REF_CHARS[random_int(0, strlen(self::REF_CHARS) - 1)];
+            }
+        } while (Db::value('SELECT 1 FROM club_members WHERE ref_code = ?', [$code]));
+        Db::exec('UPDATE club_members SET ref_code = ? WHERE id = ? AND ref_code IS NULL', [$code, $member['id']]);
+        return (string) Db::value('SELECT ref_code FROM club_members WHERE id = ?', [$member['id']]);
+    }
+
+    public static function normalizeRef(string $code): string
+    {
+        return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $code) ?? '');
+    }
+
+    /** Wer hat eingeladen? (öffentlich, nur Vorname + Initiale) */
+    public static function inviter(string $code): ?array
+    {
+        $code = self::normalizeRef($code);
+        if ($code === '' || ((int) Points::program()['bonus_referred'] <= 0 && (int) Points::program()['bonus_referrer'] <= 0)) {
+            return null;
+        }
+        $m = Db::one('SELECT first_name, last_name FROM club_members WHERE ref_code = ? AND joined_at IS NOT NULL', [$code]);
+        if (!$m) {
+            return null;
+        }
+        $name = trim(($m['first_name'] ?? '') . ' ' . ($m['last_name'] ? mb_substr((string) $m['last_name'], 0, 1) . '.' : ''));
+        return ['name' => $name !== '' ? $name : 'Ein Mitglied', 'points' => (int) Points::program()['bonus_referred']];
+    }
+
+    /** Freund tritt mit Einladungscode bei: nur Neukunden, nicht sich selbst. Bonus nach der ersten Bestellung. */
+    private static function applyReferral(array $member, string $code, int $orders): void
+    {
+        $p = Points::program();
+        $code = self::normalizeRef($code);
+        $ref = Db::one('SELECT * FROM club_members WHERE ref_code = ? AND joined_at IS NOT NULL', [$code]);
+        if (!$ref || $ref['id'] === $member['id'] || $member['referred_by'] || $orders > 0) {
+            return;
+        }
+        Db::exec('UPDATE club_members SET referred_by = ? WHERE id = ?', [$ref['id'], $member['id']]);
+        if ((int) $p['bonus_referred'] > 0) {
+            $who = trim((string) ($ref['first_name'] ?? '')) ?: 'einem Mitglied';
+            Points::book($member['id'], 'referred', (int) $p['bonus_referred'], "Eingeladen von $who", $ref['id'], null, [
+                'status' => 'locked',
+                'unlock_rule' => 'first_order',
+                'unlock_min_cents' => (int) $p['referral_min_cents'] ?: null,
+            ]);
+        }
+    }
+
+    /** Eine Bestellung wurde gutgeschrieben: gesperrte Boni freischalten, Empfehlung belohnen. */
+    public static function onOrderAvailable(array $member, array $order): void
+    {
+        $now = Util::now();
+        $amount = (int) $order['amount_cents'];
+        $locked = Db::all(
+            "SELECT * FROM club_ledger WHERE member_id = ? AND status = 'locked' AND unlock_rule = 'first_order' AND (unlock_min_cents IS NULL OR unlock_min_cents <= ?)",
+            [$member['id'], $amount]
+        );
+        foreach ($locked as $l) {
+            $expires = $l['expires_days'] !== null && (int) $l['expires_days'] > 0 ? $now + (int) $l['expires_days'] * Points::DAY_MS : null;
+            if (Db::exec("UPDATE club_ledger SET status = 'available', credited_at = ?, expires_at = ? WHERE id = ? AND status = 'locked'", [$now, $expires, $l['id']]) === 1) {
+                Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$member['id']]);
+                Events::booked($member['id'], $l['kind'], (int) $l['points'], ($l['kind'] === 'start' ? 'Startbonus' : 'Bonus') . ' freigeschaltet');
+            }
+        }
+
+        // Empfehlung: das werbende Mitglied bekommt seinen Bonus mit der ersten gutgeschriebenen Bestellung des Freundes
+        $p = Points::program();
+        if (!$member['referred_by'] || (int) $p['bonus_referrer'] <= 0 || $amount < (int) $p['referral_min_cents']) {
+            return;
+        }
+        if (Db::value("SELECT 1 FROM club_ledger WHERE kind = 'referral' AND ref = ?", [$member['id']])) {
+            return;
+        }
+        $referrer = Db::one('SELECT * FROM club_members WHERE id = ? AND joined_at IS NOT NULL', [$member['referred_by']]);
+        if (!$referrer) {
+            return;
+        }
+        $year = (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral' AND created_at > ?", [$referrer['id'], $now - 365 * Points::DAY_MS]);
+        if ((int) $p['referral_max_year'] > 0 && $year >= (int) $p['referral_max_year']) {
+            return;
+        }
+        $friend = trim((string) ($member['first_name'] ?? '')) ?: 'Deine Empfehlung';
+        Points::book($referrer['id'], 'referral', (int) $p['bonus_referrer'], "$friend hat zum ersten Mal bestellt", $member['id'], null, [], false);
+        Push::queue($referrer, 'referral', ['freund' => $friend, 'punkte' => (string) $p['bonus_referrer']], 'referral:' . $member['id']);
+        Events::rewardCheck($referrer['id']);
+    }
+
+    // ---------- Geburtstag ----------
+
+    public static function setBirthday(array $member, string $value): void
+    {
+        if ($member['birthday']) {
+            throw new HttpError(409, 'Dein Geburtstag ist schon eingetragen. Für eine Änderung schreib uns bitte kurz.');
+        }
+        if (!preg_match('/^(\d{2})-(\d{2})$/', $value, $m) || !checkdate((int) $m[1], (int) $m[2], 2024)) {
+            throw new HttpError(422, 'Bitte wähle Tag und Monat aus.');
+        }
+        Db::exec('UPDATE club_members SET birthday = ?, birthday_set_at = ? WHERE id = ? AND birthday IS NULL', [$value, Util::now(), $member['id']]);
+    }
+
+    /** Täglich: Geburtstagskinder bekommen ihren Bonus (einmal im Jahr; frühestens 30 Tage nach dem Eintragen). */
+    public static function runBirthdays(?int $now = null): string
+    {
+        $now ??= Util::now();
+        $bonus = (int) Points::program()['bonus_birthday'];
+        if ($bonus <= 0) {
+            return '0 Geburtstage';
+        }
+        $today = date('m-d', intdiv($now, 1000));
+        $days = [$today];
+        // 29. Februar feiert in anderen Jahren am 28.
+        if ($today === '02-28' && !checkdate(2, 29, (int) date('Y', intdiv($now, 1000)))) {
+            $days[] = '02-29';
+        }
+        $year = date('Y', intdiv($now, 1000));
+        $n = 0;
+        foreach (Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND birthday IN (' . Db::marks($days) . ') AND birthday_set_at < ?', array_merge($days, [$now - 30 * Points::DAY_MS])) as $m) {
+            $ref = 'birthday-' . $year;
+            if (Db::value("SELECT 1 FROM club_ledger WHERE member_id = ? AND kind = 'birthday' AND ref = ?", [$m['id'], $ref])) {
+                continue;
+            }
+            Points::book($m['id'], 'birthday', $bonus, 'Alles Gute zum Geburtstag!', $ref, null, [], false);
+            Push::queue($m, 'birthday', ['punkte' => (string) $bonus], 'birthday:' . $m['id'] . ':' . $year);
+            Events::rewardCheck($m['id']);
+            $n++;
+        }
+        return "$n Geburtstage";
+    }
+
+    // ---------- Newsletter ----------
+
+    private static function newsletterBonus(array $member): bool
+    {
+        $bonus = (int) Points::program()['bonus_newsletter'];
+        if ($bonus <= 0 || $member['newsletter_at'] || Db::value("SELECT 1 FROM club_ledger WHERE member_id = ? AND kind = 'newsletter'", [$member['id']])) {
+            return false;
+        }
+        Db::exec('UPDATE club_members SET newsletter_at = ? WHERE id = ?', [Util::now(), $member['id']]);
+        Points::book($member['id'], 'newsletter', $bonus, 'Danke für deine Newsletter-Anmeldung!');
+        Events::rewardCheck($member['id']);
+        return true;
+    }
+
+    /** Stündlich: Wer hat den Newsletter inzwischen abonniert? (nur Mitglieder ohne Newsletter-Bonus) */
+    public static function runNewsletter(?string $memberId = null): string
+    {
+        if ((int) Points::program()['bonus_newsletter'] <= 0 || !Shopify::configured()) {
+            return 'aus';
+        }
+        $now = Util::now();
+        $rows = $memberId
+            ? Db::all('SELECT * FROM club_members WHERE id = ? AND joined_at IS NOT NULL AND newsletter_at IS NULL', [$memberId])
+            : Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND newsletter_at IS NULL AND (newsletter_checked_at IS NULL OR newsletter_checked_at < ?) ORDER BY newsletter_checked_at LIMIT 100', [$now - 3600 * 1000]);
+        $n = 0;
+        foreach (array_chunk($rows, 50) as $chunk) {
+            $d = Shopify::graphql(
+                'query ClubNewsletter($ids: [ID!]!) { nodes(ids: $ids) { ... on Customer { id defaultEmailAddress { marketingState } } } }',
+                ['ids' => array_column($chunk, 'shopify_id')]
+            );
+            $subscribed = [];
+            foreach ($d['nodes'] ?? [] as $c) {
+                if (is_array($c) && ($c['defaultEmailAddress']['marketingState'] ?? '') === 'SUBSCRIBED') {
+                    $subscribed[$c['id']] = true;
+                }
+            }
+            foreach ($chunk as $m) {
+                if (isset($subscribed[$m['shopify_id']])) {
+                    $n += self::newsletterBonus($m) ? 1 : 0;
+                }
+            }
+            $ids = array_column($chunk, 'id');
+            Db::exec('UPDATE club_members SET newsletter_checked_at = ? WHERE id IN (' . Db::marks($ids) . ')', array_merge([$now], $ids));
+        }
+        return "$n Newsletter-Boni";
+    }
+
+    // ---------- Bewertung (Anfrage, das Team bestätigt) ----------
+
+    public static function claimReview(array $member, string $note): array
+    {
+        $p = Points::program();
+        if ((int) $p['bonus_review'] <= 0) {
+            throw new HttpError(409, 'Für Bewertungen gibt es gerade keine Bonuspunkte.');
+        }
+        $note = trim($note);
+        if (mb_strlen($note) < 3) {
+            throw new HttpError(422, 'Schreib uns kurz, welchen Duft du wo bewertet hast.');
+        }
+        $month = (int) Db::value("SELECT COUNT(*) FROM club_claims WHERE member_id = ? AND kind = 'review' AND status <> 'rejected' AND created_at > ?", [$member['id'], Util::now() - 30 * Points::DAY_MS]);
+        if ($month >= max(1, (int) $p['review_max_month'])) {
+            throw new HttpError(429, 'Du hast diesen Monat schon Bewertungen eingereicht. Danke dir!');
+        }
+        Util::limit('claim:' . $member['id'], 5, 86400, 'Bitte versuche es morgen noch einmal.');
+        $id = Util::uuid();
+        Db::insert('club_claims', [
+            'id' => $id,
+            'member_id' => $member['id'],
+            'kind' => 'review',
+            'note' => mb_substr($note, 0, 500),
+            'status' => 'open',
+            'points' => null,
+            'decided_by' => null,
+            'decided_at' => null,
+            'created_at' => Util::now(),
+        ]);
+        return self::claims($member['id']);
+    }
+
+    public static function claims(string $memberId): array
+    {
+        return array_map(static fn ($c) => [
+            'id' => $c['id'],
+            'kind' => $c['kind'],
+            'note' => $c['note'],
+            'status' => $c['status'],
+            'points' => $c['points'] !== null ? (int) $c['points'] : null,
+            'created_at' => (int) $c['created_at'],
+        ], Db::all('SELECT * FROM club_claims WHERE member_id = ? ORDER BY created_at DESC LIMIT 20', [$memberId]));
+    }
+
+    public static function openClaims(): array
+    {
+        return array_map(static fn ($c) => [
+            'id' => $c['id'],
+            'kind' => $c['kind'],
+            'note' => $c['note'],
+            'status' => $c['status'],
+            'created_at' => (int) $c['created_at'],
+            'member' => ['id' => $c['member_id'], 'name' => trim(($c['first_name'] ?? '') . ' ' . ($c['last_name'] ?? '')), 'email' => $c['email']],
+        ], Db::all(
+            "SELECT c.*, m.first_name, m.last_name, m.email FROM club_claims c JOIN club_members m ON m.id = c.member_id
+             WHERE c.status = 'open' ORDER BY c.created_at LIMIT 200"
+        ));
+    }
+
+    public static function decide(array $admin, string $id, bool $approve, ?int $points = null): array
+    {
+        $c = Db::one("SELECT * FROM club_claims WHERE id = ? AND status = 'open'", [$id]);
+        if (!$c) {
+            throw new HttpError(404, 'Diese Anfrage ist schon erledigt.');
+        }
+        $points ??= (int) Points::program()['bonus_review'];
+        if ($approve && ($points <= 0 || $points > 100000)) {
+            throw new HttpError(422, 'Bitte eine Punktzahl angeben.');
+        }
+        Db::update('club_claims', [
+            'status' => $approve ? 'approved' : 'rejected',
+            'points' => $approve ? $points : null,
+            'decided_by' => $admin['id'],
+            'decided_at' => Util::now(),
+        ], ['id' => $id]);
+        if ($approve) {
+            Points::book($c['member_id'], 'review', $points, 'Bewertung: ' . mb_substr((string) $c['note'], 0, 120), $c['id'], $admin['id']);
+            Events::rewardCheck($c['member_id']);
+        }
+        return self::openClaims();
+    }
+
+    // ---------- Übersicht für die App ----------
+
+    public static function status(array $member): array
+    {
+        $p = Points::program();
+        $year = date('Y');
+        return [
+            'birthday' => $member['birthday'],
+            'birthday_bonus_this_year' => (bool) Db::value("SELECT 1 FROM club_ledger WHERE member_id = ? AND kind = 'birthday' AND ref = ?", [$member['id'], 'birthday-' . $year]),
+            'newsletter' => $member['newsletter_at'] !== null,
+            'referral' => [
+                'code' => (int) $p['bonus_referrer'] > 0 || (int) $p['bonus_referred'] > 0 ? self::refCode($member) : null,
+                'invited' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE referred_by = ?', [$member['id']]),
+                'rewarded' => (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral'", [$member['id']]),
+            ],
+            'claims' => self::claims($member['id']),
+        ];
+    }
+}

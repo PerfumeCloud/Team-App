@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { BadgePercent, Gift, Mail, ShoppingBag, Truck } from 'lucide-react';
 import { api, fehlertext } from '../lib/api';
 import { useStatus } from '../lib/kontext';
 import { useTitel } from '../lib/hooks';
 import { euro, punkteWort } from '../lib/format';
+import { boni, codeText, einloesenText, sammelText, verfallText, wartenText } from '../lib/regeln';
+import { einladung } from '../lib/einladung';
+import { AktionBanner, BoniListe, StufenListe } from '../components/Club';
 import type { Me, Points, Program } from '../lib/types';
 import { Duenen, flakon, Hb, Hinweis, PunkteKarte, Toaster } from '../components/ui';
 import { Logo } from '../components/Shell';
@@ -17,9 +20,18 @@ const STANDARD: Program = {
   redeem_cents: 500,
   max_cents: 5000,
   code_days: 90,
+  code_expiry_refund: true,
   wait_days: 14,
   welcome_points: 50,
   retro_days: 30,
+  points_expiry_months: 24,
+  tiers_enabled: false,
+  tier_months: 12,
+  tiers: [],
+  bonus: { birthday: 0, newsletter: 0, review: 0, referrer: 0, referred: 0, referral_min_cents: 0 },
+  start_bonus: null,
+  promo: null,
+  next_promo: null,
 };
 
 /** Beispielstand für die Vorschau-Karte, passend zu den eingestellten Regeln */
@@ -33,8 +45,10 @@ function beispiel(p: Program): Points {
     value_cents: affordable * p.redeem_cents,
     to_next: affordable >= maxSteps ? 0 : p.redeem_points - (balance % p.redeem_points),
     next_cents: Math.min(maxSteps, affordable + 1) * p.redeem_cents,
+    locked: 0,
     steps: [],
     lifetime: balance,
+    expiring: null,
   };
 }
 
@@ -49,6 +63,16 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
   const shopify = !!status.login?.shopify;
   const email = !!status.login?.email;
   const [mitCode, setMitCode] = useState(!shopify && email);
+  const [gast, setGast] = useState<{ name: string; points: number } | null>(null);
+  useEffect(() => {
+    const code = einladung();
+    if (!code) return;
+    api<{ name: string; points: number }>('GET', `/einladung/${encodeURIComponent(code)}`)
+      .then(setGast)
+      .catch(() => setGast(null));
+  }, []);
+  const extras = boni(program);
+  const verfall = verfallText(program);
 
   return (
     <>
@@ -73,10 +97,17 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
                 Sammle mit jeder Bestellung Punkte und löse sie beim nächsten Einkauf als Rabatt ein. Und behalte deine Bestellungen im Blick, vom Versand bis an deine Tür.
               </p>
               <div className="aktionen">
+                {gast && (
+                  <Hinweis>
+                    <b style={{ fontWeight: 400, fontStyle: 'italic' }}>{gast.name}</b> hat dich eingeladen.
+                    {gast.points > 0 && ` Nach deiner ersten Bestellung bekommst du ${punkteWort(gast.points)} extra.`}
+                  </Hinweis>
+                )}
+                <AktionBanner p={program} />
                 {fehler && <Hinweis fehler>{fehler}</Hinweis>}
                 {shopify && !mitCode && (
                   <>
-                    <Hb dunkel href={`/api/auth/shopify/start?next=${encodeURIComponent(next)}`}>
+                    <Hb dunkel live href={`/api/auth/shopify/start?next=${encodeURIComponent(next)}`}>
                       Anmelden oder Konto erstellen
                     </Hb>
                     <p className="kleingedruckt">
@@ -114,7 +145,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
               </span>
               <h2 className="karte-titel">Punkte für jede Bestellung</h2>
               <p>
-                Für jeden Euro bekommst du {punkteWort(program.earn_per_euro)}.{' '}
+                {sammelText(program)}{' '}
                 {program.welcome_points > 0 && <>Zum Start schenken wir dir {punkteWort(program.welcome_points)}.</>}
               </p>
             </li>
@@ -136,8 +167,22 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
             </li>
           </ul>
 
+          {program.tiers_enabled && program.tiers.length > 0 && (
+            <section className="raster">
+              <h2 className="karte-titel">Je treuer, desto mehr Punkte</h2>
+              <StufenListe p={program} />
+            </section>
+          )}
+
+          {extras.length > 1 && (
+            <section className="raster">
+              <h2 className="karte-titel">Extra-Punkte</h2>
+              <BoniListe items={extras} />
+            </section>
+          )}
+
           <p className="kleingedruckt">
-            Punkte werden {program.wait_days > 0 ? `${program.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben.{' '}
+            {wartenText(program)} {einloesenText(program)} {codeText(program)} {verfall}{' '}
             {status.terms_url && (
               <>
                 Es gelten die{' '}

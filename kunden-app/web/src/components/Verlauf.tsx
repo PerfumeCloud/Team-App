@@ -1,14 +1,26 @@
 import { datum, euro, punkte } from '../lib/format';
 import type { Code, HistoryItem } from '../lib/types';
 
+function faktorText(f: number): string {
+  const worte: Record<number, string> = { 2: 'doppelte', 3: 'dreifache', 4: 'vierfache', 5: 'fünffache' };
+  return worte[f] ?? `${String(f).replace('.', ',')}-fache`;
+}
+
 function detail(i: HistoryItem): string {
   const wann = datum(i.at, true);
-  if (i.kind !== 'order') return i.note ? `${wann} · ${i.note}` : wann;
-  if (i.status === 'available') return `${wann} · ${euro(i.amount_cents ?? 0)}`;
+  if (i.kind !== 'order') {
+    if (i.status === 'pending' && i.reason === 'first_order') {
+      const ab = i.min_cents ? ` ab ${euro(i.min_cents)}` : '';
+      return `${wann} · wird mit deiner ersten Bestellung${ab} freigeschaltet`;
+    }
+    return i.note ? `${wann} · ${i.note}` : wann;
+  }
+  const aktion = i.factor && i.factor > 1 ? ` · ${faktorText(i.factor)} Punkte` : '';
+  if (i.status === 'available') return `${wann} · ${euro(i.amount_cents ?? 0)}${aktion}`;
   if (i.status === 'pending') {
-    if (i.reason === 'payment') return `${wann} · wartet auf die Zahlung`;
-    if (i.reason === 'shipping') return `${wann} · kommt nach dem Versand`;
-    return `${wann} · verfügbar ab ${datum(i.available_at, true)}`;
+    if (i.reason === 'payment') return `${wann} · wartet auf die Zahlung${aktion}`;
+    if (i.reason === 'shipping') return `${wann} · kommt nach dem Versand${aktion}`;
+    return `${wann} · verfügbar ab ${datum(i.available_at, true)}${aktion}`;
   }
   const grund: Record<string, string> = { cancelled: 'storniert', refunded: 'erstattet', test: 'Testbestellung', zero: 'ohne Punkte' };
   return `${wann} · ${grund[i.reason ?? ''] ?? 'zählt nicht'}`;
@@ -45,14 +57,14 @@ export function Verlauf({ items }: { items: HistoryItem[] }) {
   );
 }
 
-export function codeStatus(c: Code): string {
+export function codeStatus(c: Code, zurueck = true): string {
   switch (c.status) {
     case 'active':
       return `gültig bis ${datum(c.expires_at, true)}`;
     case 'used':
       return c.order_name ? `eingelöst bei Bestellung ${c.order_name}` : `eingelöst am ${datum(c.used_at, true)}`;
     case 'expired':
-      return 'abgelaufen, Punkte zurückgebucht';
+      return zurueck ? 'abgelaufen, Punkte zurückgebucht' : 'abgelaufen';
     case 'cancelled':
       return 'zurückgegeben';
     default:
@@ -60,7 +72,7 @@ export function codeStatus(c: Code): string {
   }
 }
 
-export function FruehereCodes({ codes }: { codes: Code[] }) {
+export function FruehereCodes({ codes, zurueck = true }: { codes: Code[]; zurueck?: boolean }) {
   if (codes.length === 0) return null;
   return (
     <details className="mehr">
@@ -70,7 +82,7 @@ export function FruehereCodes({ codes }: { codes: Code[] }) {
           <li key={c.id}>
             <span className="was">
               <span style={{ fontFamily: '"Tenor Sans", sans-serif', letterSpacing: '.08em' }}>{c.code}</span>
-              <small>{codeStatus(c)}</small>
+              <small>{codeStatus(c, zurueck)}</small>
             </span>
             <span className="zahl">{euro(c.value_cents)}</span>
           </li>

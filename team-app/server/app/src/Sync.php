@@ -69,6 +69,9 @@ final class Sync
             'jobsLastRun' => (int) Settings::get('jobs_last_run', 0),
             'ordersLastSync' => (int) Settings::get('orders_last_sync', 0),
             'mailLastFetch' => (int) Settings::get('mail_last_fetch', 0),
+            // Members Club: Menüpunkt „Club“ nur für Personen mit Club-Zugang
+            'clubConfigured' => Auth::clubAccess($me) && Club::configured(),
+            'version' => APP_VERSION,
         ];
     }
 

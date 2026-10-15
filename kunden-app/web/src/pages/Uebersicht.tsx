@@ -1,10 +1,12 @@
-import { Package } from 'lucide-react';
+import { MessageCircleHeart, Package } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTitel } from '../lib/hooks';
-import { euro, punkteWort } from '../lib/format';
+import { euro } from '../lib/format';
+import { boni, sammelText } from '../lib/regeln';
 import { Hb, Hinweis, Leer, PunkteKarte, Seitenkopf } from '../components/ui';
 import { BestellungKarte, useBestellungen } from './Bestellungen';
 import { CodeKarte } from './Praemien';
+import { AktionBanner, BoniListe, SoFunktionierts, StufenKarte } from '../components/Club';
 
 function gruss(): string {
   const h = new Date().getHours();
@@ -21,6 +23,14 @@ export default function Uebersicht() {
   const codes = me.codes ?? [];
   const name = me.member.first_name;
   const letzte = orders?.orders.slice(0, 2) ?? [];
+  const tier = me.tier ?? null;
+  // Extra-Punkte, die noch offen sind (Geburtstag nicht eingetragen, Newsletter fehlt …)
+  const offen = boni(p).filter((b) => {
+    if (b.key === 'welcome') return false;
+    if (b.key === 'birthday') return !me.bonus?.birthday;
+    if (b.key === 'newsletter') return !me.bonus?.newsletter;
+    return true;
+  });
 
   return (
     <>
@@ -36,6 +46,20 @@ export default function Uebersicht() {
             <Hb to="/praemien">Prämien ansehen</Hb>
           )}
         </PunkteKarte>
+      )}
+
+      <AktionBanner p={p} />
+
+      {me.feedback && (
+        <Link className="karte feedback-frage" to={`/feedback?anfrage=${me.feedback.id}`}>
+          <span className="symbol">
+            <MessageCircleHeart />
+          </span>
+          <div>
+            <h2 className="karte-titel">{me.feedback.title}</h2>
+            <p className="klein">{me.feedback.body}</p>
+          </div>
+        </Link>
       )}
 
       {!p.active && <Hinweis>Das Einlösen ist gerade pausiert. Deine Punkte bleiben natürlich erhalten.</Hinweis>}
@@ -65,7 +89,7 @@ export default function Uebersicht() {
         {orders && letzte.length === 0 && (
           <div className="karte">
             <Leer icon={<Package />} titel="Noch keine Bestellung">
-              <p>Für jeden Euro deiner ersten Bestellung bekommst du {punkteWort(p.earn_per_euro)}.</p>
+              <p>{sammelText(p, tier?.rate)}</p>
               <Hb href={me.shop_url}>Zum Shop</Hb>
             </Leer>
           </div>
@@ -79,29 +103,21 @@ export default function Uebersicht() {
         )}
       </section>
 
-      <section className="raster">
-        <h2 className="karte-titel">So funktioniert’s</h2>
-        <ol className="schritte">
-          <li>
-            <b>Bestellen</b>
-            <p>Für jeden Euro Warenwert bekommst du {punkteWort(p.earn_per_euro)}.</p>
-          </li>
-          <li>
-            <b>Sammeln</b>
-            <p>
-              {p.wait_days > 0
-                ? `Deine Punkte kommen ${p.wait_days} Tage nach dem Versand auf dein Konto, so lange läuft die Rückgabefrist.`
-                : 'Deine Punkte kommen nach dem Versand auf dein Konto.'}
-            </p>
-          </li>
-          <li>
-            <b>Einlösen</b>
-            <p>
-              Je {punkteWort(p.redeem_points)} gibt es {euro(p.redeem_cents)} Rabatt, als Code für deinen nächsten Einkauf.
-            </p>
-          </li>
-        </ol>
-      </section>
+      {tier && <StufenKarte tier={tier} p={p} />}
+
+      {offen.length > 0 && (
+        <section className="raster">
+          <div className="karte-kopf">
+            <h2 className="karte-titel">Extra-Punkte</h2>
+            <Link className="klein" to="/konto#extra">
+              Im Konto erledigen
+            </Link>
+          </div>
+          <BoniListe items={offen} />
+        </section>
+      )}
+
+      <SoFunktionierts p={p} rate={tier?.rate} />
     </>
   );
 }

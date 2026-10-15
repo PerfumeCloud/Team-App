@@ -69,7 +69,7 @@ final class Db
         }
     }
 
-    private static function hasColumn(string $table, string $column): bool
+    public static function hasColumn(string $table, string $column): bool
     {
         if (self::driver() === 'mysql') {
             return (bool) self::value(
@@ -83,6 +83,18 @@ final class Db
             }
         }
         return false;
+    }
+
+    /** Gibt es diese Tabelle? (z. B. club_settings, wenn der Club seine Tabellen in diese Datenbank gelegt hat) */
+    public static function tableExists(string $table): bool
+    {
+        if (self::driver() === 'mysql') {
+            return (bool) self::value(
+                'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
+                [$table]
+            );
+        }
+        return (bool) self::value("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [$table]);
     }
 
     public static function use(PDO $pdo, string $driver): void
@@ -206,6 +218,7 @@ final class Db
                 color VARCHAR(20) NOT NULL DEFAULT 'blue',
                 role VARCHAR(20) NOT NULL DEFAULT 'member',
                 prefs TEXT NULL,
+                club_access SMALLINT NOT NULL DEFAULT 0,
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL,
                 deleted SMALLINT NOT NULL DEFAULT 0",
@@ -321,6 +334,8 @@ final class Db
                 user_agent VARCHAR(255) NULL,
                 created_at BIGINT NOT NULL,
                 last_ok_at BIGINT NULL,
+                last_status INTEGER NULL,
+                last_error VARCHAR(255) NULL,
                 fail_count INTEGER NOT NULL DEFAULT 0",
             'settings' => "k VARCHAR(100) NOT NULL PRIMARY KEY,
                 v $long NULL,
@@ -342,6 +357,16 @@ final class Db
         // Postfächer haben „Sichtbar für“
         if (!self::hasColumn('emails', 'auto')) {
             $pdo->exec('ALTER TABLE emails ADD COLUMN auto SMALLINT NOT NULL DEFAULT 0');
+        }
+        // 1.3: Push-Fehler je Gerät merken (statt Geräte sofort zu löschen), Club-Zugang für Personen.
+        // club_access legt auch der Club selbst an, wenn er seine Tabellen in diese Datenbank legt.
+        foreach (['last_status' => 'INTEGER NULL', 'last_error' => 'VARCHAR(255) NULL'] as $col => $type) {
+            if (!self::hasColumn('push_subscriptions', $col)) {
+                $pdo->exec("ALTER TABLE push_subscriptions ADD COLUMN $col $type");
+            }
+        }
+        if (!self::hasColumn('users', 'club_access')) {
+            $pdo->exec('ALTER TABLE users ADD COLUMN club_access SMALLINT NOT NULL DEFAULT 0');
         }
         MailJob::migrateLegacy();
 

@@ -46,6 +46,8 @@ $state = load($stateFile) + [
     'tokens' => [],
     'calls' => [],
     'failDiscount' => false,
+    'pushes' => [],
+    'pushStatus' => [],
 ];
 
 // ---------- Steuerung für Tests ----------
@@ -56,6 +58,26 @@ if ($path === '/__mock/state') {
         save($stateFile, $state);
     }
     out($state);
+    return true;
+}
+
+// ---------- Push-Dienst (wie Apple/Google/Mozilla): nimmt verschlüsselte Nachrichten an ----------
+if (preg_match('#^/push/([\w-]+)$#', $path, $pm) && $method === 'POST') {
+    $status = (int) ($state['pushStatus'][$pm[1]] ?? 201);
+    $state['pushes'][] = [
+        'device' => $pm[1],
+        'authorization' => $_SERVER['HTTP_AUTHORIZATION'] ?? '',
+        'encoding' => $_SERVER['HTTP_CONTENT_ENCODING'] ?? '',
+        'ttl' => $_SERVER['HTTP_TTL'] ?? '',
+        'body' => base64_encode((string) file_get_contents('php://input')),
+        'status' => $status,
+    ];
+    save($stateFile, $state);
+    if ($status >= 300) {
+        out(['reason' => $status === 403 ? 'BadJwtToken' : 'Gone'], $status);
+    } else {
+        http_response_code($status);
+    }
     return true;
 }
 
@@ -137,6 +159,40 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
                 unset($state['metafields'][$mf['ownerId'] . '|' . $mf['namespace'] . '.' . $mf['key']]);
             }
             $data = ['metafieldsDelete' => ['userErrors' => []]];
+            break;
+        case 'ClubCustomer':
+            $c = $state['customers'][$v['id']] ?? null;
+            $data = ['customer' => $c ? [
+                'id' => $c['id'],
+                'tags' => $c['tags'] ?? [],
+                'numberOfOrders' => (string) count($ordersOf($c['id'])),
+                'defaultEmailAddress' => ['marketingState' => $c['marketing'] ?? 'NOT_SUBSCRIBED'],
+            ] : null];
+            break;
+        case 'ClubNewsletter':
+            $data = ['nodes' => array_map(static fn ($id) => isset($state['customers'][$id])
+                ? ['id' => $id, 'defaultEmailAddress' => ['marketingState' => $state['customers'][$id]['marketing'] ?? 'NOT_SUBSCRIBED']]
+                : null, $v['ids'])];
+            break;
+        case 'ClubTrack':
+            $byId = array_column($state['orders'], null, 'id');
+            $data = ['nodes' => array_map(static fn ($id) => $byId[$id] ?? null, $v['ids'])];
+            break;
+        case 'ClubWaitlist':
+            preg_match('/tag:"([^"]+)"/', (string) $v['q'], $mm);
+            $list = array_values(array_filter($state['customers'], static fn ($c) => in_array($mm[1] ?? '', $c['tags'] ?? [], true)));
+            $data = ['customers' => ['pageInfo' => ['hasNextPage' => false, 'endCursor' => null], 'nodes' => array_map(static fn ($c) => [
+                'id' => $c['id'], 'firstName' => $c['firstName'] ?? null, 'defaultEmailAddress' => ['emailAddress' => $c['email']],
+            ], $list)]];
+            break;
+        case 'ClubShopId':
+            $data = ['shop' => ['id' => 'gid://shopify/Shop/1']];
+            break;
+        case 'ClubShopMeta':
+            foreach ($v['m'] as $mf) {
+                $state['metafields'][$mf['ownerId'] . '|' . $mf['namespace'] . '.' . $mf['key']] = $mf['value'];
+            }
+            $data = ['metafieldsSet' => ['metafields' => [], 'userErrors' => []]];
             break;
         case 'ClubCode':
             $in = $v['input'];

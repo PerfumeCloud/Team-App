@@ -54,6 +54,21 @@ final class Auth
         return $user;
     }
 
+    /** Club-Admin (Kunden-App): Admins immer, andere nur mit Freischaltung („Club-Admin“ unter Team). */
+    public static function clubAccess(array $user): bool
+    {
+        return $user['role'] === 'admin' || (int) ($user['club_access'] ?? 0) === 1;
+    }
+
+    public static function requireClub(): array
+    {
+        $user = self::require();
+        if (!self::clubAccess($user)) {
+            throw new HttpError(403, 'Kein Zugriff auf den Club. Ein Admin kann ihn unter Einstellungen → Team freischalten.');
+        }
+        return $user;
+    }
+
     public static function login(string $email, string $password): array
     {
         $ip = Util::clientIp();
@@ -134,6 +149,7 @@ final class Auth
             'email' => $u['email'],
             'color' => $u['color'],
             'role' => $u['role'],
+            'club_access' => (int) ($u['club_access'] ?? 0),
             'updated_at' => (int) $u['updated_at'],
             'deleted' => (int) $u['deleted'],
         ];

@@ -5,7 +5,8 @@ namespace Club;
 
 /**
  * Verschickt E-Mails per SMTP über ein eigenes Postfach (z. B. info@perfumecloud.de bei netcup).
- * Nur für den Anmeldecode, falls die Anmeldung per E-Mail-Code eingeschaltet ist.
+ * Nur Bestätigungen und Einladungen: Anmeldecode, Willkommen im Club, Einladung an die Warteliste,
+ * Feedback an das Team. Alles andere (Punkte, Versand, Aktionen) kommt per Push.
  */
 final class Mailer
 {
@@ -55,10 +56,10 @@ final class Mailer
     }
 
     /** @return array{sent:bool, message:string} */
-    public static function send(string $to, string $subject, string $text, ?string $html = null): array
+    public static function send(string $to, string $subject, string $text, ?string $html = null, ?string $replyTo = null): array
     {
         if ($log = self::logFile()) {
-            @file_put_contents($log, Util::json(['to' => $to, 'subject' => $subject, 'text' => $text]) . "\n", FILE_APPEND | LOCK_EX);
+            @file_put_contents($log, Util::json(['to' => $to, 'subject' => $subject, 'text' => $text, 'reply_to' => $replyTo, 'html' => $html !== null]) . "\n", FILE_APPEND | LOCK_EX);
             return ['sent' => true, 'message' => 'Mail protokolliert.'];
         }
         if (!self::configured()) {
@@ -66,7 +67,7 @@ final class Mailer
         }
         $c = self::config();
         try {
-            self::smtp($c, $to, self::message($c, $to, $subject, $text, $html));
+            self::smtp($c, $to, self::message($c, $to, $subject, $text, $html, $replyTo));
             return ['sent' => true, 'message' => 'Mail an ' . $to . ' verschickt.'];
         } catch (\Throwable $e) {
             Util::log('SMTP: ' . $e->getMessage());
@@ -89,7 +90,74 @@ final class Mailer
             . '</table></td></tr></table></body></html>';
     }
 
-    private static function message(array $c, string $to, string $subject, string $text, ?string $html): string
+    /**
+     * Gerüst für alle Mails im Stil der App: Elfenbein, weiße Karte, Holzbraun, Castoro/Georgia.
+     * $button: ['label' => …, 'url' => …]
+     */
+    public static function layout(string $label, string $title, string $contentHtml, ?array $button = null, string $footer = ''): string
+    {
+        $btn = '';
+        if ($button) {
+            $btn = '<tr><td style="padding-top:26px"><a href="' . htmlspecialchars((string) $button['url'], ENT_QUOTES) . '" '
+                . 'style="display:inline-block;background:#232120;color:#F4EFE6;text-decoration:none;border-radius:999px;padding:14px 26px;font-size:16px;font-family:Georgia,serif">'
+                . '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8BC49E;margin-right:10px;vertical-align:1px"></span>'
+                . htmlspecialchars((string) $button['label']) . '</a></td></tr>';
+        }
+        return '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>'
+            . '<body style="margin:0;background:#F4EFE6;font-family:Georgia,\'Times New Roman\',serif;color:#2E2A27">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4EFE6;padding:32px 12px"><tr><td align="center">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:24px;border:1px solid #CDBFAD;padding:34px 30px">'
+            . '<tr><td style="font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#80562F">' . htmlspecialchars($label) . '</td></tr>'
+            . '<tr><td style="padding-top:12px;font-size:27px;line-height:1.2;color:#232120">' . $title . '</td></tr>'
+            . '<tr><td style="padding-top:16px;font-size:16px;line-height:1.6">' . $contentHtml . '</td></tr>'
+            . $btn
+            . '</table>'
+            . ($footer !== '' ? '<p style="max-width:520px;margin:18px auto 0;font-size:12px;line-height:1.5;color:#6b625b;text-align:center">' . $footer . '</p>' : '')
+            . '</td></tr></table></body></html>';
+    }
+
+    /** Willkommensmail nach dem Beitritt (Bestätigung, geht an alle neuen Mitglieder). */
+    public static function welcome(array $member): array
+    {
+        if (!(bool) Settings::get('welcome_mail', true) || !self::configured()) {
+            return ['sent' => false, 'message' => 'aus'];
+        }
+        $p = Points::program();
+        $name = trim((string) ($member['first_name'] ?? ''));
+        $balance = Points::balance($member['id']);
+        $locked = Points::locked($member['id']);
+        $tier = Tiers::of($member, $p);
+        $hallo = $name !== '' ? 'Hallo ' . $name : 'Hallo';
+        $rate = Tiers::rateText((float) $tier['rate']);
+        $lines = [
+            'Für jeden Euro bekommst du ' . $rate . '.',
+            'Je ' . $p['redeem_points'] . ' Punkte gibt es ' . Util::euro((int) $p['redeem_cents']) . ' Rabatt – als Code für deinen nächsten Einkauf.',
+        ];
+        if ($p['tiers_enabled']) {
+            $up = array_slice($p['tiers'], 1);
+            $lines[] = 'Mit mehr Einkäufen steigst du auf: ' . implode(' und ', array_map(static fn ($t) => $t['name'] . ' ab ' . Util::euro((int) $t['min_cents']) . ' (' . Tiers::rateText((float) $t['rate']) . ')', $up)) . '.';
+        }
+        $intro = $balance > 0
+            ? "<b>$balance Punkte</b> liegen schon auf deinem Konto."
+            : 'Ab jetzt sammelst du mit jeder Bestellung Punkte.';
+        if ($locked > 0) {
+            $intro .= " Dazu warten <b>$locked Punkte</b> Startbonus auf dich – sie werden mit deiner ersten Bestellung frei.";
+        }
+        $list = '<ul style="margin:14px 0 0;padding-left:20px">' . implode('', array_map(static fn ($l) => '<li style="margin:6px 0">' . htmlspecialchars($l) . '</li>', $lines)) . '</ul>';
+        $tip = '<p style="margin:18px 0 0;padding:14px 16px;background:#F4EFE6;border-radius:14px;font-size:15px">Tipp: Leg dir den Club als App auf den Home-Bildschirm und schalte unter „Konto“ die Mitteilungen ein. Dann erfährst du sofort, wenn dein Paket unterwegs ist oder Punkte ankommen.</p>';
+        $html = self::layout(
+            $p['name'],
+            'Willkommen im <i style="color:#80562F">Club</i>',
+            '<p style="margin:0">' . htmlspecialchars($hallo) . ', schön, dass du dabei bist. ' . $intro . '</p>' . $list . $tip,
+            ['label' => 'Zu meinen Punkten', 'url' => Util::baseUrl() . '/'],
+            'Perfume Cloud · Du bekommst diese E-Mail, weil du dem ' . htmlspecialchars($p['name']) . ' beigetreten bist.'
+        );
+        $text = "$hallo, schön, dass du dabei bist.\n\n" . strip_tags(str_replace('<b>', '', $intro)) . "\n\n- " . implode("\n- ", $lines)
+            . "\n\nZu deinen Punkten: " . Util::baseUrl() . "/\n\nPerfume Cloud";
+        return self::send((string) $member['email'], 'Willkommen im ' . $p['name'], $text, $html);
+    }
+
+    private static function message(array $c, string $to, string $subject, string $text, ?string $html, ?string $replyTo = null): string
     {
         $from = $c['from_email'] ?: $c['user'];
         $boundary = 'pcc' . bin2hex(random_bytes(8));
@@ -103,6 +171,9 @@ final class Mailer
             'MIME-Version: 1.0',
             'Auto-Submitted: auto-generated',
         ];
+        if ($replyTo !== null && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+            $headers[] = "Reply-To: <$replyTo>";
+        }
         if ($html === null) {
             $headers[] = 'Content-Type: text/plain; charset=utf-8';
             $headers[] = 'Content-Transfer-Encoding: base64';

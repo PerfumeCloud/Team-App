@@ -65,12 +65,19 @@ final class Api
             ['PUT', '/me/mailbox', static function () {
                 $me = Auth::require();
                 $mb = MailJob::savePersonal($me, Http::body());
-                $test = MailJob::test($mb);
-                Settings::set('mail_status_' . $mb['id'], ['ok' => $test['ok'], 'at' => Util::now(), 'message' => $test['message']]);
+                $test = self::checkMailbox($mb, false);
                 if ($test['ok']) {
                     Http::defer(static fn () => Jobs::run('setup'));
                 }
                 return ['test' => $test] + self::myMailbox($me);
+            }],
+            // Verbindung prüfen: Abruf und Versand Schritt für Schritt, mit Testmail an das Postfach selbst
+            ['POST', '/me/mailbox/check', static function () {
+                $mb = MailJob::personal(Auth::require()['id']);
+                if (!$mb) {
+                    throw new HttpError(404, 'Du hast noch kein eigenes Postfach eingetragen.');
+                }
+                return self::checkMailbox($mb, true);
             }],
             ['DELETE', '/me/mailbox', static function () {
                 $me = Auth::require();
@@ -147,11 +154,30 @@ final class Api
                 Db::exec('DELETE FROM push_subscriptions WHERE id = ? AND user_id = ?', [hash('sha256', $endpoint), $me['id']]);
                 return ['ok' => true];
             }],
-            ['POST', '/push/test', static function () {
+            // Testnachricht an alle eigenen Geräte – Ergebnis je Gerät (z. B. „iPhone Safari: BadJwtToken“)
+            ['POST', '/push/test', static fn () => Notify::test(Auth::require())],
+            ['GET', '/push/devices', static fn () => ['devices' => Notify::devices(Auth::require()['id'])]],
+            ['DELETE', '/push/devices/([0-9a-f]{64})', static function (string $id) {
                 $me = Auth::require();
-                $n = Notify::toUser($me, ['title' => 'Push funktioniert ✓', 'body' => 'So sehen Benachrichtigungen der Team-App aus.', 'url' => '/einstellungen', 'tag' => 'test']);
-                return ['sent' => $n];
+                Db::exec('DELETE FROM push_subscriptions WHERE id = ? AND user_id = ?', [$id, $me['id']]);
+                return ['devices' => Notify::devices($me['id'])];
             }],
+
+            // ---- Members Club (Kunden-App) – nur mit Club-Zugang, der Schlüssel bleibt auf dem Server ----
+            ['GET', '/club/stats', static function () {
+                Auth::requireClub();
+                return Club::request('GET', '/internal/stats');
+            }],
+            ['GET', '/club/broadcasts', static fn () => Club::broadcasts(Auth::requireClub())],
+            ['POST', '/club/broadcasts', static fn () => Club::saveBroadcast(Auth::requireClub(), Http::body(), null)],
+            ['PUT', "/club/broadcasts/$uuid", static fn (string $id) => Club::saveBroadcast(Auth::requireClub(), Http::body(), $id)],
+            ['POST', "/club/broadcasts/$uuid/(submit|approve|reject|cancel|test)", static fn (string $id, string $action) => Club::broadcastAction(Auth::requireClub(), $id, $action, Http::body())],
+            ['DELETE', "/club/broadcasts/$uuid", static function (string $id) {
+                Auth::requireClub();
+                return Club::request('DELETE', "/internal/broadcasts/$id");
+            }],
+            // Einmal-Link (60 Sekunden) in den Club-Admin
+            ['POST', '/club/sso', static fn () => Club::request('POST', '/internal/sso', ['user' => Club::user(Auth::requireClub())])],
 
             ['GET', '/widget', static function () {
                 $user = Widget::userForToken((string) (Http::query('token') ?? ''));
@@ -199,16 +225,37 @@ final class Api
             }],
             ['PUT', '/admin/mailboxes', static function () {
                 Auth::requireAdmin();
+                @set_time_limit(170);
                 $list = MailJob::save(is_array(Http::body()['mailboxes'] ?? null) ? Http::body()['mailboxes'] : []);
                 $tests = [];
                 foreach ($list as $mb) {
-                    $tests[$mb['id']] = MailJob::test($mb);
-                    Settings::set('mail_status_' . $mb['id'], ['ok' => $tests[$mb['id']]['ok'], 'at' => Util::now(), 'message' => $tests[$mb['id']]['message']]);
+                    $tests[$mb['id']] = self::checkMailbox($mb, false);
                 }
                 if ($list) {
                     Http::defer(static fn () => Jobs::run('setup'));
                 }
                 return ['tests' => $tests] + self::integrations();
+            }],
+            ['POST', '/admin/mailboxes/([A-Za-z0-9_-]{1,40})/check', static function (string $id) {
+                Auth::requireAdmin();
+                $mb = MailJob::byId($id);
+                if (!$mb) {
+                    throw new HttpError(404, 'Postfach nicht gefunden.');
+                }
+                return self::checkMailbox($mb, true);
+            }],
+            ['GET', '/admin/club', static function () {
+                Auth::requireAdmin();
+                return Club::settings();
+            }],
+            ['PUT', '/admin/club', static function () {
+                Auth::requireAdmin();
+                Club::save(Http::body());
+                return ['test' => Club::configured() ? Club::test() : null] + Club::settings();
+            }],
+            ['POST', '/admin/club/ping', static function () {
+                Auth::requireAdmin();
+                return ['test' => Club::test()] + Club::settings();
             }],
             ['POST', '/admin/jobs', static function () {
                 Auth::requireAdmin();
@@ -228,6 +275,14 @@ final class Api
                 }
                 if (isset($b['low_stock_threshold'])) {
                     Settings::set('low_stock_threshold', max(0, min(1000, (int) $b['low_stock_threshold'])));
+                }
+                // Versand: Port 465 (SSL/TLS) oder 587 (STARTTLS), 0 = automatisch; Server leer = wie IMAP
+                if (array_key_exists('smtp_port', $b)) {
+                    $port = (int) $b['smtp_port'];
+                    Settings::set('smtp_port', in_array($port, [465, 587], true) ? $port : 0);
+                }
+                if (array_key_exists('smtp_host', $b)) {
+                    Settings::set('smtp_host', MailJob::server(Util::str($b['smtp_host'], 190) ?? '', 465, 'ssl')['host']);
                 }
                 if (array_key_exists('base_url', $b)) {
                     $cfg = Config::all();
@@ -337,6 +392,7 @@ final class Api
             // Vorschlag für den IMAP-Server: derselbe wie bei info@/support@
             'suggestedHost' => $team[0]['host'] ?? '',
             'lastFetch' => (int) Settings::get('mail_last_fetch', 0),
+            'cronLastRun' => (int) Settings::get('cron_last_run', 0),
         ];
     }
 
@@ -353,6 +409,10 @@ final class Api
         if (isset($b['role']) && $id !== $me['id']) {
             $row['role'] = Util::oneOf($b['role'], ['admin', 'member'], $u['role']);
         }
+        // „Club-Admin“: Zugang zum Members Club (Admins haben ihn immer)
+        if (array_key_exists('club_access', $b)) {
+            $row['club_access'] = !empty($b['club_access']) ? 1 : 0;
+        }
         if (!empty($b['password'])) {
             $row['password_hash'] = Auth::hashPassword((string) $b['password']);
             Db::exec('DELETE FROM sessions WHERE user_id = ?', [$id]);
@@ -366,7 +426,7 @@ final class Api
         $endpoint = (string) ($b['endpoint'] ?? '');
         $p256dh = (string) ($b['keys']['p256dh'] ?? '');
         $auth = (string) ($b['keys']['auth'] ?? '');
-        if (!preg_match('#^https://#', $endpoint) || $p256dh === '' || $auth === '') {
+        if (!WebPush::validEndpoint($endpoint) || strlen($endpoint) > 2000 || $p256dh === '' || $auth === '') {
             throw new HttpError(422, 'Ungültiges Push-Abo.');
         }
         $id = hash('sha256', $endpoint);
@@ -380,9 +440,20 @@ final class Api
             'user_agent' => mb_substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 250),
             'created_at' => Util::now(),
             'last_ok_at' => null,
+            'last_status' => null,
+            'last_error' => null,
             'fail_count' => 0,
         ]);
-        return ['ok' => true];
+        return ['ok' => true, 'id' => $id];
+    }
+
+    /** Postfach prüfen und das Ergebnis des Abrufs als Status merken (der Versand ändert den Status nicht). */
+    private static function checkMailbox(array $mb, bool $smtp): array
+    {
+        @set_time_limit(120);
+        $r = MailCheck::run($mb, $smtp);
+        Settings::set('mail_status_' . $mb['id'], ['ok' => $r['imap'], 'at' => Util::now(), 'message' => $r['imapMessage']]);
+        return $r;
     }
 
     private static function integrations(): array
@@ -406,6 +477,13 @@ final class Api
                 'apiVersion' => Shopify::API_VERSION,
             ],
             'mailboxes' => $mailboxes,
+            'mail' => [
+                'lastFetch' => (int) Settings::get('mail_last_fetch', 0),
+                'lastError' => Settings::get('mail_last_error'),
+                'smtpHost' => (string) (Settings::get('smtp_host') ?? ''),
+                'smtpPort' => (int) Settings::get('smtp_port', 0),
+                'sender' => Mailer::sender()['email'] ?? null,
+            ],
             'cron' => [
                 'url' => Util::baseUrl() . '/api/cron?key=' . $cronKey,
                 'lastRun' => (int) Settings::get('cron_last_run', 0),

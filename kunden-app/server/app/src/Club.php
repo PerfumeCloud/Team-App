@@ -12,7 +12,7 @@ final class Club
     public static function fromShopify(array $c): array
     {
         $now = Util::now();
-        $m = Db::one('SELECT * FROM members WHERE shopify_id = ?', [$c['id']]);
+        $m = Db::one('SELECT * FROM club_members WHERE shopify_id = ?', [$c['id']]);
         $data = [
             'email' => mb_substr(mb_strtolower((string) $c['email']), 0, 190),
             'first_name' => Util::str($c['first_name'] ?? null, 100),
@@ -27,11 +27,11 @@ final class Club
                     unset($data[$k]);
                 }
             }
-            Db::update('members', $data, ['id' => $m['id']]);
-            return Db::one('SELECT * FROM members WHERE id = ?', [$m['id']]);
+            Db::update('club_members', $data, ['id' => $m['id']]);
+            return Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]);
         }
         $id = Util::uuid();
-        Db::insert('members', $data + [
+        Db::insert('club_members', $data + [
             'id' => $id,
             'shopify_id' => (string) $c['id'],
             'joined_at' => null,
@@ -39,7 +39,7 @@ final class Club
             'meta_dirty' => 0,
             'created_at' => $now,
         ]);
-        return Db::one('SELECT * FROM members WHERE id = ?', [$id]);
+        return Db::one('SELECT * FROM club_members WHERE id = ?', [$id]);
     }
 
     /** Nach der Anmeldung per E-Mail-Code: Shopify-Kundenkonto suchen oder anlegen. */
@@ -82,18 +82,22 @@ final class Club
         }
         $first = Util::str($in['first_name'] ?? null, 100);
         $now = Util::now();
-        $update = ['joined_at' => $now, 'meta_dirty' => 1, 'updated_at' => $now];
+        $update = ['joined_at' => $now, 'meta_dirty' => 1, 'updated_at' => $now, 'tier' => Tiers::KEYS[0]];
         if ($first !== null && !$m['first_name']) {
             $update['first_name'] = $first;
         }
-        Db::update('members', $update, ['id' => $m['id']]);
-        $m = Db::one('SELECT * FROM members WHERE id = ?', [$m['id']]);
+        Db::update('club_members', $update, ['id' => $m['id']]);
+        $m = Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]);
         Points::welcome($m);
+        Bonus::refCode($m);
+        // Startbonus (Warteliste), Einladung eines Freundes, Newsletter – gleich, damit die App es zeigen kann
+        Bonus::onJoin($m, is_string($in['einladung'] ?? null) ? $in['einladung'] : null);
+        $m = Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]);
 
-        // Shopify: Tag „club“ (für Segmente, Mails, Flow) und erste Punkte aus bisherigen Bestellungen
-        if (Shopify::configured()) {
-            $member = $m;
-            Http::defer(static function () use ($member): void {
+        // Shopify: Tag „club“ (für Segmente, Mails, Flow), erste Punkte aus bisherigen Bestellungen, Willkommensmail
+        $member = $m;
+        Http::defer(static function () use ($member): void {
+            if (Shopify::configured()) {
                 try {
                     $d = Shopify::graphql(
                         'mutation ClubTag($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }',
@@ -105,28 +109,33 @@ final class Club
                 }
                 try {
                     Points::syncMember($member);
-                    Points::pushMetafields();
                 } catch (\Throwable $e) {
                     Util::log('Beitritt-Abgleich: ' . $e->getMessage());
                 }
-            });
-        }
+            }
+            try {
+                Mailer::welcome(Db::one('SELECT * FROM club_members WHERE id = ?', [$member['id']]) ?? $member);
+            } catch (\Throwable $e) {
+                Util::log('Willkommensmail: ' . $e->getMessage());
+            }
+            if (Shopify::configured()) {
+                try {
+                    Points::pushMetafields();
+                } catch (\Throwable $e) {
+                    Util::log('Beitritt-Metafelder: ' . $e->getMessage());
+                }
+            }
+        });
         return $m;
     }
 
     /** Austritt: offene Codes werden ungültig, Punkte verfallen, Daten werden gelöscht. */
     public static function leave(array $m): void
     {
-        $codes = Db::all("SELECT discount_id FROM codes WHERE member_id = ? AND status = 'active'", [$m['id']]);
+        $codes = Db::all("SELECT discount_id FROM club_codes WHERE member_id = ? AND status = 'active'", [$m['id']]);
         if (Shopify::configured()) {
             foreach ($codes as $c) {
-                if ($c['discount_id']) {
-                    try {
-                        Shopify::graphql('mutation ClubCodeDelete($id: ID!) { discountCodeDelete(id: $id) { userErrors { message } } }', ['id' => $c['discount_id']]);
-                    } catch (\Throwable $e) {
-                        Util::log('Austritt, Code löschen: ' . $e->getMessage());
-                    }
-                }
+                Points::deleteDiscount($c['discount_id']);
             }
             try {
                 Shopify::graphql(
@@ -135,18 +144,21 @@ final class Club
                 );
                 Shopify::graphql(
                     'mutation ClubMetaDelete($m: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $m) { userErrors { message } } }',
-                    ['m' => array_map(static fn ($k) => ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => $k], ['punkte', 'punkte_ausstehend', 'mitglied_seit'])]
+                    ['m' => array_map(static fn ($k) => ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => $k], ['punkte', 'punkte_ausstehend', 'mitglied_seit', 'stufe'])]
                 );
             } catch (\Throwable $e) {
                 Util::log('Austritt, Shopify: ' . $e->getMessage());
             }
         }
         Db::tx(static function () use ($m): void {
-            foreach (['ledger', 'codes', 'club_orders', 'order_cache'] as $t) {
+            foreach (['club_ledger', 'club_codes', 'club_orders', 'club_order_cache', 'club_push_subs', 'club_push_queue', 'club_claims'] as $t) {
                 Db::exec("DELETE FROM $t WHERE member_id = ?", [$m['id']]);
             }
-            Db::exec('DELETE FROM sessions WHERE kind = ? AND subject_id = ?', ['member', $m['id']]);
-            Db::exec('DELETE FROM members WHERE id = ?', [$m['id']]);
+            // Feedback bleibt anonym erhalten
+            Db::exec('UPDATE club_feedback SET member_id = NULL, name = NULL, email = NULL WHERE member_id = ?', [$m['id']]);
+            Db::exec('UPDATE club_members SET referred_by = NULL WHERE referred_by = ?', [$m['id']]);
+            Db::exec('DELETE FROM club_sessions WHERE kind = ? AND subject_id = ?', ['member', $m['id']]);
+            Db::exec('DELETE FROM club_members WHERE id = ?', [$m['id']]);
         });
     }
 
@@ -169,10 +181,16 @@ final class Club
             'program' => Points::publicProgram(),
             'shop_url' => Shopify::shopUrl(),
             'account_url' => self::accountUrl(),
+            'preview' => Auth::preview() !== null,
+            'admin' => Auth::admin() !== null,
         ];
         if ($m['joined_at']) {
             $out['points'] = Points::summary($m);
             $out['codes'] = array_values(array_filter(Points::codes($m['id']), static fn ($c) => $c['status'] === 'active'));
+            $out['tier'] = Tiers::info($m);
+            $out['push'] = Push::state($m);
+            $out['feedback'] = Broadcasts::openFeedback($m);
+            $out['bonus'] = Bonus::status($m);
         }
         return $out;
     }

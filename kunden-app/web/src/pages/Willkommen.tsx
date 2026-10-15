@@ -1,11 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { BadgePercent, Gift, Truck } from 'lucide-react';
 import { api, fehlertext } from '../lib/api';
 import { useKunde, useStatus } from '../lib/kontext';
 import { useTitel } from '../lib/hooks';
 import { abmelden } from '../lib/konto';
-import { euro, punkteWort } from '../lib/format';
+import { punkteWort } from '../lib/format';
+import { codeText, einloesenText, sammelText, verfallText } from '../lib/regeln';
+import { einladung, einladungVergessen } from '../lib/einladung';
+import { AktionBanner } from '../components/Club';
 import type { Me } from '../lib/types';
 import { Erfolg, Hb, Hinweis, Seitenkopf } from '../components/ui';
 import { KundenShell } from '../components/Shell';
@@ -21,13 +24,22 @@ export default function Willkommen() {
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [beigetreten, setBeigetreten] = useState<Me | null>(null);
+  const [code] = useState(() => einladung());
+  const [gast, setGast] = useState<{ name: string; points: number } | null>(null);
+  useEffect(() => {
+    if (!code) return;
+    api<{ name: string; points: number }>('GET', `/einladung/${encodeURIComponent(code)}`)
+      .then(setGast)
+      .catch(() => setGast(null));
+  }, [code]);
 
   async function beitreten(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setFehler(null);
     try {
-      setBeigetreten(await api<Me>('POST', '/me/join', { terms: ok, first_name: vorname.trim() || undefined }));
+      setBeigetreten(await api<Me>('POST', '/me/join', { terms: ok, first_name: vorname.trim() || undefined, einladung: gast ? code : undefined }));
+      einladungVergessen();
     } catch (err) {
       setFehler(fehlertext(err));
     } finally {
@@ -43,6 +55,14 @@ export default function Willkommen() {
         <p>Du bist angemeldet als {me.member.email}. Ein Schritt noch, dann sammelst du mit jeder Bestellung Punkte.</p>
       </Seitenkopf>
 
+      {gast && (
+        <Hinweis>
+          <b style={{ fontWeight: 400, fontStyle: 'italic' }}>{gast.name}</b> hat dich eingeladen.
+          {gast.points > 0 && ` Nach deiner ersten Bestellung bekommst du ${punkteWort(gast.points)} extra.`}
+        </Hinweis>
+      )}
+      <AktionBanner p={p} />
+
       <ul className="vorteile">
         <li>
           <span className="symbol">
@@ -50,7 +70,7 @@ export default function Willkommen() {
           </span>
           <h2 className="karte-titel">{p.welcome_points > 0 ? `${punkteWort(p.welcome_points)} geschenkt` : 'Punkte sammeln'}</h2>
           <p>
-            {p.welcome_points > 0 ? 'Gleich zum Start. ' : ''}Danach bekommst du für jeden Euro {punkteWort(p.earn_per_euro)}.
+            {p.welcome_points > 0 ? 'Gleich zum Start. ' : ''}{sammelText(p)}
             {p.retro_days > 0 && ` Bestellungen der letzten ${p.retro_days} Tage zählen schon mit.`}
           </p>
         </li>
@@ -59,9 +79,7 @@ export default function Willkommen() {
             <BadgePercent />
           </span>
           <h2 className="karte-titel">Als Rabatt einlösen</h2>
-          <p>
-            Je {punkteWort(p.redeem_points)} gibt es {euro(p.redeem_cents)} Rabatt, als Code für deinen nächsten Einkauf.
-          </p>
+          <p>{einloesenText(p)}</p>
         </li>
         <li>
           <span className="symbol">
@@ -91,7 +109,7 @@ export default function Willkommen() {
             ) : (
               'Teilnahmebedingungen'
             )}
-            . Punkte werden {p.wait_days > 0 ? `${p.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben, Codes gelten {p.code_days} Tage. Austreten kann ich jederzeit.
+            . Punkte werden {p.wait_days > 0 ? `${p.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben. {codeText(p)} {verfallText(p)} Austreten kann ich jederzeit.
           </span>
         </label>
         {fehler && <Hinweis fehler>{fehler}</Hinweis>}
@@ -112,9 +130,10 @@ export default function Willkommen() {
       {beigetreten && (
         <Erfolg name="WILLKOMMEN" titel="Du bist im Club">
           <p>
-            {p.welcome_points > 0
-              ? `${punkteWort(p.welcome_points)} Willkommensbonus sind schon auf deinem Konto.`
+            {beigetreten.points && beigetreten.points.balance > 0
+              ? `${punkteWort(beigetreten.points.balance)} sind schon auf deinem Konto.`
               : 'Ab jetzt sammelst du mit jeder Bestellung Punkte.'}
+            {beigetreten.points && beigetreten.points.locked > 0 && ` Dazu warten ${punkteWort(beigetreten.points.locked)} Bonus auf deine erste Bestellung.`}
           </p>
           <Hb
             dunkel

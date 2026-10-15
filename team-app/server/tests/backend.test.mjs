@@ -3,6 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
+import http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -12,11 +13,125 @@ import crypto from 'node:crypto';
 const here = dirname(fileURLToPath(import.meta.url));
 const serverDir = join(here, '..');
 const tmp = mkdtempSync(join(tmpdir(), 'pc-test-'));
-const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp };
+// PC_PUSH_TEST: Push-Adressen dürfen im Test auf http://127.0.0.1 zeigen (Nachbau des Push-Dienstes)
+const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1' };
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 const IMAP_PORT = PORT + 1000;
+const SMTP_PORT = PORT + 2000;
+const CLOSED_PORT = PORT + 3000;
 const base = `http://127.0.0.1:${PORT}/api`;
 let php, imap;
+
+// Mails, die der Test-SMTP-Server angenommen hat
+const smtpMails = [];
+let smtpBuf = '';
+
+// Nachbau eines Push-Dienstes: /ok → 201, /gone → 410, /jwt → 403 {"reason":"BadJwtToken"} (wie Apple)
+const pushHits = [];
+const pushServer = http.createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    pushHits.push({ path: req.url, headers: req.headers, body: Buffer.concat(chunks) });
+    if (req.url.startsWith('/ok')) {
+      res.writeHead(201).end();
+    } else if (req.url.startsWith('/gone')) {
+      res.writeHead(410).end();
+    } else if (req.url.startsWith('/jwt')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' }).end(JSON.stringify({ reason: 'BadJwtToken' }));
+    } else {
+      res.writeHead(500).end('kaputt');
+    }
+  });
+});
+
+// Nachbau des Clubs (Kunden-App): /api/internal/… mit X-Club-Key
+const CLUB_KEY = 'club-test-schluessel-123';
+const clubCalls = [];
+const club = { broadcasts: [], denySso: new Set(), fourEyes: true };
+const CLUB_LABELS = { draft: 'Entwurf', review: 'Zur Prüfung', approved: 'Freigegeben', sending: 'Wird verschickt', sent: 'Verschickt' };
+let clubUrl = '';
+const clubServer = http.createServer((req, res) => {
+  let raw = '';
+  req.on('data', (c) => (raw += c));
+  req.on('end', () => {
+    const body = raw ? JSON.parse(raw) : {};
+    const path = new URL(req.url, 'http://x').pathname;
+    clubCalls.push({ method: req.method, path, body, key: req.headers['x-club-key'] });
+    const send = (status, data) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
+    if (req.headers['x-club-key'] !== CLUB_KEY) return send(403, { error: 'Ungültiger Schlüssel.' });
+    const row = (b) => ({ ...b, status_label: CLUB_LABELS[b.status] });
+    const route = `${req.method} ${path}`;
+    if (route === 'GET /api/internal/ping') return send(200, { ok: true, version: '1.4.0', team_mode: false, app_url: clubUrl, program: 'Perfume Cloud Club' });
+    if (route === 'GET /api/internal/stats') {
+      return send(200, {
+        members: 42, new_7: 3, new_30: 9, active_30: 20,
+        joins_by_month: [{ month: '2026-09', count: 5 }, { month: '2026-10', count: 4 }],
+        tiers: [{ key: 'bronze', name: 'Bronze', count: 30 }, { key: 'silber', name: 'Silber', count: 10 }, { key: 'gold', name: 'Gold', count: 2 }],
+        points: { earned: 12000, earned_30: 3000, redeemed: 4000, redeemed_30: 1000, expired: 200, available: 7800, available_value_cents: 3900, pending: 500, locked: 0 },
+        bonus: [], codes: { used: { count: 12, cents: 6000 } }, codes_used_30: { count: 4, cents: 2000 },
+        orders: { count: 80, revenue_cents: 640000 }, orders_30: { count: 20, revenue_cents: 160000 },
+        push_members: 25, feedback: { gut: 10, neutral: 2, schlecht: 1 }, promotion: null, open_claims: 2, app_url: clubUrl, at: Date.now(),
+      });
+    }
+    if (route === 'POST /api/internal/kick') return send(200, { push: '1 Push-Nachrichten verschickt' });
+    if (route === 'POST /api/internal/migrate') return send(200, { ok: true, version: '1.4.0', schema: '1.4.0' });
+    if (route === 'POST /api/internal/sso') {
+      if (club.denySso.has(body.user?.email)) return send(403, { error: 'Kein Zugriff auf den Club-Admin. Ein Admin der Team-App kann ihn unter „Team“ freischalten.' });
+      return send(200, { url: `${clubUrl}/api/admin/sso?t=einmal-${body.user?.id}` });
+    }
+    if (route === 'GET /api/internal/broadcasts') {
+      return send(200, {
+        broadcasts: club.broadcasts.map(row),
+        templates: [{ key: 'release', label: 'Neuer Duft', kind: 'news', title: 'Neu: {duft}', body: '{vorname}, unser neuer Duft {duft} ist da.', url: '', audience: 'all', fields: { duft: 'Name des Dufts' } }],
+        audiences: [{ key: 'all', label: 'Alle Mitglieder', count: 25 }, { key: 'silber', label: 'Silber und Gold', count: 8 }, { key: 'gold', label: 'Nur Gold', count: 2 }],
+        four_eyes: club.fourEyes, quiet: { start: 21, end: 8 }, app_url: clubUrl,
+      });
+    }
+    const save = (b) => {
+      if (/\{(duft|aktion)\}/.test(`${body.title} ${body.body}`)) return send(422, { error: 'Bitte die Platzhalter in geschweiften Klammern ausfüllen (z. B. {duft}).' });
+      Object.assign(b, { kind: body.kind, template: body.template, title: body.title, body: body.body, url: body.url, audience: body.audience, scheduled_at: body.scheduled_at, status: 'draft', review_note: null, updated_at: Date.now() });
+      return send(200, row(b));
+    };
+    if (route === 'POST /api/internal/broadcasts') {
+      const b = { id: crypto.randomUUID(), created_by: body.user.id, created_by_name: body.user.name, approved_by_name: null, approved_at: null, sent_at: null, recipients: 0, error: null, created_at: Date.now() };
+      club.broadcasts.push(b);
+      return save(b);
+    }
+    const m = path.match(/^\/api\/internal\/broadcasts\/([0-9a-f-]{36})(?:\/(\w+))?$/);
+    const b = m && club.broadcasts.find((x) => x.id === m[1]);
+    if (!b) return send(404, { error: 'Nachricht nicht gefunden.' });
+    const action = req.method === 'POST' ? m[2] : req.method;
+    if (action === 'PUT') return save(b);
+    if (action === 'submit') b.status = 'review';
+    if (action === 'approve') {
+      if (club.fourEyes && b.created_by === body.user.id) return send(403, { error: 'Vier-Augen-Prinzip: Eine andere Person muss die Nachricht freigeben.' });
+      Object.assign(b, { approved_by_name: body.user.name, approved_at: Date.now() });
+      if (b.scheduled_at) b.status = 'approved';
+      else Object.assign(b, { status: 'sent', sent_at: Date.now(), recipients: 25, delivered: 24, queued: 0 });
+    }
+    if (action === 'reject') Object.assign(b, { status: 'draft', review_note: `${body.user.name}: ${body.note}` });
+    if (action === 'cancel') b.status = 'draft';
+    if (action === 'test') return send(409, { error: `Für ${body.user.email} gibt es im Club kein Gerät mit Mitteilungen.` });
+    if (action === 'DELETE') {
+      club.broadcasts = club.broadcasts.filter((x) => x !== b);
+      return send(200, { ok: true });
+    }
+    return send(200, row(b));
+  });
+});
+
+const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
+
+/** Wartet, bis fn etwas liefert (z. B. eine Mail beim Test-SMTP-Server). */
+async function eventually(fn, ms = 3000) {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = fn();
+    if (v || Date.now() > end) return v;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
 
 function waitFor(proc, text) {
   return new Promise((resolve, reject) => {
@@ -52,15 +167,27 @@ const helper = (...args) => JSON.parse(execFileSync('php', [join(here, 'helper.p
 before(async () => {
   php = spawn('php', ['-S', `127.0.0.1:${PORT}`, '-t', join(serverDir, 'public'), join(serverDir, 'public/router.php')], { env });
   await waitFor(php, 'Development Server');
-  imap = spawn('python3', [join(here, 'fake-imap.py'), String(IMAP_PORT)]);
+  imap = spawn('python3', [join(here, 'fake-imap.py'), String(IMAP_PORT), String(SMTP_PORT)]);
+  imap.stdout.on('data', (d) => {
+    smtpBuf += d.toString();
+    const lines = smtpBuf.split('\n');
+    smtpBuf = lines.pop();
+    for (const l of lines) if (l.startsWith('MAIL ')) smtpMails.push(JSON.parse(l.slice(5)));
+  });
   await waitFor(imap, 'ready');
+  pushPort = await listen(pushServer);
+  clubUrl = `http://127.0.0.1:${await listen(clubServer)}`;
 });
 
 after(() => {
   php?.kill();
   imap?.kill();
+  pushServer.close();
+  clubServer.close();
   rmSync(tmp, { recursive: true, force: true });
 });
+
+let pushPort;
 
 const admin = new Client();
 const kim = new Client();

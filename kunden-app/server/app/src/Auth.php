@@ -11,6 +11,7 @@ final class Auth
     private const CODE_TTL_MS = 10 * 60 * 1000;
 
     private static array $cache = [];
+    private static ?array $preview = null;
 
     /** @return array{session: array, subject: array}|null */
     private static function current(string $kind): ?array
@@ -23,27 +24,47 @@ final class Auth
             return self::$cache[$kind] = null;
         }
         $now = Util::now();
-        $session = Db::one('SELECT * FROM sessions WHERE id = ? AND kind = ?', [hash('sha256', $token), $kind]);
+        $session = Db::one('SELECT * FROM club_sessions WHERE id = ? AND kind = ?', [hash('sha256', $token), $kind]);
         if (!$session || (int) $session['expires_at'] < $now) {
             return self::$cache[$kind] = null;
         }
-        $table = $kind === 'admin' ? 'admins' : 'members';
-        $subject = Db::one("SELECT * FROM $table WHERE id = ?", [$session['subject_id']]);
+        $subject = $kind === 'admin'
+            ? Admins::find((string) $session['subject_id'])
+            : Db::one('SELECT * FROM club_members WHERE id = ?', [$session['subject_id']]);
         if (!$subject) {
             return self::$cache[$kind] = null;
         }
         if ($now - (int) $session['last_seen_at'] > 3600 * 1000) {
-            Db::exec('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?', [$now, $now + self::LIFETIME_MS[$kind], $session['id']]);
+            Db::exec('UPDATE club_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?', [$now, $now + self::LIFETIME_MS[$kind], $session['id']]);
             if ($kind === 'member') {
-                Db::exec('UPDATE members SET last_seen_at = ? WHERE id = ?', [$now, $subject['id']]);
+                Db::exec('UPDATE club_members SET last_seen_at = ? WHERE id = ?', [$now, $subject['id']]);
             }
         }
         return self::$cache[$kind] = ['session' => $session, 'subject' => $subject];
     }
 
+    /**
+     * Vorschau für das Team: Mit Admin-Sitzung und Header „X-Als: <Mitglieds-ID>“ sieht der Admin-Bereich die App
+     * genau so, wie dieses Mitglied sie sieht – nur lesend.
+     */
+    public static function preview(): ?array
+    {
+        if (self::$preview !== null) {
+            return self::$preview ?: null;
+        }
+        $id = (string) ($_SERVER['HTTP_X_ALS'] ?? '');
+        if (!preg_match('/^[0-9a-f-]{36}$/', $id) || !self::admin()) {
+            self::$preview = [];
+            return null;
+        }
+        $m = Db::one('SELECT * FROM club_members WHERE id = ?', [$id]);
+        self::$preview = $m ?: [];
+        return $m;
+    }
+
     public static function member(): ?array
     {
-        return self::current('member')['subject'] ?? null;
+        return self::preview() ?? self::current('member')['subject'] ?? null;
     }
 
     public static function requireMember(): array
@@ -83,7 +104,7 @@ final class Auth
     {
         $token = bin2hex(random_bytes(32));
         $now = Util::now();
-        Db::insert('sessions', [
+        Db::insert('club_sessions', [
             'id' => hash('sha256', $token),
             'kind' => $kind,
             'subject_id' => $subjectId,
@@ -95,6 +116,7 @@ final class Auth
         ]);
         self::cookie($kind, $token, time() + intdiv(self::LIFETIME_MS[$kind], 1000));
         unset(self::$cache[$kind]);
+        self::$preview = null;
     }
 
     /** Beendet die Sitzung. Gibt das Shopify-id_token zurück (für die Abmeldung bei Shopify). */
@@ -104,7 +126,7 @@ final class Auth
         $idToken = null;
         if ($cur) {
             $idToken = $cur['session']['id_token'] ? Crypto::decrypt((string) $cur['session']['id_token']) : null;
-            Db::exec('DELETE FROM sessions WHERE id = ?', [$cur['session']['id']]);
+            Db::exec('DELETE FROM club_sessions WHERE id = ?', [$cur['session']['id']]);
         }
         self::cookie($kind, '', time() - 3600);
         self::$cache[$kind] = null;
@@ -130,15 +152,35 @@ final class Auth
     public static function adminLogin(string $email, string $password): array
     {
         Util::limit('admin:' . Util::clientIp(), 8, 900, 'Zu viele Versuche. Bitte warte 15 Minuten.');
-        $admin = Db::one('SELECT * FROM admins WHERE email = ?', [mb_strtolower(trim($email))]);
-        if (!$admin || !password_verify($password, $admin['password_hash'])) {
+        try {
+            $admin = Admins::login($email, $password);
+        } catch (HttpError $e) {
             usleep(400000);
-            throw new HttpError(401, 'E-Mail oder Passwort ist falsch.');
+            throw $e;
         }
-        Db::exec("DELETE FROM attempts WHERE bucket = ?", ['admin:' . Util::clientIp()]);
-        Db::update('admins', ['last_login_at' => Util::now()], ['id' => $admin['id']]);
+        Db::exec('DELETE FROM club_attempts WHERE bucket = ?', ['admin:' . Util::clientIp()]);
         self::start('admin', $admin['id']);
         return $admin;
+    }
+
+    /**
+     * Nach der Anmeldung als Kundin/Kunde: Gehört die (von Shopify bzw. per Code bestätigte) E-Mail-Adresse
+     * zu einem Admin, gibt es gleich auch die Admin-Sitzung. Ausschaltbar in den Einstellungen.
+     */
+    public static function adminFromMember(array $member): bool
+    {
+        if (!(bool) Settings::get('admin_by_email', true)) {
+            return false;
+        }
+        $admin = Admins::byEmail((string) $member['email']);
+        if (!$admin) {
+            return false;
+        }
+        $cur = self::admin();
+        if (!$cur || $cur['id'] !== $admin['id']) {
+            self::start('admin', $admin['id']);
+        }
+        return true;
     }
 
     public static function hashPassword(string $password): string
@@ -151,7 +193,7 @@ final class Auth
 
     public static function publicAdmin(array $a): array
     {
-        return ['id' => $a['id'], 'name' => $a['name'], 'email' => $a['email']];
+        return Admins::public($a);
     }
 
     // ---------- Anmeldung per E-Mail-Code (Ausweichweg, wenn die Shopify-Anmeldung nicht eingerichtet ist) ----------
@@ -173,8 +215,8 @@ final class Auth
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $now = Util::now();
-        Db::exec('DELETE FROM login_codes WHERE email = ? OR expires_at < ?', [$email, $now]);
-        Db::insert('login_codes', [
+        Db::exec('DELETE FROM club_login_codes WHERE email = ? OR expires_at < ?', [$email, $now]);
+        Db::insert('club_login_codes', [
             'id' => Util::uuid(),
             'email' => $email,
             'code_hash' => self::codeHash($email, $code),
@@ -200,15 +242,15 @@ final class Auth
         $email = Util::email($email);
         $code = preg_replace('/\D/', '', $code) ?? '';
         Util::limit('verify-ip:' . Util::clientIp(), 30, 900, 'Zu viele Versuche. Bitte warte 15 Minuten.');
-        $row = Db::one('SELECT * FROM login_codes WHERE email = ? AND expires_at > ? ORDER BY created_at DESC', [$email, Util::now()]);
+        $row = Db::one('SELECT * FROM club_login_codes WHERE email = ? AND expires_at > ? ORDER BY created_at DESC', [$email, Util::now()]);
         if (!$row || (int) $row['attempts'] >= 5) {
             throw new HttpError(401, 'Der Code ist abgelaufen. Bitte fordere einen neuen an.');
         }
         if (!hash_equals((string) $row['code_hash'], self::codeHash($email, $code))) {
-            Db::exec('UPDATE login_codes SET attempts = attempts + 1 WHERE id = ?', [$row['id']]);
+            Db::exec('UPDATE club_login_codes SET attempts = attempts + 1 WHERE id = ?', [$row['id']]);
             throw new HttpError(401, 'Der Code stimmt nicht. Bitte prüfe ihn noch einmal.');
         }
-        Db::exec('DELETE FROM login_codes WHERE email = ?', [$email]);
+        Db::exec('DELETE FROM club_login_codes WHERE email = ?', [$email]);
         return $email;
     }
 

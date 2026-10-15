@@ -19,6 +19,11 @@ final class WebPush
         if (is_string($public) && $public !== '' && $private) {
             return ['public' => $public, 'private' => $private];
         }
+        if (is_string($public) && $public !== '') {
+            // Privater Schlüssel nicht lesbar (z. B. app_key in config.php geändert): Die Geräte merken
+            // den neuen öffentlichen Schlüssel beim nächsten Öffnen der App und melden sich neu an.
+            Util::log('VAPID-Schlüssel nicht lesbar – neue Schlüssel erzeugt.');
+        }
         [$pem, $raw] = self::generateKeyPair();
         Settings::set('vapid_public', Util::b64url($raw));
         Settings::setSecret('vapid_private', $pem);
@@ -43,14 +48,20 @@ final class WebPush
     }
 
     /**
-     * Sendet eine Nachricht an ein Abo. Gibt den HTTP-Status zurück (201 = ok, 404/410 = Abo ungültig).
+     * Sendet eine Nachricht an ein Abo.
+     * status: HTTP-Status des Push-Dienstes (201 = angenommen, 404/410 = Abo gibt es nicht mehr, 0 = keine Verbindung)
+     * reason: Antwort des Dienstes bei Fehlern (z. B. „BadJwtToken“ von Apple, „VapidPkHashMismatch“), für die Diagnose
      * @param array{endpoint:string,p256dh:string,auth:string} $sub
+     * @return array{status:int, reason:string}
      */
-    public static function send(array $sub, array $payload, string $subject, int $ttl = 86400, string $urgency = 'normal'): int
+    public static function send(array $sub, array $payload, string $subject, int $ttl = 86400, string $urgency = 'normal'): array
     {
+        $parts = parse_url($sub['endpoint']);
+        if (!is_array($parts) || !self::validEndpoint($sub['endpoint'])) {
+            return ['status' => 404, 'reason' => 'Ungültige Push-Adresse'];
+        }
         $keys = self::keys();
         $body = self::encrypt(Util::json($payload), $sub['p256dh'], $sub['auth']);
-        $parts = parse_url($sub['endpoint']);
         $audience = $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
         $jwt = self::vapidJwt($audience, $subject, $keys['private']);
 
@@ -60,6 +71,7 @@ final class WebPush
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 8,
             CURLOPT_HTTPHEADER => [
                 'Authorization: vapid t=' . $jwt . ', k=' . $keys['public'],
                 'Content-Encoding: aes128gcm',
@@ -68,13 +80,44 @@ final class WebPush
                 'Urgency: ' . $urgency,
             ],
         ]);
-        curl_exec($ch);
+        $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $reason = '';
         if ($status === 0) {
-            Util::log('Push fehlgeschlagen: ' . curl_error($ch));
+            $reason = 'Keine Verbindung: ' . curl_error($ch);
+            Util::log('Push fehlgeschlagen: ' . $reason);
+        } elseif ($status >= 300) {
+            $reason = self::reason((string) $response, $status);
         }
         curl_close($ch);
-        return $status;
+        return ['status' => $status, 'reason' => mb_substr($reason, 0, 240)];
+    }
+
+    /** Push-Dienste sind immer https (in den Tests auch ein lokaler Nachbau). */
+    public static function validEndpoint(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return false;
+        }
+        if (($parts['scheme'] ?? '') === 'https') {
+            return true;
+        }
+        return getenv('PC_PUSH_TEST') === '1' && ($parts['scheme'] ?? '') === 'http' && $parts['host'] === '127.0.0.1';
+    }
+
+    /** Kurze Fehlerbeschreibung aus der Antwort des Push-Dienstes (Apple: {"reason":…}, Google/Mozilla: Text/JSON). */
+    private static function reason(string $body, int $status): string
+    {
+        $data = json_decode($body, true);
+        if (is_array($data)) {
+            $r = $data['reason'] ?? $data['message'] ?? $data['error']['message'] ?? $data['error'] ?? null;
+            if (is_string($r) && $r !== '') {
+                return $r;
+            }
+        }
+        $text = trim(strip_tags($body));
+        return $text !== '' ? mb_substr($text, 0, 200) : 'HTTP ' . $status;
     }
 
     public static function vapidJwt(string $audience, string $subject, string $privatePem): string

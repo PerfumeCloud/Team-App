@@ -11,7 +11,7 @@ final class Settings
     public static function get(string $key, mixed $default = null): mixed
     {
         if (!array_key_exists($key, self::$cache)) {
-            $raw = Db::value('SELECT v FROM settings WHERE k = ?', [$key]);
+            $raw = Db::value('SELECT v FROM club_settings WHERE k = ?', [$key]);
             self::$cache[$key] = $raw === null ? null : json_decode((string) $raw, true);
         }
         return self::$cache[$key] ?? $default;
@@ -21,9 +21,9 @@ final class Settings
     {
         $now = Util::now();
         $json = Util::json($value);
-        if (Db::exec('UPDATE settings SET v = ?, updated_at = ? WHERE k = ?', [$json, $now, $key]) === 0) {
-            if (!Db::value('SELECT 1 FROM settings WHERE k = ?', [$key])) {
-                Db::insert('settings', ['k' => $key, 'v' => $json, 'updated_at' => $now]);
+        if (Db::exec('UPDATE club_settings SET v = ?, updated_at = ? WHERE k = ?', [$json, $now, $key]) === 0) {
+            if (!Db::value('SELECT 1 FROM club_settings WHERE k = ?', [$key])) {
+                Db::insert('club_settings', ['k' => $key, 'v' => $json, 'updated_at' => $now]);
             }
         }
         self::$cache[$key] = $value;
@@ -31,7 +31,7 @@ final class Settings
 
     public static function delete(string $key): void
     {
-        Db::exec('DELETE FROM settings WHERE k = ?', [$key]);
+        Db::exec('DELETE FROM club_settings WHERE k = ?', [$key]);
         unset(self::$cache[$key]);
     }
 

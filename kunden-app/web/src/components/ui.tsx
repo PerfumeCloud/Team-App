@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { ArrowRight, CircleAlert, Copy, Info } from 'lucide-react';
+import { ArrowRight, CircleAlert, Copy, Hourglass, Info, Lock } from 'lucide-react';
 import zeichen from '../assets/zeichen.svg';
 import karteBild from '../assets/wueste-karte.jpg';
 import duenenBreit from '../assets/wueste-hell.jpg';
@@ -8,7 +8,7 @@ import duenenMobil from '../assets/wueste-hell-mobil.jpg';
 import flakon from '../assets/sunset-dune-360.webp';
 import { onToast, toast } from '../lib/toast';
 import { kopieren } from '../lib/hooks';
-import { euro, punkte, punkteWort } from '../lib/format';
+import { datum, euro, punkte, punkteWort } from '../lib/format';
 import type { Points, Program, Tone } from '../lib/types';
 
 export { zeichen, flakon };
@@ -33,10 +33,12 @@ interface HbProps {
   busy?: boolean;
   icon?: ReactNode;
   neuesFenster?: boolean;
+  /** grüner, pulsierender Punkt statt Holzbraun */
+  live?: boolean;
 }
 
-export function Hb({ children, onClick, href, to, type = 'button', dunkel, klein, voll, disabled, busy, icon, neuesFenster }: HbProps) {
-  const cls = ['hb', dunkel && 'hb-dunkel', klein && 'hb-klein', voll && 'hb-voll'].filter(Boolean).join(' ');
+export function Hb({ children, onClick, href, to, type = 'button', dunkel, klein, voll, disabled, busy, icon, neuesFenster, live }: HbProps) {
+  const cls = ['hb', dunkel && 'hb-dunkel', klein && 'hb-klein', voll && 'hb-voll', live && 'hb-live'].filter(Boolean).join(' ');
   const inhalt = (
     <>
       <span className="hb-punkt" aria-hidden="true" />
@@ -317,10 +319,24 @@ export function PunkteKarte({ points, program, children, marke }: { points: Poin
           {maxErreicht ? `Du kannst den höchsten Code über ${euro(program.max_cents)} einlösen.` : `Noch ${punkteWort(points.to_next)} bis ${euro(points.next_cents)} Rabatt`}
         </p>
       </div>
-      {points.pending > 0 && (
-        <p className="unterwegs">
-          <span className="live" aria-hidden="true" /> {punkteWort(points.pending)} unterwegs
-        </p>
+      {(points.pending > 0 || points.locked > 0 || points.expiring) && (
+        <div className="karte-zusatz">
+          {points.pending > 0 && (
+            <p className="unterwegs">
+              <span className="live" aria-hidden="true" /> {punkteWort(points.pending)} unterwegs
+            </p>
+          )}
+          {points.locked > 0 && (
+            <p className="unterwegs">
+              <Lock className="icon-klein" aria-hidden="true" /> {punkteWort(points.locked)} Bonus warten auf deine erste Bestellung
+            </p>
+          )}
+          {points.expiring && (
+            <p className="unterwegs">
+              <Hourglass className="icon-klein" aria-hidden="true" /> {punkteWort(points.expiring.points)} verfallen am {datum(points.expiring.at, true)}
+            </p>
+          )}
+        </div>
       )}
       {children}
     </section>

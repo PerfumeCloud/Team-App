@@ -12,48 +12,59 @@ final class Imap
     /** @var resource|null */
     private $fp = null;
     private int $tagNo = 0;
+    /** Anzahl Mails im zuletzt geöffneten Ordner (EXISTS). */
+    public int $exists = 0;
 
     public function __construct(
         private string $host,
         private int $port = 993,
         private string $security = 'ssl', // ssl | starttls | none (nur für Tests)
         private int $timeout = 25,
+        private int $connectTimeout = 10,
     ) {
     }
 
     public function connect(): void
     {
-        $ctx = stream_context_create(['ssl' => [
-            'verify_peer' => true,
-            'verify_peer_name' => true,
-            'SNI_enabled' => true,
-            'peer_name' => $this->host,
-        ]]);
+        $ctx = self::tlsContext($this->host);
         $scheme = $this->security === 'ssl' ? 'ssl' : 'tcp';
-        $fp = @stream_socket_client("$scheme://{$this->host}:{$this->port}", $errno, $errstr, $this->timeout, STREAM_CLIENT_CONNECT, $ctx);
-        if (!$fp) {
-            throw new \RuntimeException("Keine Verbindung zu {$this->host}:{$this->port} ($errstr)");
-        }
+        $fp = self::socket("$scheme://{$this->host}:{$this->port}", $this->connectTimeout, $ctx);
         stream_set_timeout($fp, $this->timeout);
         $this->fp = $fp;
         $greeting = $this->readLine();
         if (!str_starts_with($greeting, '* OK') && !str_starts_with($greeting, '* PREAUTH')) {
-            throw new \RuntimeException('Unerwartete Begrüßung vom Mailserver.');
+            throw new \RuntimeException('Unerwartete Begrüßung vom Mailserver: ' . mb_substr(trim($greeting), 0, 120));
         }
         if ($this->security === 'starttls') {
             $this->command('STARTTLS');
-            if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT)) {
-                throw new \RuntimeException('STARTTLS fehlgeschlagen.');
-            }
+            self::enableTls($fp);
         }
     }
 
+    /** Verwendete Verschlüsselung, z. B. „TLSv1.3“ (leer = unverschlüsselt). */
+    public function tls(): string
+    {
+        return $this->fp ? self::tlsProtocol($this->fp) : '';
+    }
+
+    /**
+     * Anmelden. Passwörter mit Umlauten oder Sonderzeichen außerhalb von ASCII gehen als Literal
+     * (in Anführungszeichen erlaubt IMAP nur 7-Bit-Zeichen).
+     */
     public function login(string $user, string $password): void
     {
         try {
-            $this->command('LOGIN ' . self::quote($user) . ' ' . self::quote($password));
-        } catch (\RuntimeException) {
-            throw new \RuntimeException('Anmeldung am Postfach fehlgeschlagen – Benutzername oder Passwort prüfen.');
+            if (preg_match('/^[\x20-\x7e]*$/', $user . $password)) {
+                $this->command('LOGIN ' . self::quote($user) . ' ' . self::quote($password));
+            } else {
+                $this->command('LOGIN {' . strlen($user) . '}', [$user . ' {' . strlen($password) . '}', $password]);
+            }
+        } catch (\RuntimeException $e) {
+            if (!str_starts_with($e->getMessage(), 'IMAP:')) {
+                throw $e; // Verbindung abgebrochen o. Ä. – kein Passwortproblem
+            }
+            $server = trim((string) preg_replace('/^IMAP:\s*(NO|BAD)\s*/i', '', $e->getMessage()));
+            throw new \RuntimeException('Anmeldung am Postfach fehlgeschlagen – Benutzername oder Passwort prüfen.' . ($server !== '' ? " (Server: $server)" : ''));
         }
     }
 
@@ -61,12 +72,16 @@ final class Imap
     public function examine(string $folder): string
     {
         $res = $this->command('EXAMINE ' . self::quote($folder));
+        $validity = '0';
+        $this->exists = 0;
         foreach ($res as $line) {
             if (preg_match('/\[UIDVALIDITY (\d+)\]/i', $line, $m)) {
-                return $m[1];
+                $validity = $m[1];
+            } elseif (preg_match('/^\* (\d+) EXISTS/i', $line, $m)) {
+                $this->exists = (int) $m[1];
             }
         }
-        return '0';
+        return $validity;
     }
 
     /** @return int[] */
@@ -147,8 +162,11 @@ final class Imap
         }
     }
 
-    /** @return string[] ungetaggte Antwortzeilen (Literale eingebettet) */
-    public function command(string $cmd): array
+    /**
+     * @param string[] $continuations werden der Reihe nach auf „+“ des Servers geschickt (Literale)
+     * @return string[] ungetaggte Antwortzeilen (Literale eingebettet)
+     */
+    public function command(string $cmd, array $continuations = []): array
     {
         $tag = 'A' . (++$this->tagNo);
         $this->write("$tag $cmd\r\n");
@@ -170,6 +188,9 @@ final class Imap
                 return $untagged;
             }
             if (str_starts_with($buf, '+')) {
+                if ($continuations) {
+                    $this->write(array_shift($continuations) . "\r\n");
+                }
                 continue;
             }
             $untagged[] = rtrim($buf, "\r\n");
@@ -203,6 +224,95 @@ final class Imap
             $data .= $chunk;
         }
         return $data;
+    }
+
+    /** TLS-Einstellungen: Zertifikat und Servername werden immer geprüft. */
+    public static function tlsContext(string $host)
+    {
+        return stream_context_create(['ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+            'SNI_enabled' => true,
+            'peer_name' => $host,
+        ]]);
+    }
+
+    /**
+     * Verbindung öffnen (auch für SMTP). PHP meldet TLS- und DNS-Fehler nur als Warnung –
+     * die wird hier aufgefangen, damit die Meldung (z. B. „certificate verify failed“) beim Nutzer ankommt.
+     * @return resource
+     */
+    public static function socket(string $uri, int $timeout, $ctx = null)
+    {
+        $warnings = [];
+        set_error_handler(static function (int $no, string $msg) use (&$warnings): bool {
+            $warnings[] = preg_replace('/^stream_socket_client\(\): /', '', $msg);
+            return true;
+        });
+        try {
+            $fp = stream_socket_client($uri, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $ctx ?? stream_context_create());
+        } finally {
+            restore_error_handler();
+        }
+        if (!$fp) {
+            $detail = trim(implode(' · ', array_unique(array_filter([...$warnings, (string) $errstr]))));
+            $target = (string) preg_replace('#^[a-z]+://#', '', $uri);
+            throw new \RuntimeException("Keine Verbindung zu $target" . ($detail !== '' ? " ($detail)" : ''));
+        }
+        return $fp;
+    }
+
+    /** STARTTLS: Verschlüsselung auf einer bestehenden Verbindung einschalten (TLS 1.2 oder 1.3). */
+    public static function enableTls($fp): void
+    {
+        $warnings = [];
+        set_error_handler(static function (int $no, string $msg) use (&$warnings): bool {
+            $warnings[] = preg_replace('/^stream_socket_enable_crypto\(\): /', '', $msg);
+            return true;
+        });
+        try {
+            $ok = stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT);
+        } finally {
+            restore_error_handler();
+        }
+        if ($ok !== true) {
+            throw new \RuntimeException('STARTTLS fehlgeschlagen' . ($warnings ? ' (' . implode(' · ', array_unique($warnings)) . ')' : '.'));
+        }
+    }
+
+    public static function tlsProtocol($fp): string
+    {
+        $meta = stream_get_meta_data($fp);
+        return (string) ($meta['crypto']['protocol'] ?? '');
+    }
+
+    /**
+     * Nur für die Diagnose: Für welche Namen gilt das Zertifikat des Servers? (ohne Prüfung, ohne Anmeldung)
+     * @return string[]
+     */
+    public static function certificateNames(string $host, int $port): array
+    {
+        $ctx = stream_context_create(['ssl' => ['verify_peer' => false, 'verify_peer_name' => false, 'capture_peer_cert' => true, 'SNI_enabled' => true, 'peer_name' => $host]]);
+        $fp = @stream_socket_client("ssl://$host:$port", $errno, $errstr, 8, STREAM_CLIENT_CONNECT, $ctx);
+        if (!$fp) {
+            return [];
+        }
+        $cert = stream_context_get_params($fp)['options']['ssl']['peer_certificate'] ?? null;
+        fclose($fp);
+        $info = $cert ? openssl_x509_parse($cert) : false;
+        if (!is_array($info)) {
+            return [];
+        }
+        $names = [];
+        if (!empty($info['subject']['CN'])) {
+            $names[] = (string) $info['subject']['CN'];
+        }
+        foreach (explode(',', (string) ($info['extensions']['subjectAltName'] ?? '')) as $alt) {
+            if (preg_match('/DNS:\s*(\S+)/', $alt, $m)) {
+                $names[] = $m[1];
+            }
+        }
+        return array_values(array_unique($names));
     }
 
     public static function quote(string $s): string

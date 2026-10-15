@@ -71,6 +71,32 @@ switch ($cmd) {
         echo Util::json(Stats::compute((int) ($arg ?: 30)));
         break;
 
+    case 'sql':
+        // Nur für Tests: SQL direkt ausführen (SELECT gibt die Zeilen zurück)
+        $rows = preg_match('/^\s*(SELECT|PRAGMA)/i', $arg) ? Db::all($arg) : ['changed' => Db::exec($arg)];
+        echo Util::json($rows);
+        break;
+
+    case 'setting':
+        // argv: Schlüssel, JSON-Wert (null = löschen)
+        $value = json_decode($argv[3] ?? 'null', true);
+        $value === null ? Settings::delete($arg) : Settings::set($arg, $value);
+        echo Util::json(['ok' => true]);
+        break;
+
+    case 'migrate':
+        // Zweimal hintereinander: muss ohne Fehler durchlaufen (idempotent)
+        Db::migrate();
+        Db::migrate();
+        $cols = static fn (string $t) => array_column(Db::all("PRAGMA table_info($t)"), 'name');
+        echo Util::json(['users' => $cols('users'), 'push' => $cols('push_subscriptions'), 'schema' => Settings::get('schema_version')]);
+        break;
+
+    case 'columns':
+        $cols = static fn (string $t) => array_column(Db::all("PRAGMA table_info($t)"), 'name');
+        echo Util::json(['users' => $cols('users'), 'push' => $cols('push_subscriptions'), 'schema' => Settings::get('schema_version')]);
+        break;
+
     default:
         fwrite(STDERR, "unknown\n");
         exit(1);

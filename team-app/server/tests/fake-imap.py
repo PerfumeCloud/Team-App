@@ -1,4 +1,8 @@
-"""Mini-IMAP-Server für Tests (unverschlüsselt, nur lesend). Aufruf: python3 fake-imap.py PORT"""
+"""Mini-IMAP-Server (unverschlüsselt, nur lesend) und Mini-SMTP-Server für Tests.
+Aufruf: python3 fake-imap.py IMAP-PORT [SMTP-PORT]
+Angenommene Mails stehen als Zeile „MAIL {json}“ auf stdout."""
+import base64
+import json
 import socket
 import sys
 import threading
@@ -85,6 +89,10 @@ SENT = [
 ]
 
 
+# Passwörter, die der Test-Server annimmt (auch mit Umlauten/€ → kommt per IMAP-Literal)
+PASSWORDS = {'secret', 'sécret€'}
+
+
 def encode(s):
     return s.encode('latin-1') if any(ord(c) > 127 and ord(c) < 256 for c in s) and 'iso' in s.lower() else s.encode('utf-8')
 
@@ -98,11 +106,25 @@ def handle(conn):
         line = f.readline()
         if not line:
             break
-        parts = line.decode().strip().split(' ', 2)
+        parts = line.decode('utf-8', 'replace').strip().split(' ', 2)
         tag, cmd = parts[0], parts[1].upper()
         arg = parts[2] if len(parts) > 2 else ''
-        if cmd == 'LOGIN':
-            if '"secret"' in arg:
+        if cmd == 'LOGIN' and arg.endswith('}'):
+            # LOGIN {n} → Benutzer als Literal, danach Passwort als Literal
+            send('+ Ready for literal data\r\n')
+            n = int(arg[1:-1])
+            user = f.read(n)
+            rest = f.readline().decode().strip()
+            m = int(rest[1:-1])
+            send('+ Ready for literal data\r\n')
+            pw = f.read(m).decode('utf-8', 'replace')
+            f.readline()
+            if pw in PASSWORDS:
+                send(f'{tag} OK LOGIN completed\r\n')
+            else:
+                send(f'{tag} NO [AUTHENTICATIONFAILED] Authentication failed\r\n')
+        elif cmd == 'LOGIN':
+            if any(f'"{p}"' in arg for p in PASSWORDS):
                 send(f'{tag} OK LOGIN completed\r\n')
             else:
                 send(f'{tag} NO [AUTHENTICATIONFAILED] Authentication failed\r\n')
@@ -144,16 +166,88 @@ def handle(conn):
     conn.close()
 
 
-def main():
-    port = int(sys.argv[1])
+def handle_smtp(conn):
+    """Wie netcup: Anmeldung nötig, Absender muss das angemeldete Postfach sein."""
+    f = conn.makefile('rb')
+    send = lambda b: conn.sendall(b if isinstance(b, bytes) else b.encode())
+    send('220 fake.smtp ESMTP\r\n')
+    authed = None
+    mail = None
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        cmd = line.decode('utf-8', 'replace').rstrip('\r\n')
+        up = cmd.upper()
+        if up.startswith('EHLO') or up.startswith('HELO'):
+            send('250-fake.smtp\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n')
+        elif up.startswith('AUTH PLAIN '):
+            _, user, pw = base64.b64decode(cmd[11:]).split(b'\0')
+            if pw.decode('utf-8', 'replace') in PASSWORDS:
+                authed = user.decode()
+                send('235 2.7.0 Authentication successful\r\n')
+            else:
+                send('535 5.7.8 Error: authentication failed\r\n')
+        elif up == 'AUTH LOGIN':
+            send('334 VXNlcm5hbWU6\r\n')
+            user = base64.b64decode(f.readline().strip()).decode()
+            send('334 UGFzc3dvcmQ6\r\n')
+            pw = base64.b64decode(f.readline().strip()).decode('utf-8', 'replace')
+            if pw in PASSWORDS:
+                authed = user
+                send('235 2.7.0 Authentication successful\r\n')
+            else:
+                send('535 5.7.8 Error: authentication failed\r\n')
+        elif up.startswith('MAIL FROM:'):
+            addr = cmd[10:].strip().strip('<>')
+            if not authed:
+                send('530 5.7.0 Authentication required\r\n')
+            elif addr.lower() != authed.lower():
+                send(f'553 5.7.1 <{addr}>: Sender address rejected: not owned by user {authed}\r\n')
+            else:
+                mail = {'from': addr, 'to': []}
+                send('250 2.1.0 Ok\r\n')
+        elif up.startswith('RCPT TO:') and mail is not None:
+            mail['to'].append(cmd[8:].strip().strip('<>'))
+            send('250 2.1.5 Ok\r\n')
+        elif up == 'DATA' and mail is not None:
+            send('354 End data with <CR><LF>.<CR><LF>\r\n')
+            data = b''
+            while True:
+                l = f.readline()
+                if not l or l in (b'.\r\n', b'.\n'):
+                    break
+                data += l
+            mail['data'] = data.decode('utf-8', 'replace')
+            print('MAIL ' + json.dumps(mail), flush=True)
+            mail = None
+            send('250 2.0.0 Ok: queued as 4FAKE1\r\n')
+        elif up == 'QUIT':
+            send('221 2.0.0 Bye\r\n')
+            break
+        else:
+            send('502 5.5.2 Error: command not recognized\r\n')
+    conn.close()
+
+
+def serve(port, handler):
     s = socket.socket()
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind(('127.0.0.1', port))
     s.listen(5)
-    print('ready', flush=True)
     while True:
         c, _ = s.accept()
-        threading.Thread(target=handle, args=(c,), daemon=True).start()
+        threading.Thread(target=handler, args=(c,), daemon=True).start()
+
+
+def main():
+    if len(sys.argv) > 2:
+        threading.Thread(target=serve, args=(int(sys.argv[2]), handle_smtp), daemon=True).start()
+    threading.Thread(target=serve, args=(int(sys.argv[1]), handle), daemon=True).start()
+    time.sleep(0.2)
+    print('ready', flush=True)
+    while True:
+        time.sleep(3600)
 
 
 if __name__ == '__main__':

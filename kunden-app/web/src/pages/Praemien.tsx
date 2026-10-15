@@ -8,6 +8,7 @@ import { datum, euro, punkte, punkteWort, tageBis } from '../lib/format';
 import type { Code, Points, PointsResponse } from '../lib/types';
 import { Dialog, Erfolg, Hb, Hinweis, KopierKnopf, Laden, Seitenkopf } from '../components/ui';
 import { codeStatus, FruehereCodes, Verlauf } from '../components/Verlauf';
+import { AktionBanner, SoFunktionierts } from '../components/Club';
 
 export function CodeKarte({ c, onZurueck }: { c: Code; onZurueck?: (c: Code) => void }) {
   const tage = tageBis(c.expires_at);
@@ -38,7 +39,7 @@ export function CodeKarte({ c, onZurueck }: { c: Code; onZurueck?: (c: Code) => 
 
 export default function Praemien() {
   useTitel('Prämien');
-  const { reloadMe } = useKunde();
+  const { me, reloadMe } = useKunde();
   const { data, setData, error, reload } = useLoad<PointsResponse>('/points');
   const [auswahl, setAuswahl] = useState<number | null>(null);
   const [fragen, setFragen] = useState(false);
@@ -102,15 +103,21 @@ export default function Praemien() {
       </Seitenkopf>
 
       {!p.active && <Hinweis>Das Einlösen ist gerade pausiert. Deine Punkte bleiben natürlich erhalten.</Hinweis>}
+      <AktionBanner p={p} />
+      {points.expiring && (
+        <Hinweis>
+          {punkteWort(points.expiring.points)} verfallen am {datum(points.expiring.at, true)}. Löse sie vorher ein, dann gehen sie nicht verloren.
+        </Hinweis>
+      )}
 
       <section className="karte">
         <div className="karte-kopf">
           <h2>
             {punkte(points.balance)} <em style={{ color: 'var(--em)' }}>{points.balance === 1 ? 'Punkt' : 'Punkte'}</em>
           </h2>
-          {points.pending > 0 && (
+          {points.pending + points.locked > 0 && (
             <span className="unterwegs">
-              <span className="live" aria-hidden="true" /> {punkte(points.pending)} unterwegs
+              <span className="live" aria-hidden="true" /> {punkte(points.pending + points.locked)} unterwegs
             </span>
           )}
         </div>
@@ -139,7 +146,7 @@ export default function Praemien() {
           </p>
         )}
         <div>
-          <Hb dunkel disabled={!stufe} onClick={() => setFragen(true)}>
+          <Hb dunkel disabled={!stufe || me.preview} onClick={() => setFragen(true)}>
             {stufe ? `Code über ${euro(stufe.cents)} erstellen` : 'Prämie wählen'}
           </Hb>
         </div>
@@ -150,7 +157,7 @@ export default function Praemien() {
           <h2 className="karte-titel">Deine offenen Codes</h2>
           <div className="raster raster-2">
             {offen.map((c) => (
-              <CodeKarte key={c.id} c={c} onZurueck={c.status === 'active' ? setZurueck : undefined} />
+              <CodeKarte key={c.id} c={c} onZurueck={c.status === 'active' && !me.preview ? setZurueck : undefined} />
             ))}
           </div>
         </section>
@@ -162,32 +169,10 @@ export default function Praemien() {
           <span className="klein leise">insgesamt {punkteWort(points.lifetime)} gesammelt</span>
         </div>
         <Verlauf items={history} />
-        <FruehereCodes codes={frueher} />
+        <FruehereCodes codes={frueher} zurueck={p.code_expiry_refund} />
       </section>
 
-      <section className="raster">
-        <h2 className="karte-titel">So funktioniert’s</h2>
-        <ol className="schritte">
-          <li>
-            <b>Bestellen</b>
-            <p>Für jeden Euro Warenwert bekommst du {punkteWort(p.earn_per_euro)}. Versand zählt nicht mit.</p>
-          </li>
-          <li>
-            <b>Sammeln</b>
-            <p>
-              {p.wait_days > 0
-                ? `Deine Punkte kommen ${p.wait_days} Tage nach dem Versand auf dein Konto, so lange läuft die Rückgabefrist.`
-                : 'Deine Punkte kommen nach dem Versand auf dein Konto.'}
-            </p>
-          </li>
-          <li>
-            <b>Einlösen</b>
-            <p>
-              Je {punkteWort(p.redeem_points)} gibt es {euro(p.redeem_cents)} Rabatt. Der Code gilt {p.code_days} Tage und nur mit deinem Kundenkonto.
-            </p>
-          </li>
-        </ol>
-      </section>
+      <SoFunktionierts p={p} rate={data.tier?.rate} />
 
       {fragen && stufe && (
         <Dialog

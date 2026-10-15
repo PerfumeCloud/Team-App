@@ -136,11 +136,11 @@ final class Util
     public static function limit(string $bucket, int $max, int $windowSec, string $message): void
     {
         $now = self::now();
-        Db::exec('DELETE FROM attempts WHERE bucket = ? AND created_at < ?', [$bucket, $now - $windowSec * 1000]);
-        if ((int) Db::value('SELECT COUNT(*) FROM attempts WHERE bucket = ?', [$bucket]) >= $max) {
+        Db::exec('DELETE FROM club_attempts WHERE bucket = ? AND created_at < ?', [$bucket, $now - $windowSec * 1000]);
+        if ((int) Db::value('SELECT COUNT(*) FROM club_attempts WHERE bucket = ?', [$bucket]) >= $max) {
             throw new HttpError(429, $message);
         }
-        Db::insert('attempts', ['id' => self::uuid(), 'bucket' => $bucket, 'created_at' => $now]);
+        Db::insert('club_attempts', ['id' => self::uuid(), 'bucket' => $bucket, 'created_at' => $now]);
     }
 
     /** Für ausgehende HTTP-Anfragen (Shopify). @return array{0:int,1:string} */

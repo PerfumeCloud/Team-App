@@ -183,9 +183,15 @@ final class Team
         if ($expired) {
             $log[] = "$expired abgelaufene Anmeldungen aufgeräumt.";
         }
-        $broken = Db::exec('DELETE FROM push_subscriptions WHERE fail_count >= 10');
+        $broken = Db::exec('DELETE FROM push_subscriptions WHERE fail_count >= ?', [Notify::MAX_FAILS]);
         if ($broken) {
             $log[] = "$broken nicht mehr erreichbare Push-Geräte entfernt.";
+        }
+        // Der Club (Kunden-App) bringt seine Tabellen auf demselben Weg auf den neuesten Stand.
+        // Klappt das nicht, bleibt die Team-Datenbank trotzdem aktualisiert.
+        $club = Club::migrate();
+        if ($club !== null) {
+            $log[] = $club;
         }
         Settings::set('sync_epoch', Util::now());
         $log[] = 'Alle Geräte laden ihre Daten beim nächsten Öffnen komplett neu.';
@@ -207,6 +213,8 @@ final class Team
                 'lastSeen' => (int) Db::value('SELECT MAX(last_seen_at) FROM sessions WHERE user_id = ?', [$u['id']]) ?: null,
                 'pushDevices' => (int) Db::value('SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ?', [$u['id']]),
                 'pushLastOk' => (int) Db::value('SELECT MAX(last_ok_at) FROM push_subscriptions WHERE user_id = ?', [$u['id']]) ?: null,
+                'pushError' => Db::value('SELECT last_error FROM push_subscriptions WHERE user_id = ? AND fail_count > 0 ORDER BY fail_count DESC', [$u['id']]),
+                'clubAccess' => Auth::clubAccess($u),
                 'mailPush' => !empty(Auth::prefs($u)['push']['mail']),
                 'mailboxes' => MailJob::visibleAddresses($u['id']),
                 'invitePending' => self::invitePending($u['id']),

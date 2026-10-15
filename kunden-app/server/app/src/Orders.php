@@ -20,7 +20,7 @@ final class Orders
     /** @return array{orders: array, fetched_at: int, error?: string} */
     public static function list(array $member, bool $fresh = false): array
     {
-        $cache = Db::one('SELECT data, fetched_at FROM order_cache WHERE member_id = ?', [$member['id']]);
+        $cache = Db::one('SELECT data, fetched_at FROM club_order_cache WHERE member_id = ?', [$member['id']]);
         $nodes = null;
         $fetched = 0;
         $error = null;
@@ -38,10 +38,10 @@ final class Orders
                     foreach ($nodes as $o) {
                         Points::upsertOrder($member, $o, $prog);
                     }
-                    Db::exec('UPDATE members SET orders_synced_at = ? WHERE id = ?', [$fetched, $member['id']]);
+                    Db::exec('UPDATE club_members SET orders_synced_at = ? WHERE id = ?', [$fetched, $member['id']]);
                 }
-                Db::exec('DELETE FROM order_cache WHERE member_id = ?', [$member['id']]);
-                Db::insert('order_cache', ['member_id' => $member['id'], 'data' => Util::json($nodes), 'fetched_at' => $fetched]);
+                Db::exec('DELETE FROM club_order_cache WHERE member_id = ?', [$member['id']]);
+                Db::insert('club_order_cache', ['member_id' => $member['id'], 'data' => Util::json($nodes), 'fetched_at' => $fetched]);
             } catch (\Throwable $e) {
                 Util::log('Bestellungen: ' . $e->getMessage());
                 $nodes = $cache ? (json_decode((string) $cache['data'], true) ?: []) : [];

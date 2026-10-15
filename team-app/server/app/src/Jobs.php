@@ -12,6 +12,10 @@ final class Jobs
     public static function run(string $trigger): array
     {
         @set_time_limit(170);
+        if ($trigger === 'cron') {
+            // Der Cronjob hat sich gemeldet – auch wenn gerade noch ein Abgleich läuft
+            Settings::set('cron_last_run', Util::now());
+        }
         if (!self::lock()) {
             return ['skipped' => 'läuft bereits'];
         }
@@ -27,9 +31,6 @@ final class Jobs
             $summary['events'] = self::safe(static fn () => Calendar::remind(), null);
             $summary['cleanup'] = self::safe(static fn () => self::cleanup(), null);
             Settings::set('jobs_last_run', Util::now());
-            if ($trigger === 'cron') {
-                Settings::set('cron_last_run', Util::now());
-            }
         } finally {
             self::unlock();
         }

@@ -90,7 +90,7 @@ final class CustomerAccount
         $state = Util::b64url(random_bytes(24));
         $nonce = Util::b64url(random_bytes(16));
         $verifier = self::isPublic() ? Util::b64url(random_bytes(48)) : null;
-        Db::insert('oauth_states', [
+        Db::insert('club_oauth_states', [
             'id' => hash('sha256', $state),
             'verifier' => $verifier,
             'nonce' => $nonce,
@@ -129,8 +129,8 @@ final class CustomerAccount
         if ($state === '' || $code === '' || !is_string($cookie) || !hash_equals($cookie, $state)) {
             throw new HttpError(400, 'Die Anmeldung ist abgelaufen. Bitte versuche es noch einmal.');
         }
-        $row = Db::one('SELECT * FROM oauth_states WHERE id = ?', [hash('sha256', $state)]);
-        Db::exec('DELETE FROM oauth_states WHERE id = ? OR created_at < ?', [hash('sha256', $state), Util::now() - self::STATE_TTL_MS]);
+        $row = Db::one('SELECT * FROM club_oauth_states WHERE id = ?', [hash('sha256', $state)]);
+        Db::exec('DELETE FROM club_oauth_states WHERE id = ? OR created_at < ?', [hash('sha256', $state), Util::now() - self::STATE_TTL_MS]);
         if (!$row || (int) $row['created_at'] < Util::now() - self::STATE_TTL_MS) {
             throw new HttpError(400, 'Die Anmeldung ist abgelaufen. Bitte versuche es noch einmal.');
         }
