@@ -137,8 +137,65 @@ export interface BonusStatus {
   birthday: string | null;
   birthday_bonus_this_year: boolean;
   newsletter: boolean;
-  referral: { code: string | null; invited: number; rewarded: number };
+  referral: { code: string | null; invited: number; rewarded: number; link?: ReferralLink | null };
   claims: Claim[];
+}
+
+/** Empfehlungslink mit Rabatt für Freunde (Punkte je Bestellung über den Link) */
+export interface ReferralLink {
+  link: string;
+  code: string;
+  friend_text: string;
+  reward_text: string;
+  new_customers_only: boolean;
+  max_year: number;
+  clicks: number;
+  orders: number;
+  pending_points: number;
+  earned_points: number;
+}
+
+/** Befragung nach der Lieferung – Stand im Konto */
+export interface SurveyState {
+  enabled: boolean;
+  mail: boolean;
+  mail_available: boolean;
+  open: { token: string; order_name: string; title: string | null; image: string | null; count: number; points: number } | null;
+}
+
+export interface SurveyQuestion {
+  id: string;
+  text: string;
+  type: 'stars' | 'choice' | 'text';
+  options: string[];
+}
+
+export interface SurveyThanks {
+  points: number;
+  low: boolean;
+  review: { url: string; label: string } | null;
+  referral: { link: string; friend_text: string; reward_text: string } | null;
+  join: { url: string; program: string; welcome_points: number } | null;
+}
+
+/** Öffentliche Bewertungsseite /bewertung/:token */
+export interface SurveyView {
+  state: 'open' | 'answered' | 'expired';
+  first_name: string | null;
+  order_name: string;
+  items: { key: string; title: string; variant: string | null; image: string | null }[];
+  ratings: Record<string, number>;
+  answers: Record<string, string | number>;
+  comment: string | null;
+  questions: SurveyQuestion[];
+  comment_enabled: boolean;
+  member: boolean;
+  points: number;
+  privacy_url: string;
+  imprint_url: string;
+  shop_url: string;
+  test: boolean;
+  thanks: SurveyThanks | null;
 }
 
 export interface Me {
@@ -155,6 +212,7 @@ export interface Me {
   push?: PushState;
   feedback?: { id: string; title: string; body: string } | null;
   bonus?: BonusStatus;
+  survey?: SurveyState;
 }
 
 export type Tone = 'good' | 'progress' | 'wait' | 'bad' | 'muted';
@@ -204,6 +262,7 @@ export type HistoryKind =
   | 'referral'
   | 'referred'
   | 'start'
+  | 'survey'
   | 'expire';
 
 export interface HistoryItem {

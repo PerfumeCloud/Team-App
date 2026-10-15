@@ -586,6 +586,7 @@ final class Surveys
             'member' => $member !== null,
             'points' => $member && (int) $row['points'] === 0 && $state === 'open' ? (int) $c['points'] : 0,
             'privacy_url' => self::privacyUrl(),
+            'imprint_url' => self::imprintUrl(),
             'shop_url' => Shopify::shopUrl(),
             'test' => (bool) (int) $row['test'],
             'thanks' => $state === 'answered' ? self::thanks($row, $member) : null,

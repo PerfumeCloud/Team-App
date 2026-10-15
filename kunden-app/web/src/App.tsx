@@ -15,6 +15,7 @@ import Feedback from './pages/Feedback';
 import { VorschauLeiste } from './components/Club';
 import Einrichtung from './pages/Einrichtung';
 import AdminApp from './pages/admin/AdminApp';
+import Bewertung, { Abmelden } from './pages/Bewertung';
 
 export default function App() {
   return (
@@ -75,6 +76,9 @@ function StatusGate() {
       <Routes>
         <Route path="/einrichtung" element={status.installed ? <Navigate to="/admin" replace /> : <Einrichtung />} />
         <Route path="/admin/*" element={<AdminApp />} />
+        {/* Ohne Anmeldung, nur mit dem Link aus Mail oder Push */}
+        <Route path="/bewertung/:token" element={<Bewertung />} />
+        <Route path="/abmelden/:token" element={<Abmelden />} />
         <Route path="/*" element={<KundenApp status={status} />} />
       </Routes>
     </StatusCtx.Provider>

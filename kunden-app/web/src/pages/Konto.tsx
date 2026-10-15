@@ -7,7 +7,7 @@ import { useTitel } from '../lib/hooks';
 import { abmelden } from '../lib/konto';
 import { datum, punkteWort } from '../lib/format';
 import { Dialog, Hb, Hinweis, Seitenkopf } from '../components/ui';
-import { ExtraPunkte, FeedbackLink, Mitteilungen } from '../components/KontoExtras';
+import { Befragung, ExtraPunkte, FeedbackLink, Mitteilungen } from '../components/KontoExtras';
 import { StufenZeichen } from '../components/Club';
 
 interface InstallEvent extends Event {
@@ -132,6 +132,8 @@ export default function Konto() {
       </section>
 
       <Mitteilungen />
+
+      <Befragung />
 
       <ExtraPunkte />
 

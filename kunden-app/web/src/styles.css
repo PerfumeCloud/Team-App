@@ -426,6 +426,39 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.85em;padding:.05em .35e
 .bewertung button[aria-pressed="true"] svg{color:var(--styx)}
 .bewertung button:active{transform:scale(.98)}
 
+/* Befragung nach der Lieferung: Sterne je Duft, Auswahl, Fußzeile */
+.sterne{display:flex;gap:.15rem;flex:none}
+.sterne button{display:grid;place-items:center;width:2.9rem;height:2.9rem;padding:0;border:0;border-radius:.9rem;background:none;cursor:pointer;transition:transform .15s var(--weich)}
+.sterne button svg{width:2rem;height:2rem;fill:rgba(255,255,255,.75);stroke:var(--tea);stroke-width:1.4;transition:fill .2s,stroke .2s}
+.sterne button.an svg{fill:var(--wood);stroke:var(--wood)}
+.sterne button:active{transform:scale(.92)}
+@media (hover:hover){.sterne button:hover{transform:scale(1.08)}}
+.sterne-klein button{width:2.5rem;height:2.5rem}
+.sterne-klein button svg{width:1.6rem;height:1.6rem}
+.duft-zeile{display:flex;flex-wrap:wrap;gap:.6rem .9rem;align-items:center}
+.duft-zeile .name{display:grid;flex:1 1 9rem;min-width:0;line-height:1.3}
+.duft-zeile .name small{color:var(--leise);font-size:.875rem}
+.duft-zeile+.duft-zeile{padding-top:.8rem;border-top:1px solid var(--linie)}
+.auswahl{display:flex;flex-wrap:wrap;gap:.5rem}
+.auswahl button{height:2.75rem;padding:0 1.1rem;border-radius:999px;border:1px solid var(--tea);background:rgba(255,255,255,.66);cursor:pointer;font-size:.9375rem;transition:background-color .2s,border-color .2s}
+.auswahl button:hover{border-color:rgba(35,33,32,.5);background:#fff}
+.auswahl button[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--styx)}
+.befragung-fuss{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem 1.2rem;margin-top:.5rem;font-size:.875rem;color:var(--leise)}
+.befragung-fuss a{color:var(--leise)}
+.inline-symbol{display:inline;width:1rem;height:1rem;vertical-align:-.15em}
+.karte-kopf-links{justify-content:flex-start}
+.formular-reihe .feld{align-content:start}
+.feld-einheit{display:flex;align-items:center;gap:.5rem}
+.feld-einheit input{width:7rem;flex:none}
+.frage-editor{display:grid;gap:.7rem;padding:1rem;border-radius:1.2rem;border:1px solid var(--linie);background:rgba(255,255,255,.4)}
+.mail-vorschau-rahmen{display:grid;gap:.6rem}
+.mail-vorschau{width:100%;height:min(70vh,46rem);border:1px solid var(--tea);border-radius:1rem;background:#fff}
+.sterne-verteilung{display:grid;gap:.35rem}
+.sterne-verteilung>div{display:grid;grid-template-columns:2.6rem minmax(0,1fr) 2.4rem;gap:.6rem;align-items:center;font-size:.9375rem}
+.sterne-verteilung .balken{display:block;height:.6rem;border-radius:999px;background:rgba(35,33,32,.08);overflow:hidden}
+.sterne-verteilung .balken i{display:block;height:100%;border-radius:999px;background:var(--wood)}
+.sterne-verteilung .rechts{text-align:right;font-variant-numeric:tabular-nums}
+
 /* Diagramm im Admin-Bereich (Balken je Monat, Verteilung) */
 .saeulen{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;align-items:end;height:7rem;padding-top:.4rem}
 .saeulen span{position:relative;display:block;min-height:2px;border-radius:4px 4px 0 0;background:var(--amber)}

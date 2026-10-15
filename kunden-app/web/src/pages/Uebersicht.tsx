@@ -1,7 +1,7 @@
-import { MessageCircleHeart, Package } from 'lucide-react';
+import { MessageCircleHeart, Package, Star } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTitel } from '../lib/hooks';
-import { euro } from '../lib/format';
+import { euro, punkteWort } from '../lib/format';
 import { boni, sammelText } from '../lib/regeln';
 import { Hb, Hinweis, Leer, PunkteKarte, Seitenkopf } from '../components/ui';
 import { BestellungKarte, useBestellungen } from './Bestellungen';
@@ -25,12 +25,19 @@ export default function Uebersicht() {
   const letzte = orders?.orders.slice(0, 2) ?? [];
   const tier = me.tier ?? null;
   // Extra-Punkte, die noch offen sind (Geburtstag nicht eingetragen, Newsletter fehlt …)
-  const offen = boni(p).filter((b) => {
-    if (b.key === 'welcome') return false;
-    if (b.key === 'birthday') return !me.bonus?.birthday;
-    if (b.key === 'newsletter') return !me.bonus?.newsletter;
-    return true;
-  });
+  const link = me.bonus?.referral.link;
+  const offen = boni(p)
+    .filter((b) => {
+      if (b.key === 'welcome') return false;
+      if (b.key === 'birthday') return !me.bonus?.birthday;
+      if (b.key === 'newsletter') return !me.bonus?.newsletter;
+      return true;
+    })
+    // Mit Empfehlungslink: Rabatt für Freunde, Punkte je Bestellung (statt Punkte beim Beitritt)
+    .map((b) => (b.key === 'referral' && link ? { ...b, titel: 'Freunde einladen', text: `Mit deinem Link bekommen sie ${link.friend_text}, du ${link.reward_text}.` } : b));
+  if (link && !offen.some((b) => b.key === 'referral')) {
+    offen.push({ key: 'referral', titel: 'Freunde einladen', text: `Mit deinem Link bekommen sie ${link.friend_text}, du ${link.reward_text}.` });
+  }
 
   return (
     <>
@@ -58,6 +65,20 @@ export default function Uebersicht() {
           <div>
             <h2 className="karte-titel">{me.feedback.title}</h2>
             <p className="klein">{me.feedback.body}</p>
+          </div>
+        </Link>
+      )}
+
+      {me.survey?.open && (
+        <Link className="karte feedback-frage" to={`/bewertung/${me.survey.open.token}`}>
+          <span className="symbol">
+            <Star />
+          </span>
+          <div>
+            <h2 className="karte-titel">Wie gefällt dir {me.survey.open.title ?? 'deine Bestellung'}?</h2>
+            <p className="klein">
+              Ein Tipp auf die Sterne genügt{me.survey.open.points > 0 ? ` – als Dankeschön gibt es ${punkteWort(me.survey.open.points)}` : ''}.
+            </p>
           </div>
         </Link>
       )}

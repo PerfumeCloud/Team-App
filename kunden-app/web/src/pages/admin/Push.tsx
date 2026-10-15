@@ -23,6 +23,7 @@ const BEISPIEL: Record<string, string> = {
   freund: 'Clara',
   aktion: 'Black Friday',
   faktor: 'doppelte',
+  duft: 'Sunset Dune',
 };
 
 function fuellen(text: string): string {

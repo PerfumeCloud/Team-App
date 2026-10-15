@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { Bell, BellOff, Cake, Check, MessageCircleHeart, MessageSquareHeart, Newspaper, Send, Share2, Users } from 'lucide-react';
+import { Bell, BellOff, Cake, Check, MessageCircleHeart, MessageSquareHeart, Newspaper, Send, Share2, Star, Users } from 'lucide-react';
 import { api, fehlertext } from '../lib/api';
 import { useKunde } from '../lib/kontext';
 import { toast } from '../lib/toast';
 import { datum, punkteWort } from '../lib/format';
 import { aboAufGeraet, alsApp, erlaubnis, istIos, pushAusschalten, pushEinschalten, pushMoeglich } from '../lib/push';
 import { einladungsLink } from '../lib/einladung';
-import type { Claim, Me, PushCategory, PushState } from '../lib/types';
+import type { Claim, Me, PushCategory, PushState, ReferralLink, SurveyState } from '../lib/types';
 import { Hb, Hinweis, KopierKnopf } from './ui';
 
 /* ---------- Mitteilungen ---------- */
@@ -216,10 +216,55 @@ function Geburtstag() {
   );
 }
 
+/** Empfehlungslink mit Rabatt für Freunde: Punkte je Bestellung über den Link – auch ohne Club-Beitritt. */
+function Empfehlungslink({ r }: { r: ReferralLink }) {
+  const { me } = useKunde();
+  const text = `Ich mag die Düfte von Perfume Cloud. Mit meinem Link bekommst du ${r.friend_text}:`;
+
+  async function teilen() {
+    try {
+      await navigator.share({ title: 'Perfume Cloud', text, url: r.link });
+    } catch {
+      /* abgebrochen */
+    }
+  }
+
+  return (
+    <div className="extra">
+      <span className="symbol">
+        <Users />
+      </span>
+      <div className="extra-inhalt">
+        <b>Freunde einladen</b>
+        <p className="klein">
+          Deine Freundinnen und Freunde bekommen {r.friend_text}. Du bekommst {r.reward_text} – auch wenn sie nicht im Club sind.
+          {r.new_customers_only && ' Gilt für Neukundinnen und Neukunden.'}
+          {r.max_year > 0 && ` Bis zu ${r.max_year} Bestellungen im Jahr.`}
+        </p>
+        <div className="kopierfeld">
+          <input readOnly value={r.link} onFocus={(e) => e.currentTarget.select()} aria-label="Dein Empfehlungslink" />
+          <KopierKnopf text={r.link} nurIcon label="Link kopieren" />
+          {'share' in navigator && (
+            <button className="knopf knopf-rund" onClick={() => void teilen()} aria-label="Teilen" title="Teilen" disabled={me.preview}>
+              <Share2 />
+            </button>
+          )}
+        </div>
+        <small className="leise">
+          {r.orders > 0 || r.clicks > 0
+            ? `Bisher: ${r.clicks} ${r.clicks === 1 ? 'Klick' : 'Klicks'} · ${r.orders} ${r.orders === 1 ? 'Bestellung' : 'Bestellungen'}${r.earned_points > 0 ? ` · ${punkteWort(r.earned_points)} bekommen` : ''}${r.pending_points > 0 ? ` · ${punkteWort(r.pending_points)} vorgemerkt` : ''}`
+            : `Rabattcode für deine Freunde: ${r.code} (wird über den Link automatisch eingelöst)`}
+        </small>
+      </div>
+    </div>
+  );
+}
+
 function Einladen() {
   const { me } = useKunde();
   const p = me.program;
   const r = me.bonus?.referral;
+  if (r?.link) return <Empfehlungslink r={r.link} />;
   if (!r?.code) return null;
   const link = einladungsLink(r.code);
   const text = `Ich sammle im ${p.name} Punkte für meine Düfte. Mit meinem Link bekommst du nach deiner ersten Bestellung ${punkteWort(p.bonus.referred)} extra:`;
@@ -352,7 +397,7 @@ function Newsletter() {
 export function ExtraPunkte() {
   const { me } = useKunde();
   const p = me.program;
-  const irgendwas = p.bonus.birthday > 0 || p.bonus.review > 0 || p.bonus.newsletter > 0 || !!me.bonus?.referral.code;
+  const irgendwas = p.bonus.birthday > 0 || p.bonus.review > 0 || p.bonus.newsletter > 0 || !!me.bonus?.referral.code || !!me.bonus?.referral.link;
   if (!irgendwas) return null;
   return (
     <section className="karte" id="extra">
@@ -362,6 +407,60 @@ export function ExtraPunkte() {
         <Einladen />
         <Newsletter />
         <Bewertung />
+      </div>
+    </section>
+  );
+}
+
+/** Befragung nach der Lieferung: offene Bewertung und ob zusätzlich per E-Mail gefragt werden darf (Einwilligung). */
+export function Befragung() {
+  const { me, setMe } = useKunde();
+  const s = me.survey;
+  const [busy, setBusy] = useState(false);
+  if (!s?.enabled) return null;
+
+  async function mail(on: boolean) {
+    setBusy(true);
+    try {
+      setMe({ ...me, survey: await api<SurveyState>('PUT', '/me/survey-mail', { on }) } as Me);
+      toast(on ? 'Wir fragen dich auch per E-Mail' : 'Keine Bewertungsanfragen mehr per E-Mail');
+    } catch (e) {
+      toast(fehlertext(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="karte" id="bewertungen">
+      <div className="extra">
+        <span className="symbol">
+          <Star />
+        </span>
+        <div className="extra-inhalt">
+          <b>Wie gefällt dir dein Duft?</b>
+          <p className="klein">
+            Ein paar Tage nach der Lieferung fragen wir per Mitteilung, wie dir deine Bestellung gefällt – ein Tipp auf die Sterne genügt
+            {s.open && s.open.points > 0 ? `, als Dankeschön gibt es ${punkteWort(s.open.points)}` : ''}.
+          </p>
+          {s.open && (
+            <div>
+              <Link className="knopf" to={`/bewertung/${s.open.token}`}>
+                <Star /> {s.open.title ? `${s.open.title} bewerten` : `Bestellung ${s.open.order_name} bewerten`}
+              </Link>
+            </div>
+          )}
+          {s.mail_available && (
+            <label className="schalter">
+              <span>
+                Auch per E-Mail fragen
+                <small>Mit dem Schalter willigst du ein, dass wir dir dafür E-Mails schicken. Ausschalten geht jederzeit.</small>
+              </span>
+              <input type="checkbox" checked={s.mail} disabled={busy || me.preview} onChange={(e) => void mail(e.target.checked)} />
+            </label>
+          )}
+          <small className="leise">Höchstens eine Anfrage pro Bestellung. Abmelden geht jederzeit hier oder über den Link in jeder Mail.</small>
+        </div>
       </div>
     </section>
   );

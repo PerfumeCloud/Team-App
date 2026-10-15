@@ -10,6 +10,7 @@ import type { AdminPromo, FeedbackItem, InvitesOverview, OpenClaim } from '../..
 import { Chip, Dialog, Hb, Hinweis, Laden, Seitenkopf } from '../../components/ui';
 import { Kennzahl } from './Dashboard';
 import { useAdmin } from './AdminApp';
+import { BefragungAdmin, EmpfehlungenAdmin } from './Kundenstimmen';
 
 export default function Aktionen() {
   const { me } = useAdmin();
@@ -23,12 +24,16 @@ export default function Aktionen() {
         <NavLink to="/admin/aktionen/anfragen">Bewertungen{me.open_claims > 0 ? ` (${me.open_claims})` : ''}</NavLink>
         <NavLink to="/admin/aktionen/warteliste">Warteliste</NavLink>
         <NavLink to="/admin/aktionen/feedback">Feedback</NavLink>
+        <NavLink to="/admin/aktionen/befragung">Befragung</NavLink>
+        <NavLink to="/admin/aktionen/empfehlungen">Empfehlungslinks</NavLink>
       </nav>
       <Routes>
         <Route index element={<Promotions />} />
         <Route path="anfragen" element={<Anfragen />} />
         <Route path="warteliste" element={<Warteliste />} />
         <Route path="feedback" element={<FeedbackListe />} />
+        <Route path="befragung" element={<BefragungAdmin />} />
+        <Route path="empfehlungen" element={<EmpfehlungenAdmin />} />
         <Route path="*" element={<Navigate to="/admin/aktionen" replace />} />
       </Routes>
     </>
