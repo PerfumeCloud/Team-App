@@ -348,11 +348,15 @@ final class MailJob
             $imap->examine($sentFolder);
             $sentUids = array_slice($imap->search("SINCE $since"), -self::MAX_PER_MAILBOX);
             if ($sentUids) {
-                foreach ($imap->fetch($sentUids, 'UID BODY.PEEK[HEADER.FIELDS (IN-REPLY-TO REFERENCES)]') as $msg) {
-                    $raw = self::firstWithPrefix($msg, 'BODY[HEADER');
-                    if (preg_match_all('/<[^<>\s]+>/', (string) $raw, $m)) {
+                foreach ($imap->fetch($sentUids, 'UID INTERNALDATE BODY.PEEK[HEADER.FIELDS (IN-REPLY-TO REFERENCES DATE)]') as $msg) {
+                    $raw = (string) self::firstWithPrefix($msg, 'BODY[HEADER');
+                    $h = self::parseHeaders($raw);
+                    // Zeitpunkt der Antwort (für die Antwortzeit im Wochenrückblick)
+                    $at = self::parseDate((string) ($msg['INTERNALDATE'] ?? ''), $h['date'] ?? '');
+                    if (preg_match_all('/<[^<>\s]+>/', ($h['in-reply-to'] ?? '') . ' ' . ($h['references'] ?? ''), $m)) {
                         foreach ($m[0] as $mid) {
-                            $replied[strtolower($mid)] = true;
+                            $mid = strtolower($mid);
+                            $replied[$mid] = min($replied[$mid] ?? PHP_INT_MAX, $at);
                         }
                     }
                 }
@@ -389,7 +393,7 @@ final class MailJob
     /**
      * Abgerufene Mails speichern bzw. aktualisieren und neu einstufen.
      * @param array<int, array<string, mixed>> $messages nach UID (aus Imap::fetch)
-     * @param array<string, bool>|null $replied Message-IDs mit Antwort im Gesendet-Ordner (null = nicht geprüft)
+     * @param array<string, int>|null $replied Message-IDs mit Antwort im Gesendet-Ordner → Zeitpunkt der Antwort (null = nicht geprüft)
      * @return array{new:int, important:int, ids:string[]}
      */
     private static function store(array $mb, array $own, string $validity, array $messages, ?array $replied, bool $initial, int $now): array
@@ -424,6 +428,16 @@ final class MailJob
             if ($replied === null && $old && (int) $old['answered'] === 1) {
                 $mail['answered'] = 1; // Antwort im Gesendet-Ordner bleibt bekannt
             }
+            // Wann wurde geantwortet? Aus dem Gesendet-Ordner, sonst: jetzt bemerkt (bei der ersten Abfrage unbekannt)
+            $answeredAt = $old['answered_at'] ?? null;
+            if ($mail['answered'] && $answeredAt === null) {
+                $sentAt = $messageId !== '' ? ($replied[$messageId] ?? null) : null;
+                if ($sentAt !== null && $sentAt >= $receivedAt) {
+                    $answeredAt = $sentAt;
+                } elseif ($old && !(int) $old['answered'] && !$initial) {
+                    $answeredAt = $now;
+                }
+            }
             $c = $auto ? ['important' => false, 'reasons' => [], 'score' => 0] : self::classify($mail, $now);
             $mail['important'] = $c['important'] ? 1 : 0;
             $mail['reasons'] = implode('|', $c['reasons']) ?: null;
@@ -440,6 +454,9 @@ final class MailJob
                         'from_email' => mb_substr($fromEmail, 0, 255),
                         'status' => 'open',
                         'notified' => $initial ? 2 : 0,
+                        'imap_uid' => (int) $uid,
+                        'imap_validity' => $validity,
+                        'answered_at' => $answeredAt,
                         'created_at' => $now,
                         'updated_at' => $now,
                         'deleted' => 0,
@@ -449,7 +466,7 @@ final class MailJob
                     // Gleichzeitig von einem anderen Abruf eingetragen – dann ist sie schon da
                 }
             } else {
-                $changed = (int) $old['deleted'] === 1;
+                $changed = (int) $old['deleted'] === 1 || $old['imap_uid'] === null || (string) $old['answered_at'] !== (string) $answeredAt;
                 foreach (['seen', 'flagged', 'answered', 'important', 'reasons', 'score', 'snippet', 'auto'] as $k) {
                     if ((string) $old[$k] !== (string) $mail[$k]) {
                         $changed = true;
@@ -465,6 +482,9 @@ final class MailJob
                         'score' => $mail['score'],
                         'snippet' => $mail['snippet'],
                         'auto' => $mail['auto'],
+                        'imap_uid' => (int) $uid,
+                        'imap_validity' => $validity,
+                        'answered_at' => $answeredAt,
                         'deleted' => 0,
                         'updated_at' => max($now, (int) $old['updated_at'] + 1),
                     ], ['id' => $id]);
@@ -809,6 +829,30 @@ final class MailJob
         }
         $text = trim((string) preg_replace('/\s+/u', ' ', implode(' ', $lines)));
         return mb_substr($text, 0, 280);
+    }
+
+    /**
+     * Vollständige Mail (Kopf + Inhalt) zerlegen: Kopfzeilen, lesbarer Text und Namen der Anhänge.
+     * @return array{headers:array<string,string>, text:string, attachments:array<int, array{name:string, size:int}>}
+     */
+    public static function parseFull(string $raw): array
+    {
+        $split = preg_split("/\r?\n\r?\n/", $raw, 2);
+        $headers = self::parseHeaders($split[0] ?? '');
+        $body = $split[1] ?? '';
+        $text = self::extractText($headers['content-type'] ?? 'text/plain', $headers['content-transfer-encoding'] ?? '', $body, 0);
+        $text = trim((string) preg_replace("/\n{3,}/", "\n\n", str_replace(["\r\n", "\r"], "\n", $text)));
+        $attachments = [];
+        if (preg_match_all('/Content-Disposition:\s*(?:attachment|inline)[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*/i', $body, $m)) {
+            foreach ($m[0] as $disp) {
+                $disp = (string) preg_replace("/\r?\n[ \t]+/", ' ', $disp);
+                if (preg_match('/filename\*?=(?:"([^"]+)"|([^;\s]+))/i', $disp, $f)) {
+                    $name = self::decodeHeader(rawurldecode((string) preg_replace("/^[a-z0-9-]+''/i", '', $f[1] !== '' ? $f[1] : $f[2])));
+                    $attachments[] = ['name' => mb_substr($name, 0, 120), 'size' => 0];
+                }
+            }
+        }
+        return ['headers' => $headers, 'text' => $text, 'attachments' => $attachments];
     }
 
     private static function extractText(string $ct, string $cte, string $body, int $depth): string

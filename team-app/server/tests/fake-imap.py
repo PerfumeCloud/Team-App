@@ -179,16 +179,43 @@ def handle(conn):
                 send(f'{tag} OK IDLE terminated\r\n')
             else:
                 send(f'{tag} BAD expected DONE\r\n')
-        elif cmd == 'EXAMINE':
+        elif cmd in ('EXAMINE', 'SELECT'):
             folder = SENT if 'Sent' in arg else INBOX
             uidnext = max(m['uid'] for m in folder) + 1
-            send(f'* {len(folder)} EXISTS\r\n* OK [UIDVALIDITY 777] UIDs valid\r\n* OK [UIDNEXT {uidnext}] Predicted next UID\r\n{tag} OK [READ-ONLY] EXAMINE completed\r\n')
+            mode = 'READ-ONLY' if cmd == 'EXAMINE' else 'READ-WRITE'
+            send(f'* {len(folder)} EXISTS\r\n* OK [UIDVALIDITY 777] UIDs valid\r\n* OK [UIDNEXT {uidnext}] Predicted next UID\r\n{tag} OK [{mode}] {cmd} completed\r\n')
+        elif cmd == 'APPEND':
+            # APPEND "Sent" (\Seen) {n} → Mail als Literal
+            n = int(arg[arg.rindex('{') + 1:arg.rindex('}')])
+            send('+ Ready for literal data\r\n')
+            data = f.read(n)
+            f.readline()
+            with LOCK:
+                uid = max(m['uid'] for m in SENT) + 1
+                head, _, body = data.decode('utf-8', 'replace').partition('\r\n\r\n')
+                SENT.append({'uid': uid, 'flags': ['\\Seen'], 'internal': imap_date(datetime.now(timezone.utc)), 'headers': head + '\r\n\r\n', 'body': body})
+            print('APPENDED ' + json.dumps({'folder': arg.split(' ')[0].strip('"'), 'size': n}), flush=True)
+            send(f'{tag} OK APPEND completed\r\n')
         elif cmd == 'UID':
             sub = arg.split(' ', 1)
-            if sub[0].upper() == 'SEARCH':
+            if sub[0].upper() == 'STORE':
+                uidset, rest = sub[1].split(' ', 1)
+                wanted = {int(u) for u in uidset.split(',')}
+                flags = rest[rest.index('(') + 1:rest.index(')')].split()
+                for m in folder:
+                    if m['uid'] in wanted:
+                        for fl in flags:
+                            if fl not in m['flags']:
+                                m['flags'].append(fl)
+                print('STORED ' + json.dumps({'uids': sorted(wanted), 'flags': flags}), flush=True)
+                send(f'{tag} OK STORE completed\r\n')
+            elif sub[0].upper() == 'SEARCH':
                 uids = [m['uid'] for m in folder]
                 crit = sub[1] if len(sub) > 1 else ''
-                if crit.upper().startswith('UID '):
+                if crit.upper().startswith('HEADER MESSAGE-ID '):
+                    want = crit.split(' ', 2)[2].strip('"').lower()
+                    uids = [m['uid'] for m in folder if f'message-id: {want}' in m['headers'].lower()]
+                elif crit.upper().startswith('UID '):
                     # „UID n:*“ – wie echte Server: mindestens die höchste UID
                     low = int(crit.split(' ', 1)[1].split(':')[0])
                     uids = [u for u in uids if u >= low] or [max(uids)]
@@ -205,6 +232,9 @@ def handle(conn):
                         h = m['headers'].encode('utf-8')
                         fields = items[items.index('HEADER.FIELDS'):items.index(')') + 1]
                         out += f' BODY[{fields}] {{{len(h)}}}\r\n'.encode() + h
+                    if 'BODY.PEEK[]' in items:
+                        raw = m['headers'].encode('utf-8') + (m['body'].encode('latin-1') if 'iso-8859-1' in m['headers'] else m['body'].encode('utf-8'))
+                        out += f' BODY[]<0> {{{len(raw)}}}\r\n'.encode() + raw
                     if 'BODY.PEEK[TEXT]' in items:
                         b = m['body'].encode('latin-1') if 'iso-8859-1' in m['headers'] else m['body'].encode('utf-8')
                         out += f' BODY[TEXT]<0> {{{len(b)}}}\r\n'.encode() + b

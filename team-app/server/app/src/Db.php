@@ -356,6 +356,49 @@ final class Db
             'settings' => "k VARCHAR(100) NOT NULL PRIMARY KEY,
                 v $long NULL,
                 updated_at BIGINT NOT NULL",
+            // 1.5: Notizen des Teams zu Kundinnen und Kunden (nach E-Mail-Adresse)
+            'customer_notes' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
+                email VARCHAR(190) NOT NULL,
+                body TEXT NOT NULL,
+                created_by VARCHAR(36) NULL,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL,
+                deleted SMALLINT NOT NULL DEFAULT 0",
+            // 1.5: Textbausteine für Antworten (pflegen Admins)
+            'reply_templates' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
+                title VARCHAR(120) NOT NULL,
+                body TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_by VARCHAR(36) NULL,
+                updated_by VARCHAR(36) NULL,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL,
+                deleted SMALLINT NOT NULL DEFAULT 0",
+            // 1.5: Voller Text einer Mail (beim ersten Öffnen vom Mailserver geholt)
+            'email_bodies' => "id VARCHAR(40) NOT NULL PRIMARY KEY,
+                headers TEXT NULL,
+                body $long NULL,
+                attachments TEXT NULL,
+                fetched_at BIGINT NOT NULL",
+            // 1.5: Aus der App verschickte Antworten (für Antwortzeit und Nachvollziehbarkeit)
+            'replies' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
+                email_id VARCHAR(40) NULL,
+                mailbox VARCHAR(190) NOT NULL,
+                to_email VARCHAR(255) NOT NULL,
+                subject VARCHAR(500) NULL,
+                user_id VARCHAR(36) NULL,
+                template_id VARCHAR(36) NULL,
+                created_at BIGINT NOT NULL",
+            // 1.5: In der App als versendet markierte Bestellungen
+            'shipments' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
+                order_id VARCHAR(64) NOT NULL,
+                order_name VARCHAR(40) NOT NULL,
+                carrier VARCHAR(60) NULL,
+                tracking VARCHAR(120) NULL,
+                url VARCHAR(500) NULL,
+                notified SMALLINT NOT NULL DEFAULT 0,
+                user_id VARCHAR(36) NULL,
+                created_at BIGINT NOT NULL",
         ];
 
         $pdo = self::pdo();
@@ -384,6 +427,12 @@ final class Db
         if (!self::hasColumn('users', 'club_access')) {
             $pdo->exec('ALTER TABLE users ADD COLUMN club_access SMALLINT NOT NULL DEFAULT 0');
         }
+        // 1.5: Mail auf dem Server wiederfinden (Antworten, voller Text), Zeitpunkt der Antwort (Antwortzeit)
+        foreach (['imap_uid' => 'BIGINT NULL', 'imap_validity' => 'VARCHAR(20) NULL', 'answered_at' => 'BIGINT NULL', 'replied_by' => 'VARCHAR(36) NULL'] as $col => $type) {
+            if (!self::hasColumn('emails', $col)) {
+                $pdo->exec("ALTER TABLE emails ADD COLUMN $col $type");
+            }
+        }
         MailJob::migrateLegacy();
 
         $indexes = [
@@ -403,6 +452,10 @@ final class Db
             ['sessions_user', 'sessions', 'user_id', false],
             ['push_user', 'push_subscriptions', 'user_id', false],
             ['login_ip', 'login_attempts', 'ip', false],
+            ['customer_notes_email', 'customer_notes', 'email', false],
+            ['replies_created', 'replies', 'created_at', false],
+            ['shipments_created', 'shipments', 'created_at', false],
+            ['shipments_order', 'shipments', 'order_id', false],
         ];
         foreach ($indexes as [$idx, $table, $col, $unique]) {
             $u = $unique ? 'UNIQUE ' : '';
@@ -422,6 +475,8 @@ final class Db
         if (!self::value("SELECT 1 FROM settings WHERE k = 'jobs_lock'")) {
             self::insert('settings', ['k' => 'jobs_lock', 'v' => '0', 'updated_at' => Util::now()]);
         }
+        Replies::seedTemplates();
+        Reports::seedReminderTask();
         Settings::set('schema_version', APP_VERSION);
     }
 }

@@ -388,6 +388,8 @@ final class Sync
             'assignee_id' => $r['assignee_id'],
             'done_by' => $r['done_by'],
             'done_at' => $r['done_at'] !== null ? (int) $r['done_at'] : null,
+            'answered_at' => isset($r['answered_at']) ? (int) $r['answered_at'] : null,
+            'replied_by' => $r['replied_by'] ?? null,
             'auto' => (int) ($r['auto'] ?? 0),
             // „Sichtbar für“ des Postfachs: [] = alle
             'visible_to' => MailJob::byAddress((string) $r['mailbox'])['visible_to'] ?? [],

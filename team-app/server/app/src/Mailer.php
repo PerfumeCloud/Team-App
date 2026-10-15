@@ -20,8 +20,11 @@ final class Mailer
         return $team[0] ?? null;
     }
 
-    /** @return array{sent:bool, message:string} */
-    public static function send(string $to, string $subject, string $text, ?string $html = null): array
+    /**
+     * @param array<int, array{name:string, type:string, data:string}> $attachments
+     * @return array{sent:bool, message:string}
+     */
+    public static function send(string $to, string $subject, string $text, ?string $html = null, array $attachments = []): array
     {
         $mb = self::sender();
         if (!$mb) {
@@ -29,7 +32,10 @@ final class Mailer
         }
         $from = self::fromAddress($mb);
         try {
-            self::deliver($mb, $to, self::message($from, $to, $subject, $text, $html));
+            $data = $attachments
+                ? self::compose(['from' => $from, 'fromName' => 'Perfume Cloud Team', 'to' => $to, 'subject' => $subject, 'text' => $text, 'html' => $html, 'attachments' => $attachments, 'auto' => true])
+                : self::message($from, $to, $subject, $text, $html);
+            self::deliver($mb, $to, $data);
             return ['sent' => true, 'message' => 'Mail an ' . $to . ' verschickt (über ' . $from . ').'];
         } catch (\Throwable $e) {
             Util::log('SMTP: ' . $e->getMessage());
@@ -85,6 +91,51 @@ final class Mailer
             . "--$boundary\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($text))
             . "--$boundary\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($html))
             . "--$boundary--\r\n";
+    }
+
+    /**
+     * Mail zusammensetzen. $o: from, fromName, to, subject, text, html?, headers? (z. B. In-Reply-To),
+     * attachments? [[name, type, data]], auto? (true = automatische Mail, Auto-Submitted).
+     */
+    public static function compose(array $o): string
+    {
+        $from = (string) $o['from'];
+        $host = explode('@', $from)[1] ?? 'perfumecloud.de';
+        $name = trim((string) ($o['fromName'] ?? ''));
+        $headers = [
+            'From: ' . ($name !== '' ? '=?UTF-8?B?' . base64_encode($name) . '?= ' : '') . "<$from>",
+            'To: <' . $o['to'] . '>',
+        ];
+        $headers[] = 'Subject: ' . mb_encode_mimeheader((string) $o['subject'], 'UTF-8', 'B', "\r\n", 9);
+        $headers[] = 'Date: ' . date('r');
+        $headers[] = 'Message-ID: ' . ($o['messageId'] ?? '<' . bin2hex(random_bytes(12)) . "@$host>");
+        foreach ((array) ($o['headers'] ?? []) as $k => $v) {
+            $v = trim((string) preg_replace('/[\r\n]+/', ' ', (string) $v));
+            if ($v !== '') {
+                $headers[] = "$k: $v";
+            }
+        }
+        $headers[] = 'MIME-Version: 1.0';
+        if (!empty($o['auto'])) {
+            $headers[] = 'Auto-Submitted: auto-generated';
+        }
+        $part = static fn (string $type, string $data): string => "Content-Type: $type; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($data));
+        $html = $o['html'] ?? null;
+        $b1 = 'pc' . bin2hex(random_bytes(8));
+        $content = $html === null
+            ? $part('text/plain', (string) $o['text'])
+            : "Content-Type: multipart/alternative; boundary=\"$b1\"\r\n\r\n--$b1\r\n" . $part('text/plain', (string) $o['text']) . "--$b1\r\n" . $part('text/html', (string) $html) . "--$b1--\r\n";
+        $attachments = (array) ($o['attachments'] ?? []);
+        if (!$attachments) {
+            return implode("\r\n", $headers) . "\r\n" . $content;
+        }
+        $b2 = 'pc' . bin2hex(random_bytes(8));
+        $out = implode("\r\n", $headers) . "\r\nContent-Type: multipart/mixed; boundary=\"$b2\"\r\n\r\n--$b2\r\n" . $content;
+        foreach ($attachments as $a) {
+            $fn = (string) preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $a['name']);
+            $out .= "--$b2\r\nContent-Type: {$a['type']}; name=\"$fn\"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"$fn\"\r\n\r\n" . chunk_split(base64_encode((string) $a['data']));
+        }
+        return $out . "--$b2--\r\n";
     }
 
     /**

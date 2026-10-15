@@ -165,9 +165,16 @@ final class Auth
                 'comments' => true,
                 'reminders' => true,
                 'events' => true,
+                'shipping' => true,
+                'weekly' => true,
+                'feedback' => true,
             ],
             // Push für Mails: 'all' = jede neue Mail, 'everything' = auch Newsletter/automatische, 'important' = nur wichtige
             'mailScope' => 'all',
+            // Signatur unter Antworten aus der App (null = „Viele Grüße / Vorname“)
+            'signature' => null,
+            // Wochenrückblick zusätzlich an die eigene Adresse
+            'weeklyMail' => false,
         ];
         $p = json_decode((string) ($u['prefs'] ?? ''), true);
         if (!is_array($p)) {
@@ -175,6 +182,8 @@ final class Auth
         }
         $p['push'] = array_merge($defaults['push'], is_array($p['push'] ?? null) ? $p['push'] : []);
         $p['mailScope'] = in_array($p['mailScope'] ?? null, ['all', 'everything', 'important'], true) ? $p['mailScope'] : $defaults['mailScope'];
+        $p['signature'] = is_string($p['signature'] ?? null) ? $p['signature'] : null;
+        $p['weeklyMail'] = (bool) ($p['weeklyMail'] ?? false);
         return $p;
     }
 }

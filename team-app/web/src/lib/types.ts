@@ -3,7 +3,7 @@ export type UserColor = 'blue' | 'sage' | 'rose' | 'amber' | 'plum' | 'slate';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type Priority = 'low' | 'normal' | 'high';
 export type NoteColor = 'none' | 'cream' | 'blue' | 'sage' | 'rose' | 'sand';
-export type PushKind = 'mail' | 'orders' | 'tasks' | 'comments' | 'reminders' | 'events';
+export type PushKind = 'mail' | 'orders' | 'tasks' | 'comments' | 'reminders' | 'events' | 'shipping' | 'weekly' | 'feedback';
 export type EventKind = 'termin' | 'meeting' | 'event' | 'frist';
 
 /** Termin im Team-Kalender. Datum/Uhrzeit in Ortszeit; start_time null = ganztägig. */
@@ -111,6 +111,10 @@ export interface Email {
   assignee_id: ID | null;
   done_by: ID | null;
   done_at: number | null;
+  /** Zeitpunkt der Antwort (aus „Gesendet“ oder aus der App) */
+  answered_at?: number | null;
+  /** Wer aus der App geantwortet hat */
+  replied_by?: ID | null;
   updated_at: number;
   deleted: number;
 }
@@ -162,6 +166,10 @@ export interface SyncResponse {
 
 export interface Prefs {
   push: Record<PushKind, boolean>;
+  /** Signatur unter Antworten aus der App (null = „Viele Grüße / Vorname“) */
+  signature?: string | null;
+  /** Wochenrückblick zusätzlich per Mail an die eigene Adresse */
+  weeklyMail?: boolean;
   /** Push für Mails: jede neue, wirklich alle (auch Newsletter) oder nur wichtige. */
   mailScope?: 'all' | 'everything' | 'important';
 }
@@ -398,4 +406,238 @@ export interface LiveStatus {
   beat: number;
   boxes: Record<string, { state: 'idle' | 'poll' | 'connecting' | 'error'; message: string | null }>;
   lastMail: { at: number; delay: number } | null;
+}
+
+// ---------------- 1.5: Kundeninfos, Antworten, Versand, Auswertungen ----------------
+
+export interface Tracking {
+  company: string | null;
+  number: string | null;
+  url: string | null;
+}
+
+export interface CustomerOrder {
+  id: string;
+  name: string;
+  created_at: number;
+  total_cents: number;
+  cancelled: boolean;
+  test: boolean;
+  financial: string;
+  financial_label: string;
+  fulfillment: string;
+  status_label: string;
+  delivery: string | null;
+  shipped_at: number | null;
+  delivered_at: number | null;
+  items: { title: string; variant: string | null; qty: number }[];
+  tracking: Tracking[];
+  codes: string[];
+  city: string | null;
+  first_name: string | null;
+  admin_url: string;
+  /** Bestellt von einer anderen E-Mail-Adresse */
+  other?: boolean;
+}
+
+export interface ClubInfo {
+  error?: string;
+  member?: boolean;
+  joined_at?: number | null;
+  tier?: { key: string; name: string } | null;
+  points?: { available: number; pending: number; value_cents?: number } | null;
+  codes?: { code: string; value_cents: number; status: string; expires_at: number }[];
+  ratings?: { avg: number | null; count: number; last: { stars: number; product: string | null; comment: string | null; created_at: number } | null };
+  referrals?: { count: number; orders: number } | null;
+  ref_link?: string | null;
+  admin_url?: string | null;
+}
+
+export interface CustomerNote {
+  id: string;
+  body: string;
+  created_by: ID | null;
+  created_at: number;
+}
+
+export interface CustomerInfo {
+  email: string;
+  order: string | null;
+  shopify: { configured: boolean; missing: string[]; error: string | null };
+  customer: {
+    id: string;
+    name: string;
+    first_name: string;
+    since: number;
+    orders: number;
+    spent_cents: number;
+    tags: string[];
+    note: string | null;
+    newsletter: boolean;
+    city: string | null;
+    country: string | null;
+    admin_url: string;
+  } | null;
+  orders: CustomerOrder[];
+  mentioned: CustomerOrder | null;
+  club: ClubInfo | null;
+  notes: CustomerNote[];
+}
+
+export interface MailMessage {
+  id: string;
+  text: string;
+  attachments: { name: string; size: number }[];
+  to: { name: string; email: string }[];
+  cc: { name: string; email: string }[];
+  reply_to: string;
+  date: number | null;
+  order_number: string | null;
+  replies: { id: string; to: string; subject: string; user_id: ID | null; created_at: number }[];
+  signature: string;
+  footer: string;
+}
+
+export interface ReplyTemplate {
+  id: ID;
+  title: string;
+  body: string;
+  position: number;
+  updated_at: number;
+}
+
+export interface TemplatesResponse {
+  templates: ReplyTemplate[];
+  placeholders: Record<string, string>;
+  footer: string;
+  fromName: string;
+}
+
+export interface ReplyResult {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  missing: string[];
+  sent?: boolean;
+  message?: string;
+  warnings?: string[];
+  email?: Email;
+}
+
+export interface ShipOrder {
+  id: string;
+  name: string;
+  created_at: number;
+  age_days: number;
+  total_cents: number;
+  financial: string;
+  financial_label: string;
+  paid: boolean;
+  partial: boolean;
+  customer: { name: string | null; city: string; country: string | null } | null;
+  method: string | null;
+  note: string | null;
+  location: string | null;
+  items: { title: string; variant: string | null; qty: number }[];
+  can_ship: boolean;
+  test: boolean;
+  admin_url: string;
+}
+
+export interface ShippingSettings {
+  remind_days: number;
+  default_carrier: string;
+  notify: boolean;
+}
+
+export interface ShippingList {
+  configured: boolean;
+  missing: string[];
+  error: string | null;
+  orders: ShipOrder[];
+  settings: ShippingSettings;
+  carriers: string[];
+  recent: { order_id: string; name: string; carrier: string | null; tracking: string | null; url: string | null; user_id: ID | null; created_at: number }[];
+}
+
+export interface ShipResult {
+  order: string;
+  carrier: string;
+  number: string;
+  url: string | null;
+  notify: boolean;
+  items: string[];
+  missing: string[];
+  test?: boolean;
+  sent?: boolean;
+  message: string;
+}
+
+export interface WeeklyConfig {
+  on: boolean;
+  day: number;
+  hour: number;
+  mail: boolean;
+  push: boolean;
+}
+
+export interface WeeklyMailStats {
+  received: number;
+  answered: number;
+  measured: number;
+  avg_hours: number | null;
+  median_hours: number | null;
+  within_24h: number | null;
+}
+
+export interface WeeklyReport {
+  data: {
+    from: number;
+    to: number;
+    shop: {
+      current: { revenue: number; orders: number; items: number; aov: number };
+      previous: { revenue: number; orders: number; items: number; aov: number };
+      top: { title: string; qty: number; revenue: number }[];
+      shipped: number;
+      to_ship: number;
+      oldest_days: number | null;
+      configured: boolean;
+    };
+    mail: { configured: false } | { configured: true; current: WeeklyMailStats; previous: WeeklyMailStats; open_24h: number; replies_in_app: Record<string, number> };
+    tasks: { done: number; created: number; overdue: { title: string; due: string; assignee: ID | null }[] };
+    club: Record<string, unknown> | null;
+  };
+  subject: string;
+  html: string;
+  config: WeeklyConfig;
+}
+
+export interface BackupFile {
+  name: string;
+  size: number;
+  at: number;
+  weekly: boolean;
+}
+
+export interface BackupStatus {
+  hasPassword: boolean;
+  last: { ok: boolean; at: number; name?: string; size?: number; rows?: number; kind?: string; message?: string } | null;
+  lastMail: { ok: boolean; at: number; to: string; message: string } | null;
+  files: BackupFile[];
+  email: string;
+}
+
+export interface BackupSummary {
+  name?: string;
+  token?: string;
+  created_at: number;
+  app: string;
+  tables: { name: string; rows: number }[];
+}
+
+export interface ReportsAdmin {
+  reports: { email: string; weekly: WeeklyConfig; lastWeekly: { at: number; message: string } | null; days: string[] };
+  backup: BackupStatus;
+  shipping: ShippingSettings;
 }

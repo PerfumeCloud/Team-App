@@ -121,6 +121,42 @@ final class Shopify
         throw new \RuntimeException('Shopify-API ist gerade überlastet.');
     }
 
+    /** Berechtigungen der Shopify-App (aus der letzten Anmeldung). @return string[] */
+    public static function scopes(): array
+    {
+        $t = Settings::get('shopify_token');
+        if (!is_array($t) || ($t['scope'] ?? '') === '') {
+            try {
+                self::token();
+                $t = Settings::get('shopify_token');
+            } catch (\Throwable) {
+                return [];
+            }
+        }
+        return array_values(array_filter(array_map('trim', explode(',', (string) ($t['scope'] ?? '')))));
+    }
+
+    /** Fehlende Berechtigungen (write_x schließt read_x ein). @return string[] */
+    public static function missing(array $needed): array
+    {
+        $have = self::scopes();
+        return array_values(array_filter($needed, static fn (string $s) =>
+            !in_array($s, $have, true) && !(str_starts_with($s, 'read_') && in_array('write_' . substr($s, 5), $have, true))));
+    }
+
+    /** Link in den Shopify-Admin, z. B. adminUrl('orders/123'). */
+    public static function adminUrl(string $path): string
+    {
+        $handle = (string) preg_replace('/\.myshopify\.com$/', '', self::config()['shop']);
+        return 'https://admin.shopify.com/store/' . $handle . '/' . ltrim($path, '/');
+    }
+
+    /** Ziffern am Ende einer Shopify-ID („gid://shopify/Order/123“ → „123“). */
+    public static function numericId(string $gid): string
+    {
+        return (string) preg_replace('/\D/', '', substr($gid, (int) strrpos($gid, '/')));
+    }
+
     public static function test(): array
     {
         try {
@@ -131,6 +167,11 @@ final class Shopify
             $msg = 'Verbunden mit ' . ($d['shop']['name'] ?? '?');
             if ($missing) {
                 return ['ok' => false, 'message' => $msg . ' – es fehlen Berechtigungen: ' . implode(', ', $missing)];
+            }
+            // Für Kundeninfos und Versand (seit 1.5) – ohne sie läuft der Rest trotzdem
+            $optional = self::missing(['read_customers', 'write_merchant_managed_fulfillment_orders']);
+            if ($optional) {
+                return ['ok' => true, 'message' => $msg . ' · Für Kundeninfos und Versand noch freigeben: ' . implode(', ', $optional)];
             }
             return ['ok' => true, 'message' => $msg];
         } catch (\Throwable $e) {

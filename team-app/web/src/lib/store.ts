@@ -60,6 +60,8 @@ interface State extends Data {
   addComment: (taskId: ID, body: string) => void;
   deleteComment: (id: ID) => void;
   updateEmail: (id: string, patch: { status?: 'open' | 'done'; assignee_id?: ID | null }) => void;
+  /** Mail so übernehmen, wie der Server sie nach einer Antwort zurückgibt */
+  putEmail: (mail: Email) => void;
   setMe: (user: User, prefs?: Prefs) => void;
 }
 
@@ -479,6 +481,11 @@ export const useStore = create<State>((set, get) => ({
     });
     updateBadge();
     kick();
+  },
+
+  putEmail(mail) {
+    set((s) => ({ emails: { ...s.emails, [mail.id]: mail } }));
+    updateBadge();
   },
 
   setMe(user, prefs) {

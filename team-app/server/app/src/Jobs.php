@@ -36,6 +36,11 @@ final class Jobs
             if (!empty($parts['other'])) {
                 $summary['reminders'] = self::safe(static fn () => self::reminders(), null);
                 $summary['events'] = self::safe(static fn () => Calendar::remind(), null);
+                if (Shopify::configured()) {
+                    $summary['shipping'] = self::safe(static fn () => Shipping::remind(), null);
+                }
+                $summary['weekly'] = self::safe(static fn () => Reports::weeklyIfDue(), null);
+                $summary['backup'] = self::safe(static fn () => Backup::nightly(), null);
                 $summary['cleanup'] = self::safe(static fn () => self::cleanup(), null);
             }
             Settings::set('jobs_last_run', Util::now());
@@ -130,6 +135,8 @@ final class Jobs
         Db::exec('DELETE FROM login_attempts WHERE created_at < ?', [$now - $day]);
         Db::exec('DELETE FROM activity WHERE created_at < ?', [$now - 90 * $day]);
         Db::exec('DELETE FROM emails WHERE received_at < ?', [$now - 30 * $day]);
+        Db::exec('DELETE FROM email_bodies WHERE fetched_at < ?', [$now - 30 * $day]);
+        Db::exec('DELETE FROM customer_notes WHERE deleted = 1 AND updated_at < ?', [$now - 60 * $day]);
         foreach (['tasks', 'notes', 'comments'] as $t) {
             Db::exec("DELETE FROM $t WHERE deleted = 1 AND updated_at < ?", [$now - 60 * $day]);
         }

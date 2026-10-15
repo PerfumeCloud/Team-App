@@ -138,6 +138,55 @@ final class Api
 
             ['PATCH', '/emails/([0-9a-f]{40})', static fn (string $id) => Sync::updateEmail(Auth::require(), $id, Http::body())],
 
+            // ---- Mail lesen und beantworten (1.5) ----
+            ['GET', '/emails/([0-9a-f]{40})/message', static fn (string $id) => Replies::message(Auth::require(), $id, Http::query('fresh') === '1')],
+            ['POST', '/emails/([0-9a-f]{40})/fill', static function (string $id) {
+                $me = Auth::require();
+                $mail = Replies::mail($me, $id);
+                $b = Http::body();
+                return Replies::fill($me, $mail, (string) ($b['text'] ?? ''), isset($b['order']) && is_string($b['order']) ? $b['order'] : null);
+            }],
+            ['POST', '/emails/([0-9a-f]{40})/reply', static fn (string $id) => Replies::reply(Auth::require(), $id, Http::body())],
+            ['GET', '/templates', static function () {
+                Auth::require();
+                return ['templates' => Replies::templates(), 'placeholders' => Replies::PLACEHOLDERS, 'footer' => Replies::footer(), 'fromName' => Replies::fromName()];
+            }],
+            ['PUT', "/templates/$uuid", static fn (string $id) => ['templates' => Replies::saveTemplate(Auth::requireAdmin(), $id, Http::body())]],
+            ['DELETE', "/templates/$uuid", static function (string $id) {
+                Auth::requireAdmin();
+                return ['templates' => Replies::deleteTemplate($id)];
+            }],
+
+            // ---- Kundeninfos (1.5) ----
+            ['GET', '/customers', static function () {
+                Auth::require();
+                return Customers::lookup((string) (Http::query('email') ?? ''), Http::query('order'));
+            }],
+            ['POST', '/customers/notes', static fn () => Customers::addNote(Auth::require(), Http::body())],
+            ['DELETE', "/customers/notes/$uuid", static fn (string $id) => Customers::deleteNote(Auth::require(), $id)],
+
+            // ---- Versand (1.5) ----
+            ['GET', '/shipping', static function () {
+                Auth::require();
+                return Shipping::list();
+            }],
+            ['POST', '/shipping/(\d{1,20})', static fn (string $id) => Shipping::ship(Auth::require(), $id, Http::body())],
+            ['GET', '/shipping/guess', static function () {
+                Auth::require();
+                $n = (string) (Http::query('number') ?? '');
+                $c = Shipping::guessCarrier($n);
+                return ['carrier' => $c];
+            }],
+
+            // ---- Wochenrückblick (1.5) ----
+            ['GET', '/reports/weekly', static function () {
+                Auth::require();
+                $data = Reports::compute();
+                $r = Reports::render($data);
+                return ['data' => $data, 'subject' => $r['subject'], 'html' => $r['html'], 'config' => Reports::weeklyConfig()];
+            }],
+            ['POST', '/reports/weekly/test', static fn () => Reports::send(Auth::require())],
+
             ['GET', '/stats', static function () {
                 Auth::require();
                 return Stats::compute((int) (Http::query('days') ?? 30));
@@ -300,6 +349,85 @@ final class Api
                 }
                 return self::integrations();
             }],
+            ['PUT', '/admin/mail-settings', static function () {
+                Auth::requireAdmin();
+                $b = Http::body();
+                if (array_key_exists('footer', $b)) {
+                    Settings::set('mail_footer', Util::str($b['footer'], 1000) ?? '');
+                }
+                if (array_key_exists('from_name', $b)) {
+                    Settings::set('mail_from_name', Util::str($b['from_name'], 80) ?? '');
+                }
+                return ['footer' => Replies::footer(), 'fromName' => Replies::fromName()];
+            }],
+            ['PUT', '/admin/shipping', static function () {
+                Auth::requireAdmin();
+                return ['settings' => Shipping::saveSettings(Http::body())];
+            }],
+
+            // ---- Auswertungen & Datensicherung (1.5, nur Admins) ----
+            ['GET', '/admin/reports', static function () {
+                Auth::requireAdmin();
+                return ['reports' => Reports::settings(), 'backup' => Backup::status(), 'shipping' => Shipping::settings()];
+            }],
+            ['PUT', '/admin/reports', static function () {
+                Auth::requireAdmin();
+                Reports::save(Http::body());
+                return ['reports' => Reports::settings(), 'backup' => Backup::status(), 'shipping' => Shipping::settings()];
+            }],
+            ['POST', '/admin/reports/test-mail', static function () {
+                Auth::requireAdmin();
+                return Reports::testMail();
+            }],
+            ['POST', '/admin/reports/weekly/send', static function () {
+                Auth::requireAdmin();
+                return Reports::send(null);
+            }],
+            ['PUT', '/admin/backup/password', static function () {
+                Auth::requireAdmin();
+                Backup::setPassword((string) (Http::body()['password'] ?? ''));
+                return ['backup' => Backup::status()];
+            }],
+            ['POST', '/admin/backup', static function () {
+                Auth::requireAdmin();
+                $r = Backup::create('manuell');
+                return ['created' => $r, 'backup' => Backup::status()];
+            }],
+            ['POST', '/admin/backup/verify', static function () {
+                Auth::requireAdmin();
+                $name = Http::body()['name'] ?? null;
+                return Backup::verify(is_string($name) ? $name : null);
+            }],
+            ['POST', '/admin/backup/mail', static function () {
+                Auth::requireAdmin();
+                $name = (string) (Http::body()['name'] ?? (Backup::files()[0]['name'] ?? ''));
+                return Backup::mail($name) + ['backup' => Backup::status()];
+            }],
+            ['GET', '/admin/backup/download', static function () {
+                Auth::requireAdmin();
+                $file = Backup::path((string) (Http::query('name') ?? ''));
+                header('Content-Type: application/octet-stream');
+                header('Content-Disposition: attachment; filename="' . basename($file) . '"');
+                header('Content-Length: ' . filesize($file));
+                header('Cache-Control: no-store');
+                readfile($file);
+                return null;
+            }],
+            ['GET', '/admin/backup/preview', static function () {
+                Auth::requireAdmin();
+                return Backup::preview((string) (Http::query('name') ?? ''));
+            }],
+            ['POST', '/admin/backup/upload', static function () {
+                Auth::requireAdmin();
+                $raw = (string) file_get_contents('php://input');
+                return Backup::stage($raw, rawurldecode((string) ($_SERVER['HTTP_X_BACKUP_PASSWORD'] ?? '')));
+            }],
+            ['POST', '/admin/backup/restore', static function () {
+                $me = Auth::requireAdmin();
+                $b = Http::body();
+                return Backup::restore($me, ['name' => $b['name'] ?? null, 'token' => $b['token'] ?? null], (string) ($b['confirm'] ?? '')) + ['backup' => Backup::status()];
+            }],
+
             ['POST', '/admin/users', static function () {
                 $r = Team::create(Auth::requireAdmin(), Http::body());
                 return ['user' => Auth::publicUser($r['user']), 'restored' => $r['restored'], 'invite' => $r['invite']];
@@ -370,6 +498,12 @@ final class Api
             }
             if (isset($b['prefs']['mailScope'])) {
                 $prefs['mailScope'] = Util::oneOf($b['prefs']['mailScope'], ['all', 'everything', 'important'], $prefs['mailScope']);
+            }
+            if (array_key_exists('signature', $b['prefs'])) {
+                $prefs['signature'] = Util::str($b['prefs']['signature'], 1000);
+            }
+            if (isset($b['prefs']['weeklyMail'])) {
+                $prefs['weeklyMail'] = (bool) $b['prefs']['weeklyMail'];
             }
             $row['prefs'] = Util::json($prefs);
         }

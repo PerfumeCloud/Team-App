@@ -4,8 +4,9 @@ declare(strict_types=1);
 namespace PC;
 
 /**
- * Minimaler IMAP-Client (nur lesend) – kommt ohne die PHP-IMAP-Erweiterung aus,
+ * Minimaler IMAP-Client – kommt ohne die PHP-IMAP-Erweiterung aus,
  * die auf vielen Webhostings fehlt bzw. seit PHP 8.4 nicht mehr mitgeliefert wird.
+ * Liest fast nur; geschrieben wird nur beim Antworten aus der App (Kopie in „Gesendet“, Markierung „beantwortet“).
  */
 final class Imap
 {
@@ -89,6 +90,33 @@ final class Imap
             }
         }
         return $validity;
+    }
+
+    /** Ordner zum Schreiben öffnen (für Markierungen). Gibt UIDVALIDITY zurück. */
+    public function select(string $folder): string
+    {
+        $validity = '0';
+        foreach ($this->command('SELECT ' . self::quote($folder)) as $line) {
+            if (preg_match('/\[UIDVALIDITY (\d+)\]/i', $line, $m)) {
+                $validity = $m[1];
+            }
+        }
+        return $validity;
+    }
+
+    /** Markierungen setzen, z. B. storeFlags([12], '\\Answered'). */
+    public function storeFlags(array $uids, string $flags): void
+    {
+        if ($uids) {
+            $this->command('UID STORE ' . implode(',', array_map('intval', $uids)) . ' +FLAGS.SILENT (' . $flags . ')');
+        }
+    }
+
+    /** Mail in einen Ordner legen (z. B. die eigene Antwort in „Gesendet“). */
+    public function append(string $folder, string $message, string $flags = '\\Seen'): void
+    {
+        $data = str_replace(["\r\n", "\n"], ["\n", "\r\n"], $message);
+        $this->command('APPEND ' . self::quote($folder) . ' (' . $flags . ') {' . strlen($data) . '}', [$data]);
     }
 
     /** @return int[] */

@@ -24,6 +24,8 @@ let php, imap;
 
 // Mails, die der Test-SMTP-Server angenommen hat
 const smtpMails = [];
+// Schreibzugriffe auf den Test-IMAP-Server (Kopie in „Gesendet“, Markierungen)
+const imapEvents = [];
 let smtpBuf = '';
 
 // Nachbau eines Push-Dienstes: /ok → 201, /gone → 410, /jwt → 403 {"reason":"BadJwtToken"} (wie Apple)
@@ -182,7 +184,10 @@ before(async () => {
     smtpBuf += d.toString();
     const lines = smtpBuf.split('\n');
     smtpBuf = lines.pop();
-    for (const l of lines) if (l.startsWith('MAIL ')) smtpMails.push(JSON.parse(l.slice(5)));
+    for (const l of lines) {
+      if (l.startsWith('MAIL ')) smtpMails.push(JSON.parse(l.slice(5)));
+      else if (l.startsWith('APPENDED ') || l.startsWith('STORED ')) imapEvents.push({ kind: l.split(' ')[0], ...JSON.parse(l.slice(l.indexOf(' ') + 1)) });
+    }
   });
   await waitFor(imap, 'ready');
   pushPort = await listen(pushServer);
@@ -1054,6 +1059,215 @@ test('Sofort-Abruf: neue Mail per IDLE in Sekunden gemeldet, Lücken nachgeholt,
   await on;
   // Jede Mail genau einmal gemeldet
   assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM emails WHERE notified = 0")[0].n, 0);
+});
+
+test('1.5 Erinnerung: Aufgabe „Postfach auswertung@… anlegen“ für den Admin', () => {
+  helper('migrate');
+  const t = helper('sql', "SELECT t.title, t.assignee_id, t.priority, u.email FROM tasks t JOIN users u ON u.id = t.assignee_id WHERE t.title LIKE 'Postfach auswertung@%'");
+  assert.equal(t.length, 1);
+  assert.equal(t[0].email, 'marius@example.de');
+  assert.equal(t[0].priority, 'high');
+  helper('migrate');
+  assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM tasks WHERE title LIKE 'Postfach auswertung@%'")[0].n, 1, 'nur einmal');
+});
+
+test('Antworten aus der App: voller Text, Bausteine, Test an mich, Versand mit Kopie in Gesendet', async () => {
+  helper('mail', String(IMAP_PORT));
+  helper('setting', 'smtp_port', String(SMTP_PORT));
+  const id = helper('sql', "SELECT id FROM emails WHERE from_email = 'juergen@example.de'")[0].id;
+
+  const msg = await kim.req('GET', `/emails/${id}/message`);
+  assert.equal(msg.status, 200, JSON.stringify(msg.data));
+  assert.match(msg.data.text, /ich warte seit einer Woche/);
+  assert.equal(msg.data.order_number, '1042');
+  assert.equal(msg.data.reply_to, 'juergen@example.de');
+  assert.equal((await kim.req('GET', '/emails/' + 'f'.repeat(40) + '/message')).status, 404);
+
+  // Bausteine: beim Update angelegt, pflegen nur Admins
+  const tpl = await kim.req('GET', '/templates');
+  assert.ok(tpl.data.templates.length >= 5);
+  assert.ok(tpl.data.placeholders.sendungslink);
+  assert.equal((await kim.req('PUT', `/templates/${crypto.randomUUID()}`, { title: 'X', body: 'Y' })).status, 403);
+  const tid = crypto.randomUUID();
+  const saved = await admin.req('PUT', `/templates/${tid}`, { title: 'Kurz', body: 'Hallo {vorname}, deine Bestellung {bestellnummer} ist unterwegs.' });
+  assert.ok(saved.data.templates.some((t) => t.id === tid));
+
+  // Platzhalter: Vorname aus dem Absender, Bestellnummer fehlt ohne Shopify → wird gemeldet
+  const fill = await kim.req('POST', `/emails/${id}/fill`, { text: 'Hallo {vorname}, deine Bestellung {bestellnummer} ist unterwegs. {meinvorname}' });
+  assert.equal(fill.data.text, 'Hallo Jürgen, deine Bestellung ist unterwegs. Kim');
+  assert.deepEqual(fill.data.missing, ['bestellnummer']);
+
+  // Vorschau: Betreff mit Re:, Signatur und Fußzeile, Zitat
+  await admin.req('PUT', '/me', { prefs: { signature: 'Liebe Grüße\nMarius' } });
+  const pre = await admin.req('POST', `/emails/${id}/reply`, { text: 'Hallo {vorname}, schauen wir nach!', quote: true, mode: 'preview' });
+  assert.equal(pre.status, 200, JSON.stringify(pre.data));
+  assert.equal(pre.data.to, 'juergen@example.de');
+  assert.equal(pre.data.subject, 'Re: Wo bleibt meine Bestellung #1042?');
+  assert.match(pre.data.text, /^Hallo Jürgen, schauen wir nach!\n\nLiebe Grüße\nMarius\n\nPerfume Cloud/);
+  assert.match(pre.data.text, /schrieb Jürgen Müller <juergen@example.de>:\n> Hallo liebes Team,/);
+
+  // Test an mich: geht an die eigene Adresse, nichts wird markiert
+  const before = smtpMails.length;
+  const test = await admin.req('POST', `/emails/${id}/reply`, { text: 'Hallo {vorname}', mode: 'test' });
+  assert.equal(test.data.sent, true, JSON.stringify(test.data));
+  const tm = await eventually(() => smtpMails.slice(before).find((m) => m.to.includes('marius@example.de')));
+  assert.ok(tm);
+  assert.match(tm.data, /Subject: \[TEST\] Re: Wo bleibt/);
+  assert.match(mailText(tm.data), /so käme die Antwort bei juergen@example.de an/);
+  assert.equal(helper('sql', `SELECT answered FROM emails WHERE id = '${id}'`)[0].answered, 0);
+
+  // Senden: an die Kundin, mit Bezug auf die Original-Mail, Kopie in „Gesendet“, Original als beantwortet markiert
+  const ev = imapEvents.length;
+  const sent = await admin.req('POST', `/emails/${id}/reply`, { text: 'Hallo {vorname}, dein Paket ist unterwegs.', mode: 'send', done: true, template_id: tid });
+  assert.equal(sent.data.sent, true, JSON.stringify(sent.data));
+  assert.deepEqual(sent.data.warnings, []);
+  assert.equal(sent.data.email.answered, 1);
+  assert.equal(sent.data.email.status, 'done');
+  const out = await eventually(() => smtpMails.find((m) => m.to.includes('juergen@example.de')));
+  assert.ok(out, 'Antwort kam an');
+  assert.equal(out.from, 'support@perfumecloud.de');
+  assert.match(out.data, /In-Reply-To: <a1@example.de>/);
+  assert.match(out.data, /References: <a1@example.de>/);
+  assert.doesNotMatch(out.data, /Auto-Submitted/);
+  assert.match(mailText(out.data), /Hallo Jürgen, dein Paket ist unterwegs\.\n\nLiebe Grüße\nMarius/);
+  assert.ok(await eventually(() => imapEvents.slice(ev).some((e) => e.kind === 'APPENDED' && e.folder === 'Sent')), 'Kopie in Gesendet');
+  assert.ok(await eventually(() => imapEvents.slice(ev).some((e) => e.kind === 'STORED' && e.uids.includes(101) && e.flags.includes('\\Answered'))), 'als beantwortet markiert');
+  const row = helper('sql', `SELECT answered_at, replied_by, status FROM emails WHERE id = '${id}'`)[0];
+  assert.ok(row.answered_at > 0);
+  assert.equal(helper('sql', `SELECT COUNT(*) AS n FROM replies WHERE email_id = '${id}'`)[0].n, 1);
+  // Beim nächsten Abruf bleibt sie beantwortet (Flag steht jetzt auch auf dem Server)
+  helper('mail', String(IMAP_PORT));
+  assert.equal(helper('sql', `SELECT answered FROM emails WHERE id = '${id}'`)[0].answered, 1);
+  await admin.req('PUT', '/me', { prefs: { signature: null } });
+});
+
+test('Kundeninfos: ohne Shopify verständlich, Notizen des Teams', async () => {
+  const r = await kim.req('GET', '/customers?email=Juergen@Example.de&order=1042');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.email, 'juergen@example.de');
+  assert.equal(r.data.order, '1042');
+  assert.equal(r.data.shopify.configured, false);
+  assert.deepEqual(r.data.orders, []);
+  assert.equal((await kim.req('GET', '/customers?email=quatsch')).status, 422);
+  const n = await kim.req('POST', '/customers/notes', { email: 'juergen@example.de', body: 'Mag holzige Düfte, hat 2× Ambre Soir bestellt' });
+  assert.equal(n.data.notes.length, 1);
+  const again = await admin.req('GET', '/customers?email=juergen@example.de');
+  assert.equal(again.data.notes[0].body, 'Mag holzige Düfte, hat 2× Ambre Soir bestellt');
+  const adminNote = await admin.req('POST', '/customers/notes', { email: 'juergen@example.de', body: 'VIP' });
+  const vip = adminNote.data.notes.find((x) => x.body === 'VIP');
+  assert.equal((await kim.req('DELETE', `/customers/notes/${vip.id}`)).status, 403);
+  assert.equal((await admin.req('DELETE', `/customers/notes/${vip.id}`)).data.notes.length, 1);
+  assert.equal((await kim.req('POST', '/customers/notes', { email: 'juergen@example.de', body: '  ' })).status, 422);
+});
+
+test('Versand: ohne Shopify verständlich, Versanddienst an der Nummer erkennen', async () => {
+  const r = await kim.req('GET', '/shipping');
+  assert.equal(r.data.configured, false);
+  assert.deepEqual(r.data.orders, []);
+  assert.ok(r.data.carriers.includes('DHL'));
+  assert.equal(r.data.settings.remind_days, 2);
+  const guess = async (n) => (await kim.req('GET', '/shipping/guess?number=' + encodeURIComponent(n))).data.carrier;
+  assert.equal(await guess('1Z999AA10123456784'), 'UPS');
+  assert.equal(await guess('00340434161094042557'), 'DHL');
+  assert.equal(await guess('JJD000390007882718'), 'DHL');
+  assert.equal(await guess('RR123456785DE'), 'Deutsche Post (DE)');
+  assert.equal(await guess('H1234567890123456789'), 'Hermes');
+  assert.equal(await guess('abc'), null);
+  assert.equal((await kim.req('POST', '/shipping/123', { number: '00340434161094042557' })).status, 409);
+  assert.equal((await kim.req('PUT', '/admin/shipping', { remind_days: 3 })).status, 403);
+  const s = await admin.req('PUT', '/admin/shipping', { remind_days: 3, default_carrier: 'Hermes', notify: false });
+  assert.deepEqual(s.data.settings, { remind_days: 3, default_carrier: 'Hermes', notify: false });
+});
+
+test('Datensicherung: Passwort, sichern, prüfen, Mail an Auswertungsadresse, wiederherstellen', async () => {
+  assert.equal((await kim.req('POST', '/admin/backup')).status, 403);
+  assert.equal((await admin.req('POST', '/admin/backup')).status, 409, 'ohne Passwort');
+  assert.equal((await admin.req('PUT', '/admin/backup/password', { password: 'kurz' })).status, 422);
+  await admin.req('PUT', '/admin/backup/password', { password: 'sicherung-geheim-1' });
+  const b = await admin.req('POST', '/admin/backup');
+  assert.equal(b.status, 200, JSON.stringify(b.data));
+  assert.match(b.data.created.name, /^pc-\d{4}-\d{2}-\d{2}-manuell\.pcbak$/);
+  assert.ok(b.data.created.rows > 10);
+  assert.ok(!b.data.backup.files.some((f) => f.name.includes('upload')));
+  const v = await admin.req('POST', '/admin/backup/verify', {});
+  assert.equal(v.data.ok, true);
+  assert.ok(v.data.tables.some((t) => t.name === 'tasks' && t.rows > 0));
+  assert.ok(!v.data.tables.some((t) => t.name === 'sessions'), 'Anmeldungen gehören nicht in die Sicherung');
+
+  // Datei herunterladen: verschlüsselt, kein Klartext
+  const dl = await fetch(`${base}/admin/backup/download?name=${b.data.created.name}`, { headers: { Cookie: admin.cookie } });
+  const file = Buffer.from(await dl.arrayBuffer());
+  assert.equal(file.subarray(0, 4).toString(), 'PCBK');
+  assert.ok(!file.includes(Buffer.from('marius@example.de')), 'verschlüsselt');
+  assert.equal((await fetch(`${base}/admin/backup/download?name=../config.php`, { headers: { Cookie: admin.cookie } })).status, 404);
+
+  // Wöchentliche Mail an die Auswertungsadresse mit Anhang
+  const before = smtpMails.length;
+  const m = await admin.req('POST', '/admin/backup/mail', { name: b.data.created.name });
+  assert.equal(m.data.sent, true, JSON.stringify(m.data));
+  const bm = await eventually(() => smtpMails.slice(before).find((x) => x.to.includes('auswertung@perfumecloud.de')));
+  assert.ok(bm);
+  assert.match(bm.data, /Content-Disposition: attachment; filename="pc-/);
+
+  // Nach der Sicherung angelegte Aufgabe verschwindet beim Wiederherstellen
+  const tid = crypto.randomUUID();
+  await admin.req('PUT', `/tasks/${tid}`, { title: 'Nach der Sicherung' });
+  assert.equal((await admin.req('POST', '/admin/backup/restore', { name: b.data.created.name, confirm: 'ja' })).status, 422);
+  const r = await admin.req('POST', '/admin/backup/restore', { name: b.data.created.name, confirm: 'WIEDERHERSTELLEN' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.before, /-vorher\.pcbak$/, 'vorher automatisch gesichert');
+  assert.equal(helper('sql', `SELECT COUNT(*) AS n FROM tasks WHERE id = '${tid}'`)[0].n, 0);
+  assert.equal((await admin.req('GET', '/me')).status, 200, 'bleibt angemeldet');
+
+  // Hochladen: falsches Passwort, dann richtig
+  const up = (pw) => fetch(`${base}/admin/backup/upload`, { method: 'POST', headers: { Cookie: admin.cookie, 'X-PC': '1', 'Content-Type': 'application/octet-stream', 'X-Backup-Password': encodeURIComponent(pw) }, body: file });
+  const wrong = await up('falsch');
+  assert.equal(wrong.status, 422);
+  assert.match((await wrong.json()).error, /Passwort falsch/);
+  const ok = await (await up('sicherung-geheim-1')).json();
+  assert.ok(ok.token);
+  assert.ok(ok.tables.length > 5);
+  const r2 = await admin.req('POST', '/admin/backup/restore', { token: ok.token, confirm: 'WIEDERHERSTELLEN' });
+  assert.equal(r2.status, 200, JSON.stringify(r2.data));
+  assert.equal((await admin.req('POST', '/admin/backup/restore', { token: ok.token, confirm: 'WIEDERHERSTELLEN' })).status, 410);
+});
+
+test('Wochenrückblick: Kennzahlen mit Vorwoche, Antwortzeit, Vorschau an mich, Auswertungsadresse', async () => {
+  helper('seed-orders', '30');
+  const r = await kim.req('GET', '/reports/weekly');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(r.data.data.shop.current.orders > 0);
+  assert.ok(r.data.data.shop.previous.orders > 0);
+  assert.ok(r.data.data.shop.top.length > 0);
+  assert.equal(r.data.config.day, 5, 'Freitag');
+  assert.match(r.data.html, /Wochenrückblick/);
+  assert.match(r.data.html, /Antwortzeit/);
+  const mail = r.data.data.mail;
+  assert.equal(mail.configured, true);
+  // Jürgen: in der App nach ~2 Std. beantwortet, Ben: Antwort im Gesendet-Ordner nach 10 Std. → Median ~6 Std.
+  assert.equal(mail.current.measured, 2, JSON.stringify(mail));
+  assert.ok(mail.current.median_hours > 5 && mail.current.median_hours < 7, String(mail.current.median_hours));
+  assert.equal(mail.current.within_24h, 100);
+
+  const before = smtpMails.length;
+  const t = await kim.req('POST', '/reports/weekly/test');
+  assert.equal(t.data.sent, true, JSON.stringify(t.data));
+  const pm = await eventually(() => smtpMails.slice(before).find((x) => x.to.includes('kim@example.de')));
+  assert.ok(pm);
+  assert.match(pm.data, /multipart\/alternative/);
+
+  assert.equal((await kim.req('PUT', '/admin/reports', { email: 'x@example.de' })).status, 403);
+  assert.equal((await admin.req('PUT', '/admin/reports', { email: 'kein-mail' })).status, 422);
+  const s = await admin.req('PUT', '/admin/reports', { email: 'Auswertung@Example.de', weekly: { day: 5, hour: 16, push: false } });
+  assert.equal(s.data.reports.email, 'auswertung@example.de');
+  assert.equal(s.data.reports.weekly.hour, 16);
+  const tm = await admin.req('POST', '/admin/reports/test-mail');
+  assert.equal(tm.data.sent, true);
+  const now = await admin.req('POST', '/admin/reports/weekly/send');
+  assert.match(now.data.message, /auswertung@example.de: ok/);
+  assert.ok(await eventually(() => smtpMails.filter((x) => x.to.includes('auswertung@example.de')).length >= 2));
+  await admin.req('PUT', '/admin/reports', { email: '' });
+  assert.equal((await admin.req('GET', '/admin/reports')).data.reports.email, 'auswertung@perfumecloud.de', 'leer = Standardadresse');
 });
 
 test('Login-Sperre nach zu vielen Versuchen', async () => {
