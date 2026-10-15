@@ -1,9 +1,10 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
-import { CircleAlert, CircleCheck, Database, KeyRound } from 'lucide-react';
+import { CircleAlert, CircleCheck, Database, Download, KeyRound } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { User } from '../lib/types';
 import { Button, cx, Logo, Segmented, Spinner } from '../components/ui';
+import { isStandalone } from '../lib/push';
 
 function AuthFrame({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
@@ -81,6 +82,14 @@ export function Login() {
         </Button>
       </form>
       <p className="mt-6 text-center text-[13px] text-ink-3">Passwort vergessen? Ein Admin kann es unter Einstellungen → Team neu setzen.</p>
+      {!isStandalone() && (
+        <p className="mt-4 text-center">
+          <a href="/app" className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline">
+            <Download className="h-4 w-4" />
+            Als App installieren
+          </a>
+        </p>
+      )}
     </AuthFrame>
   );
 }
@@ -197,7 +206,7 @@ export function Setup() {
       <form onSubmit={submit} className="space-y-5">
         <div className="card p-6">
           <h2 className="font-display text-[26px] font-semibold text-ink">Willkommen!</h2>
-          <p className="mt-1 text-[14.5px] leading-relaxed text-ink-2">
+          <p className="mt-1 text-[15px] leading-relaxed text-ink-2">
             Einmalige Einrichtung – danach meldet ihr euch nur noch an. Alles weitere (Team, Shopify, Postfächer) stellst du anschließend in den Einstellungen ein.
           </p>
           {reqs.length > 0 && (
@@ -249,10 +258,10 @@ export function Setup() {
                   <label className="label">Passwort</label>
                   <input className="field" type="password" value={db.pass} onChange={set('pass')} autoComplete="new-password" />
                 </div>
-                <p className="text-[12.5px] text-ink-3 sm:col-span-3">Bei netcup steht der Server im Webhosting-Panel unter „Domain-Einstellungen → MySQL-Server“ (z. B. mysqlf937.netcup.net).</p>
+                <p className="text-[13px] text-ink-3 sm:col-span-3">Bei netcup steht der Server im Webhosting-Panel unter „Domain-Einstellungen → MySQL-Server“ (z. B. mysqlf937.netcup.net).</p>
               </div>
             ) : (
-              <p className="text-[13.5px] text-ink-2">Die Daten liegen in einer Datei im geschützten Ordner „storage“. Gut zum Ausprobieren – für den Alltag ist MySQL robuster.</p>
+              <p className="text-[14px] text-ink-2">Die Daten liegen in einer Datei im geschützten Ordner „storage“. Gut zum Ausprobieren – für den Alltag ist MySQL robuster.</p>
             )}
           </div>
         )}

@@ -200,7 +200,7 @@ function NoteForm({ note, onClose }: { note: Note; onClose: () => void }) {
           setBody(e.target.value);
         }}
         placeholder="Schreib los …"
-        className="mt-3 min-h-[40dvh] w-full bg-transparent text-[15.5px] leading-[1.7] text-ink placeholder:text-ink-3 focus:outline-none"
+        className="mt-3 min-h-[40dvh] w-full bg-transparent text-[16px] leading-[1.7] text-ink placeholder:text-ink-3 focus:outline-none"
       />
       <div className="mt-4 flex items-center justify-between text-[12px] text-ink-3">
         <span className="flex items-center gap-1.5">

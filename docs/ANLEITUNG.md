@@ -138,6 +138,10 @@ Ab Version 1.4 hält die App die Verbindung zu euren Postfächern offen. Der Mai
 
 Voraussetzung: **iOS 16.4 oder neuer**. Die Version steht unter Einstellungen → Allgemein → Info.
 
+> **Am einfachsten:** **`team.perfumecloud.de/app`** öffnen. Die Seite erkennt das Gerät und zeigt genau die passenden Schritte, ganz ohne Anmeldung. Am Computer steht dort ein QR-Code: mit der iPhone-Kamera scannen, fertig. Den Link könnt ihr euch auch gegenseitig schicken (in der App unter **Einstellungen → App auf weiteren Geräten**).
+>
+> Warum nicht aus dem App Store? Die App kommt direkt von eurem Server und aktualisiert sich selbst. Für den App Store bräuchte es ein Apple-Entwicklerkonto (99 € im Jahr) und Apples Prüfung bei jedem Update.
+
 1. Auf dem iPhone **Safari** öffnen.
 2. Oben **`team.perfumecloud.de`** eingeben und öffnen.
 3. Mit **E-Mail und Passwort** anmelden (von Marius).
@@ -160,10 +164,12 @@ Voraussetzung: **iOS 16.4 oder neuer**. Die Version steht unter Einstellungen �
 ## Teil C – Windows-PC und Mac
 
 **Windows (Edge oder Chrome):**
-1. `https://team.perfumecloud.de` öffnen und anmelden.
-2. Rechts in der Adressleiste auf das Symbol **App installieren** klicken (Bildschirm mit Pfeil). Alternativ im Menü **⋯** → **Apps** → **Diese Website als App installieren**.
-3. Auf **Installieren** klicken. Die App erscheint im Startmenü und lässt sich an die Taskleiste anheften.
-4. In der App unter **Einstellungen**, **Benachrichtigungen** auf **Aktivieren** klicken.
+1. **`https://team.perfumecloud.de/app`** öffnen und auf **App installieren** klicken. (Oder: rechts in der Adressleiste auf das Symbol **App installieren** klicken, Bildschirm mit Pfeil. Alternativ im Menü **⋯** → **Apps** → **Diese Website als App installieren**.)
+2. Auf **Installieren** klicken. Die App öffnet sich in einem eigenen Fenster, erscheint im Startmenü und lässt sich an die Taskleiste anheften.
+3. In der App anmelden und unter **Einstellungen**, **Benachrichtigungen** auf **Aktivieren** klicken.
+4. Rechtsklick auf das Icon in der Taskleiste zeigt Kurzbefehle: **Postfach**, **Planung**, **Kalender**, **Idee festhalten**.
+
+Benachrichtigungen kommen auch bei geschlossenem App-Fenster, solange der Computer läuft.
 
 **Mac (Safari):** Die Seite öffnen und im Menü **Ablage** auf **Zum Dock hinzufügen** klicken.
 

@@ -128,7 +128,7 @@ export default function Calendar() {
               </IconButton>
             </div>
           </div>
-          <div className="grid grid-cols-7 text-center text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">
+          <div className="grid grid-cols-7 text-center text-[12px] font-semibold uppercase tracking-wide text-ink-3">
             {WEEKDAYS.map((w) => (
               <div key={w} className="pb-1.5">
                 {w}
@@ -236,7 +236,7 @@ export default function Calendar() {
               </div>
             )}
             {dayEvents.length === 0 && dayTasks.length === 0 ? (
-              <button onClick={() => setDraft({ start_date: selected })} className="w-full rounded-xl border border-dashed border-line px-3 py-5 text-center text-[13.5px] text-ink-3 hover:bg-surface-2">
+              <button onClick={() => setDraft({ start_date: selected })} className="w-full rounded-xl border border-dashed border-line px-3 py-5 text-center text-[14px] text-ink-3 hover:bg-surface-2">
                 Noch nichts eingetragen – tippen zum Hinzufügen
               </button>
             ) : (
@@ -256,7 +256,7 @@ export default function Calendar() {
               <CalendarDays className="h-4 w-4 text-ink-3" /> Demnächst
             </h2>
             {upcoming.length === 0 ? (
-              <p className="text-[13.5px] text-ink-3">Keine weiteren Termine eingetragen.</p>
+              <p className="text-[14px] text-ink-3">Keine weiteren Termine eingetragen.</p>
             ) : (
               <div className="-mx-2 space-y-0.5">
                 {upcoming.map((it) =>
@@ -282,7 +282,7 @@ function TaskLine({ t, onOpen }: { t: Task; onOpen: () => void }) {
     <div className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-surface-2">
       <TaskCheck task={t} size={20} />
       <button onClick={onOpen} className={cx('min-w-0 flex-1 truncate text-left text-[14px] text-ink-2', t.status === 'done' && 'line-through')}>
-        <span className="mr-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Aufgabe</span>
+        <span className="mr-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-3">Aufgabe</span>
         {t.title}
       </button>
     </div>

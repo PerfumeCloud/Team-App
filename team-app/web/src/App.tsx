@@ -5,7 +5,7 @@ import { Logo, Spinner, Toasts } from './components/ui';
 import { useStore } from './lib/store';
 import Home from './pages/Home';
 import { Invite, Login, Setup } from './pages/Auth';
-import { refreshPush } from './lib/push';
+import { isStandalone, refreshPush } from './lib/push';
 
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Notes = lazy(() => import('./pages/Notes'));
@@ -15,6 +15,7 @@ const Inbox = lazy(() => import('./pages/Inbox'));
 const Statistics = lazy(() => import('./pages/Statistics'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Club = lazy(() => import('./pages/Club'));
+const Install = lazy(() => import('./pages/Install'));
 
 const SYNC_MS = 4000;
 
@@ -26,6 +27,15 @@ function SyncLoop() {
     // Push-Abo dieses Geräts beim Server auffrischen (falls es dort fehlt oder der Schlüssel neu ist)
     void refreshPush().catch(() => undefined);
   }, []);
+  useEffect(() => {
+    // Installierte App am Computer: Kurzbefehl (z. B. „Postfach“) bei schon offenem Fenster
+    const queue = (window as Window & { launchQueue?: { setConsumer: (cb: (p: { targetURL?: string }) => void) => void } }).launchQueue;
+    queue?.setConsumer(({ targetURL }) => {
+      if (!targetURL) return;
+      const path = new URL(targetURL).pathname;
+      if (path !== '/' && path !== window.location.pathname) navigate(path);
+    });
+  }, [navigate]);
   useEffect(() => {
     const tick = () => document.visibilityState === 'visible' && sync();
     const t = window.setInterval(tick, SYNC_MS);
@@ -68,6 +78,17 @@ export default function App() {
     void boot();
   }, [boot]);
 
+  // Installations-Seite /app: ohne Anmeldung erreichbar; in der installierten App gleich zur Übersicht
+  if (window.location.pathname === '/app') {
+    if (!isStandalone()) {
+      return (
+        <Suspense fallback={<Splash />}>
+          <Install />
+        </Suspense>
+      );
+    }
+    window.history.replaceState(null, '', '/');
+  }
   if (phase === 'boot') return <Splash />;
   // Einladungslink aus der Mail: /?einladung=pci_…
   const invite = new URLSearchParams(window.location.search).get('einladung');

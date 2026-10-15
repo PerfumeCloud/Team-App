@@ -121,7 +121,7 @@ export default function Inbox() {
             onClick={() => setShowAuto((v) => !v)}
             aria-pressed={showAuto}
             className={cx(
-              'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-medium transition-colors',
+              'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors',
               showAuto ? 'border-accent/40 bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2',
             )}
           >
@@ -193,7 +193,7 @@ function MailRow({ mail, users, usersMap, now, meId }: { mail: Email; users: Use
         <div className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', !mail.seen && open ? 'bg-accent' : 'bg-transparent')} aria-label={!mail.seen ? 'Ungelesen' : undefined} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
-            <span className={cx('truncate text-[14.5px] text-ink', !mail.seen ? 'font-semibold' : 'font-medium')}>{sender}</span>
+            <span className={cx('truncate text-[15px] text-ink', !mail.seen ? 'font-semibold' : 'font-medium')}>{sender}</span>
             <span className="shrink-0 text-[12px] text-ink-3">{relative(mail.received_at, now)}</span>
           </div>
           <div className={cx('mt-0.5 text-[14px] leading-snug text-ink', !mail.seen && 'font-medium')}>{mail.subject}</div>

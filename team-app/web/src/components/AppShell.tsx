@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               end={to === '/'}
               className={({ isActive }) =>
                 cx(
-                  'flex h-10 items-center gap-3 rounded-xl px-3 text-[14.5px] font-medium transition-colors',
+                  'flex h-10 items-center gap-3 rounded-xl px-3 text-[15px] font-medium transition-colors',
                   isActive ? 'bg-accent-soft text-accent' : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
                 )
               }
@@ -176,7 +176,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 lg:mb-8">
       <div className="min-w-0">
         <h1 className="page-title">{title}</h1>
-        {subtitle && <p className="mt-1.5 text-[14.5px] text-ink-2">{subtitle}</p>}
+        {subtitle && <p className="mt-1.5 text-[15px] text-ink-2">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>

@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, ArrowUp, BellRing, CalendarDays, CircleCheck, Inbox, Lightbulb, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus } from 'lucide-react';
+import { ArrowRight, ArrowUp, BellRing, CalendarDays, CircleCheck, Download, Inbox, Lightbulb, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus, X } from 'lucide-react';
 import { Sparkline, StatTile, Trend } from '../components/charts';
 import { TaskCard } from '../components/tasks';
 import { EventRow, SpecialRow } from '../components/events';
 import { addDaysIso, agenda, dayLabel, specialsBetween } from '../lib/calendar';
-import { Avatar, Button, Chip, cx, SectionHeader } from '../components/ui';
+import { Avatar, Button, Chip, cx, IconButton, SectionHeader } from '../components/ui';
 import { openImportantCount, sortTasks, useStore } from '../lib/store';
 import { useStats } from '../lib/stats';
 import { euro, firstName, greeting, longDay, relative, todayISO, addDays } from '../lib/format';
 import { useNow } from '../lib/hooks';
-import { pushState } from '../lib/push';
+import { isStandalone, pushState } from '../lib/push';
+import { useInstall } from '../lib/install';
 
 export default function Home() {
   const me = useStore((s) => s.me);
@@ -105,6 +106,8 @@ export default function Home() {
           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.4} />
         </button>
       </form>
+
+      <InstallHint />
 
       {setupOpen.length > 0 && (
         <div className="card p-4 md:p-5">
@@ -218,7 +221,7 @@ export default function Home() {
                           <span className="truncate text-[14px] font-medium text-ink">{m.from_name || m.from_email}</span>
                           <span className="shrink-0 text-[12px] text-ink-3">{relative(m.received_at, now)}</span>
                         </div>
-                        <div className="truncate text-[13.5px] text-ink-2">{m.subject}</div>
+                        <div className="truncate text-[14px] text-ink-2">{m.subject}</div>
                       </div>
                       <Chip tone="accent" className="hidden sm:inline-flex">
                         {m.mailbox.split('@')[0]}@
@@ -279,7 +282,7 @@ export default function Home() {
                       >
                         <Avatar user={u} size={28} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[13.5px] leading-snug text-ink-2">
+                          <p className="text-[14px] leading-snug text-ink-2">
                             <span className="font-semibold text-ink">{u ? firstName(u.name) : 'Jemand'}</span> {a.text}
                           </p>
                           <p className="mt-0.5 text-[12px] text-ink-3">{relative(a.created_at, now)}</p>
@@ -290,12 +293,53 @@ export default function Home() {
                 })}
               </ul>
             ) : (
-              <p className="px-3 py-4 text-[13.5px] text-ink-3">Hier erscheint, was ihr gemeinsam erledigt.</p>
+              <p className="px-3 py-4 text-[14px] text-ink-3">Hier erscheint, was ihr gemeinsam erledigt.</p>
             )}
           </div>
         </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+const HINT_KEY = 'pc-install-hint';
+
+/** Hinweis „Als App installieren“ – nur im Browser, bis man ihn wegklickt oder installiert. */
+function InstallHint() {
+  const install = useInstall();
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return isStandalone() || localStorage.getItem(HINT_KEY) === 'aus';
+    } catch {
+      return isStandalone();
+    }
+  });
+  if (hidden || install.installed) return null;
+  const hide = () => {
+    try {
+      localStorage.setItem(HINT_KEY, 'aus');
+    } catch {
+      /* egal */
+    }
+    setHidden(true);
+  };
+  const open = () => (install.canPrompt ? void install.prompt() : window.location.assign('/app'));
+  return (
+    <div className="card flex items-center gap-1 p-2 pl-3">
+      <button type="button" onClick={open} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-1 text-left">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Download className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="section-title block">Als App installieren</span>
+          <span className="block text-[13px] text-ink-2">Mit eigenem Icon und Push</span>
+        </span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-accent" />
+      </button>
+      <IconButton label="Hinweis ausblenden" onClick={hide}>
+        <X className="h-4 w-4" />
+      </IconButton>
     </div>
   );
 }

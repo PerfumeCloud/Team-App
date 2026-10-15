@@ -23,7 +23,7 @@ export default {
         bad: v('bad'),
       },
       fontFamily: {
-        sans: ['"Inter Variable"', 'Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
       },
       borderRadius: {

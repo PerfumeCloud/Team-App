@@ -248,7 +248,7 @@ export default function Ideas() {
             <ArrowUp className="h-5 w-5" strokeWidth={2.4} />
           </button>
         </div>
-        <p className="mt-1.5 hidden px-2 text-[11.5px] text-ink-3 lg:block">Enter sendet · Shift + Enter für eine neue Zeile</p>
+        <p className="mt-1.5 hidden px-2 text-[12px] text-ink-3 lg:block">Enter sendet · Shift + Enter für eine neue Zeile</p>
       </form>
     </div>
   );
@@ -271,10 +271,10 @@ function Intro({ onExample, compact }: { onExample: (t: string) => void; compact
         </div>
       )}
       <p className="eyebrow mb-2">So verstehe ich dich</p>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-[13.5px] sm:grid-cols-[auto_1fr]">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-[14px] sm:grid-cols-[auto_1fr]">
         {HELP.map(([k, v], i) => (
           <div key={i} className="contents">
-            <dt className="text-ink [&_code]:rounded [&_code]:bg-surface-2 [&_code]:px-1 [&_code]:font-mono [&_code]:text-[12.5px]">{k}</dt>
+            <dt className="text-ink [&_code]:rounded [&_code]:bg-surface-2 [&_code]:px-1 [&_code]:font-mono [&_code]:text-[13px]">{k}</dt>
             <dd className="mb-1.5 text-ink-3 sm:mb-0">→ {v}</dd>
           </div>
         ))}
@@ -287,7 +287,7 @@ function Intro({ onExample, compact }: { onExample: (t: string) => void; compact
               <button
                 key={e}
                 onClick={() => onExample(e)}
-                className="whitespace-pre-wrap rounded-xl border border-line/80 px-3.5 py-2.5 text-left text-[13.5px] leading-snug text-ink-2 transition-colors hover:bg-surface-2"
+                className="whitespace-pre-wrap rounded-xl border border-line/80 px-3.5 py-2.5 text-left text-[14px] leading-snug text-ink-2 transition-colors hover:bg-surface-2"
               >
                 {e}
               </button>
@@ -347,7 +347,7 @@ function Reply({
       <div className="card min-w-0 flex-1 space-y-3 p-3.5 sm:p-4">
         {m.state === 'saved' && m.saved ? (
           <div className="space-y-3">
-            <p className="flex items-center gap-2 text-[14.5px] text-ink">
+            <p className="flex items-center gap-2 text-[15px] text-ink">
               <Check className="h-4 w-4 text-good" />
               Angelegt – {savedText(m.saved)}.
             </p>
@@ -379,7 +379,7 @@ function Reply({
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[14.5px] text-ink">{summary(m.draft)}</p>
+              <p className="text-[15px] text-ink">{summary(m.draft)}</p>
               <Segmented
                 size="sm"
                 value={m.mode}
@@ -483,7 +483,7 @@ function Tick({ checked, onChange, label }: { checked: boolean; onChange: (v: bo
 }
 
 const PRIORITY: Record<Priority, string> = { low: 'Niedrig', normal: 'Normal', high: 'Hoch' };
-const pill = 'relative inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors';
+const pill = 'relative inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[13px] font-medium transition-colors';
 
 function TaskDraft({
   t,
@@ -570,14 +570,14 @@ function TaskDraft({
             placeholder="Kategorie"
             aria-label="Kategorie"
             style={{ width: `${Math.max(8, (t.category ?? '').length) + 1}ch` }}
-            className="bg-transparent text-[12.5px] text-ink placeholder:text-ink-3 focus:outline-none"
+            className="bg-transparent text-[13px] text-ink placeholder:text-ink-3 focus:outline-none"
           />
         </span>
       </div>
       {t.checklist.length > 0 && (
         <ul className="mt-2.5 space-y-1 sm:pl-8">
           {t.checklist.map((c, i) => (
-            <li key={i} className="flex items-center gap-2 text-[13.5px] text-ink-2">
+            <li key={i} className="flex items-center gap-2 text-[14px] text-ink-2">
               <span className="h-3.5 w-3.5 shrink-0 rounded border border-line" />
               <input
                 value={c}
@@ -685,7 +685,7 @@ function EventDraftCard({
             placeholder="Ort"
             aria-label="Ort"
             style={{ width: `${Math.max(4, (e.location ?? '').length) + 1}ch` }}
-            className="bg-transparent text-[12.5px] text-ink placeholder:text-ink-3 focus:outline-none"
+            className="bg-transparent text-[13px] text-ink placeholder:text-ink-3 focus:outline-none"
           />
         </span>
       </div>

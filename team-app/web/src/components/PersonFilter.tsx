@@ -18,7 +18,7 @@ export function PersonFilter({
   const sorted = [...users].sort((a, b) => (a.id === meId ? -1 : b.id === meId ? 1 : a.name.localeCompare(b.name)));
   const pill = (active: boolean) =>
     cx(
-      'flex h-9 shrink-0 items-center gap-2 rounded-full border text-[13.5px] font-medium transition-colors',
+      'flex h-9 shrink-0 items-center gap-2 rounded-full border text-[14px] font-medium transition-colors',
       active ? 'border-accent/40 bg-accent-soft text-accent' : 'border-line bg-surface text-ink-2 hover:text-ink',
     );
   return (

@@ -90,7 +90,7 @@ export default function Tasks() {
               className={cx('flex min-h-[320px] flex-col rounded-3xl p-3 transition-colors', dragOver === s ? 'bg-accent-soft' : 'bg-surface-2/60')}
             >
               <div className="mb-3 flex items-center justify-between px-1.5 pt-1">
-                <h2 className="text-[13.5px] font-semibold text-ink">{STATUS_LABEL[s]}</h2>
+                <h2 className="text-[14px] font-semibold text-ink">{STATUS_LABEL[s]}</h2>
                 <span className="tnum text-[12px] text-ink-3">{byStatus[s].length}</span>
               </div>
               {s === 'todo' && (

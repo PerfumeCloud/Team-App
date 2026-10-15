@@ -149,7 +149,7 @@ function ClubStatistics() {
   return (
     <div className={cx('space-y-5 transition-opacity', loading && 'opacity-70')}>
       {error && (
-        <p className="flex items-start gap-2 rounded-2xl bg-bad/10 p-3 text-[13.5px] text-bad">
+        <p className="flex items-start gap-2 rounded-2xl bg-bad/10 p-3 text-[14px] text-bad">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {error}
         </p>
       )}
@@ -184,12 +184,12 @@ function ClubStatistics() {
           </div>
           <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
             <div>
-              <div className="text-[12.5px] text-ink-2">Aktiv (30 Tage)</div>
+              <div className="text-[13px] text-ink-2">Aktiv (30 Tage)</div>
               <div className="tnum text-[18px] font-semibold text-ink">{int(s.active_30)}</div>
               <div className="text-[12px] text-ink-3">{pct(s.active_30, s.members)} der Mitglieder</div>
             </div>
             <div>
-              <div className="text-[12.5px] text-ink-2">Mit Push</div>
+              <div className="text-[13px] text-ink-2">Mit Push</div>
               <div className="tnum text-[18px] font-semibold text-ink">{int(s.push_members)}</div>
               <div className="text-[12px] text-ink-3">{pct(s.push_members, s.members)} erreichbar</div>
             </div>
@@ -239,7 +239,7 @@ function ClubStatistics() {
           {bonus.length ? (
             <BarList items={bonus.map(([, b]) => ({ label: b.title, value: b.points, display: `${int(b.points)} P.`, sub: `${int(b.count)}×` }))} />
           ) : (
-            <p className="text-[13.5px] text-ink-3">Noch keine Extra-Punkte vergeben (Geburtstag, Bewertung, Newsletter, Empfehlung, Startbonus).</p>
+            <p className="text-[14px] text-ink-3">Noch keine Extra-Punkte vergeben (Geburtstag, Bewertung, Newsletter, Empfehlung, Startbonus).</p>
           )}
         </div>
       </div>
@@ -291,7 +291,7 @@ function MonthBars({ data }: { data: { month: string; count: number }[] }) {
               aria-label={`${monthLong.format(date)}: ${d.count} Beitritte`}
             >
               {i === shown && (
-                <span className="tnum absolute inset-x-[-12px] text-center text-[11.5px] font-semibold text-ink" style={{ bottom: `calc(${(d.count / max) * 100}% + 4px)` }}>
+                <span className="tnum absolute inset-x-[-12px] text-center text-[12px] font-semibold text-ink" style={{ bottom: `calc(${(d.count / max) * 100}% + 4px)` }}>
                   {int(d.count)}
                 </span>
               )}
@@ -307,7 +307,7 @@ function MonthBars({ data }: { data: { month: string; count: number }[] }) {
         {data.map((d, i) => {
           const [y, m] = d.month.split('-').map(Number);
           return (
-            <span key={d.month} className={cx('flex-1 text-center text-[10.5px] text-ink-3', i % 2 === 1 && 'max-sm:invisible')}>
+            <span key={d.month} className={cx('flex-1 text-center text-[11px] text-ink-3', i % 2 === 1 && 'max-sm:invisible')}>
               {monthShort.format(new Date(y, m - 1, 1)).replace('.', '')}
             </span>
           );
@@ -449,7 +449,7 @@ function Messages() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-xl">
             <h2 className="font-display text-[23px] font-semibold text-ink">Nachricht an Mitglieder senden</h2>
-            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">
+            <p className="mt-1 text-[14px] leading-relaxed text-ink-2">
               Push-Nachricht an alle im Club, z. B. bei einem neuen Duft. Ablauf: schreiben → zur Prüfung geben → freigeben. Erst mit der Freigabe wird verschickt – sofort oder zum geplanten Zeitpunkt.
             </p>
           </div>
@@ -469,7 +469,7 @@ function Messages() {
             </button>
           ))}
         </div>
-        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-ink-3">
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-3">
           {ov.audiences.map((a) => (
             <span key={a.key} className="inline-flex items-center gap-1">
               <Users className="h-3.5 w-3.5" /> {a.label}: <b className="tnum font-semibold text-ink-2">{int(a.count)}</b>
@@ -484,9 +484,9 @@ function Messages() {
             <section key={g.key}>
               <div className="mb-2 flex items-baseline gap-2 px-1">
                 <h2 className="section-title">{g.title}</h2>
-                <span className="tnum text-[12.5px] text-ink-3">{g.items.length}</span>
+                <span className="tnum text-[13px] text-ink-3">{g.items.length}</span>
               </div>
-              {g.hint && <p className="mb-2 px-1 text-[12.5px] text-ink-3">{g.hint}</p>}
+              {g.hint && <p className="mb-2 px-1 text-[13px] text-ink-3">{g.hint}</p>}
               <ul className="space-y-3">
                 {g.items.map((b) => {
                   const mine = b.created_by === ov.me.id;
@@ -505,7 +505,7 @@ function Messages() {
                             {b.scheduled_at && b.status !== 'sent' && <Chip icon={<CalendarClock className="h-3 w-3" />}>{dateTime(b.scheduled_at)}</Chip>}
                           </div>
                           <p className="mt-2 text-[15px] font-semibold text-ink">{b.title}</p>
-                          <p className="mt-0.5 line-clamp-2 text-[13.5px] text-ink-2">{b.body}</p>
+                          <p className="mt-0.5 line-clamp-2 text-[14px] text-ink-2">{b.body}</p>
                           <p className="mt-1.5 text-[12px] text-ink-3">
                             von {b.created_by_name}
                             {b.approved_by_name ? ` · freigegeben von ${b.approved_by_name}` : ''}
@@ -547,7 +547,7 @@ function Messages() {
                                 Prüfen & freigeben
                               </Button>
                             ) : (
-                              <span className="flex items-center text-[12.5px] text-ink-3">Wartet auf Freigabe durch eine andere Person</span>
+                              <span className="flex items-center text-[13px] text-ink-3">Wartet auf Freigabe durch eine andere Person</span>
                             )}
                             <Button size="sm" variant="secondary" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setDraft(fromBroadcast(b, ov.templates))}>
                               Bearbeiten
@@ -567,7 +567,7 @@ function Messages() {
             </section>
           ),
       )}
-      {ov.broadcasts.length === 0 && <p className="px-1 text-[13.5px] text-ink-3">Noch keine Nachrichten. Wähle oben eine Vorlage, z. B. „Neuer Duft“.</p>}
+      {ov.broadcasts.length === 0 && <p className="px-1 text-[14px] text-ink-3">Noch keine Nachrichten. Wähle oben eine Vorlage, z. B. „Neuer Duft“.</p>}
 
       <Sheet open={!!draft} onClose={() => setDraft(null)} wide title={<h2 className="font-display text-[24px] font-semibold text-ink">{draft?.id ? 'Nachricht bearbeiten' : 'Neue Nachricht'}</h2>}>
         {draft && <Composer ov={ov} initial={draft} onDone={async () => { setDraft(null); await load(); }} />}
@@ -591,10 +591,10 @@ function PushPreview({ title, body, appUrl }: { title: string; body: string; app
             <span className="text-[11px] text-ink-3">jetzt</span>
           </div>
           <p className="mt-0.5 line-clamp-1 text-[14px] font-semibold text-ink">{title || 'Überschrift'}</p>
-          <p className="line-clamp-4 text-[13.5px] leading-snug text-ink-2">{body || 'Text der Nachricht'}</p>
+          <p className="line-clamp-4 text-[14px] leading-snug text-ink-2">{body || 'Text der Nachricht'}</p>
         </div>
       </div>
-      <p className="mt-2 px-1 text-[11.5px] text-ink-3">Vorschau mit Beispielwerten (Vorname „Anna“, Stufe „Gold“).</p>
+      <p className="mt-2 px-1 text-[12px] text-ink-3">Vorschau mit Beispielwerten (Vorname „Anna“, Stufe „Gold“).</p>
     </div>
   );
 }
@@ -640,7 +640,7 @@ function Composer({ ov, initial, onDone }: { ov: BroadcastOverview; initial: Dra
               aria-pressed={d.template === t.key}
               onClick={() => setD({ ...fromTemplate(t), id: d.id })}
               className={cx(
-                'h-8 rounded-full border px-3 text-[12.5px] transition-colors',
+                'h-8 rounded-full border px-3 text-[13px] transition-colors',
                 d.template === t.key ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-2 hover:bg-surface-2',
               )}
             >
@@ -673,7 +673,7 @@ function Composer({ ov, initial, onDone }: { ov: BroadcastOverview; initial: Dra
         <p className="mt-1 text-[12px] text-ink-3">
           <code className="rounded bg-surface-2 px-1">{'{vorname}'}</code> und <code className="rounded bg-surface-2 px-1">{'{stufe}'}</code> setzt der Club beim Versand für jedes Mitglied ein. Am Sperrbildschirm sind etwa 150 Zeichen sichtbar.
         </p>
-        {missing && <p className="mt-1 text-[12.5px] text-warn">Bitte die Platzhalter in geschweiften Klammern ausfüllen.</p>}
+        {missing && <p className="mt-1 text-[13px] text-warn">Bitte die Platzhalter in geschweiften Klammern ausfüllen.</p>}
       </div>
 
       {d.kind === 'news' ? (
@@ -683,7 +683,7 @@ function Composer({ ov, initial, onDone }: { ov: BroadcastOverview; initial: Dra
           </label>
           <input id="b-url" className="field" value={d.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://perfumecloud.de/products/…" inputMode="url" />
           {invalidUrl ? (
-            <p className="mt-1 text-[12.5px] text-bad">Der Link muss mit https:// beginnen.</p>
+            <p className="mt-1 text-[13px] text-bad">Der Link muss mit https:// beginnen.</p>
           ) : (
             <p className="mt-1 text-[12px] text-ink-3">Leer = öffnet die Club-App.</p>
           )}
@@ -717,7 +717,7 @@ function Composer({ ov, initial, onDone }: { ov: BroadcastOverview; initial: Dra
             ]}
           />
           {d.when === 'later' && <input type="datetime-local" className="field mt-2" value={d.at} onChange={(e) => set({ at: e.target.value })} />}
-          {past && <p className="mt-1 text-[12.5px] text-bad">Der Zeitpunkt liegt in der Vergangenheit.</p>}
+          {past && <p className="mt-1 text-[13px] text-bad">Der Zeitpunkt liegt in der Vergangenheit.</p>}
         </div>
       </div>
       <p className="text-[12px] text-ink-3">
@@ -783,7 +783,7 @@ function Review({
       <PushPreview title={fillSample(b.title)} body={fillSample(b.body)} appUrl={ov.app_url} />
       <dl className="divide-y divide-line/70 rounded-2xl border border-line">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex gap-3 px-4 py-2.5 text-[13.5px]">
+          <div key={k} className="flex gap-3 px-4 py-2.5 text-[14px]">
             <dt className="w-32 shrink-0 text-ink-3">{k}</dt>
             <dd className="min-w-0 break-words text-ink">{v}</dd>
           </div>

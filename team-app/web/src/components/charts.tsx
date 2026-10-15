@@ -208,7 +208,7 @@ export function Trend({
   against?: string;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const sizes = { sm: 'h-5 px-1.5 text-[11.5px]', md: 'h-6 px-2 text-[12.5px]', lg: 'h-7 px-2.5 text-[14px]' };
+  const sizes = { sm: 'h-5 px-1.5 text-[12px]', md: 'h-6 px-2 text-[13px]', lg: 'h-7 px-2.5 text-[14px]' };
   const icon = size === 'lg' ? 'h-4 w-4' : 'h-3.5 w-3.5';
   const base = cx('tnum inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full font-semibold', sizes[size]);
   if (!absolute && !prev) {
@@ -283,7 +283,7 @@ export function StatTile({
         <span className="tnum text-[26px] font-semibold leading-none tracking-[-0.02em] text-ink">{value}</span>
         {trend}
       </div>
-      {sub && <div className="mt-1.5 text-[12.5px] text-ink-2">{sub}</div>}
+      {sub && <div className="mt-1.5 text-[13px] text-ink-2">{sub}</div>}
       {footer && <div className="mt-auto pt-3">{footer}</div>}
     </Comp>
   );

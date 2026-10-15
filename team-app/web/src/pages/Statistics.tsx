@@ -110,11 +110,11 @@ export default function Statistics() {
                   <span className="tnum text-[44px] font-semibold leading-none tracking-[-0.03em] text-ink sm:text-[48px]">{euro(s.current.revenue)}</span>
                   <Trend cur={s.current.revenue} prev={s.previous.revenue} size="lg" />
                 </div>
-                <div className="mt-2 text-[12.5px] text-ink-3">gegenüber den {days} Tagen davor</div>
+                <div className="mt-2 text-[13px] text-ink-3">gegenüber den {days} Tagen davor</div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3 border-t border-line pt-4">
                 <div>
-                  <div className="text-[12.5px] text-ink-2">Heute</div>
+                  <div className="text-[13px] text-ink-2">Heute</div>
                   <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                     <span className="tnum text-[18px] font-semibold text-ink">{euro(s.today.revenue)}</span>
                     {s.yesterdaySameTime && <Trend cur={s.today.revenue} prev={s.yesterdaySameTime.revenue} size="sm" against={`zu gestern bis ${time(now)}`} />}
@@ -125,7 +125,7 @@ export default function Statistics() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[12.5px] text-ink-2">Vorzeitraum</div>
+                  <div className="text-[13px] text-ink-2">Vorzeitraum</div>
                   <div className="text-[18px] font-semibold text-ink-2">{euro(s.previous.revenue)}</div>
                   <div className="text-[12px] text-ink-3">{int(s.previous.orders)} Bestellungen</div>
                 </div>
@@ -141,7 +141,7 @@ export default function Statistics() {
               </div>
               {table ? (
                 <div className="max-h-[240px] overflow-y-auto">
-                  <table className="w-full text-[13.5px]">
+                  <table className="w-full text-[14px]">
                     <thead className="sticky top-0 bg-surface text-left text-[12px] text-ink-3">
                       <tr>
                         <th className="py-1.5 font-medium">Tag</th>
@@ -246,7 +246,7 @@ export default function Statistics() {
                   }))}
                 />
               ) : (
-                <p className="text-[13.5px] text-ink-3">Noch keine Verkäufe in diesem Zeitraum.</p>
+                <p className="text-[14px] text-ink-3">Noch keine Verkäufe in diesem Zeitraum.</p>
               )}
             </div>
 
@@ -276,7 +276,7 @@ export default function Statistics() {
                   ))}
                 </ul>
               ) : (
-                <p className="flex items-center gap-2 text-[13.5px] text-ink-2">
+                <p className="flex items-center gap-2 text-[14px] text-ink-2">
                   <PackageCheck className="h-4 w-4 text-good" /> Alle Düfte ausreichend auf Lager.
                 </p>
               )}
@@ -304,7 +304,7 @@ export default function Statistics() {
                 })}
               </ul>
             ) : (
-              <p className="text-[13.5px] text-ink-3">Noch keine Bestellungen synchronisiert.</p>
+              <p className="text-[14px] text-ink-3">Noch keine Bestellungen synchronisiert.</p>
             )}
           </div>
         </div>

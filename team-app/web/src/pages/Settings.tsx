@@ -38,6 +38,7 @@ import { disablePush, enablePush, isIos, isStandalone, pushState, thisDeviceId, 
 import { openClubAdmin } from './Club';
 import { STATES } from '../lib/holidays';
 import { getThemePref, setThemePref, type ThemePref } from '../lib/theme';
+import { installUrl, useInstall } from '../lib/install';
 import widgetTemplate from '../lib/widget-template.js?raw';
 import { relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
@@ -57,7 +58,7 @@ function Section({ title, description, children, id }: { title: string; descript
   return (
     <section className="card scroll-mt-24 p-5 md:p-6" id={id}>
       <h2 className="font-display text-[23px] font-semibold text-ink">{title}</h2>
-      {description && <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">{description}</p>}
+      {description && <p className="mt-1 text-[14px] leading-relaxed text-ink-2">{description}</p>}
       <div className="mt-5">{children}</div>
     </section>
   );
@@ -303,7 +304,7 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
         )}
       </div>
       {missingHere && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-warn/10 p-3 text-[13.5px] text-warn">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-warn/10 p-3 text-[14px] text-warn">
           <span className="flex items-start gap-2">
             <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> Dieses Gerät ist beim Server nicht angemeldet und bekommt deshalb nichts.
           </span>
@@ -330,14 +331,14 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
                       {d.id === thisId && <Chip tone="accent">Dieses Gerät</Chip>}
                       {r && (r.ok ? <Chip tone="good">Test angekommen beim Push-Dienst</Chip> : <Chip tone="bad">Test fehlgeschlagen</Chip>)}
                     </div>
-                    <div className="text-[12.5px] text-ink-3">
+                    <div className="text-[13px] text-ink-3">
                       {failing
                         ? `${status ? `HTTP ${status} · ` : ''}${reason || 'Fehler'}${d.fail_count > 1 ? ` · ${d.fail_count}× in Folge` : ''}`
                         : d.last_ok_at
                           ? `Zuletzt zugestellt ${relative(d.last_ok_at)}`
                           : `Angemeldet ${relative(d.created_at)}`}
                     </div>
-                    {failing && <p className="mt-1 text-[12.5px] text-ink-2">{pushHint(reason ?? '', status ?? 0)}</p>}
+                    {failing && <p className="mt-1 text-[13px] text-ink-2">{pushHint(reason ?? '', status ?? 0)}</p>}
                   </div>
                   <IconButton label={`${d.device} entfernen`} className="h-8 w-8 hover:text-bad" onClick={() => removeDevice(d)}>
                     <Trash2 className="h-4 w-4" />
@@ -354,8 +355,8 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
           {PUSH_KINDS.map((k) => (
             <li key={k.key} className="flex items-center justify-between gap-4 py-3">
               <div>
-                <div className="text-[14.5px] font-medium text-ink">{k.label}</div>
-                <div className="text-[12.5px] text-ink-3">{k.hint}</div>
+                <div className="text-[15px] font-medium text-ink">{k.label}</div>
+                <div className="text-[13px] text-ink-3">{k.hint}</div>
               </div>
               <Toggle label={k.label} checked={prefs.push[k.key]} onChange={(v) => onPrefs({ ...prefs, push: { ...prefs.push, [k.key]: v } })} />
             </li>
@@ -363,8 +364,8 @@ function PushSection({ prefs, onPrefs }: { prefs: Prefs | null; onPrefs: (p: Pre
           {prefs.push.mail && (
             <li className="flex flex-wrap items-center justify-between gap-3 py-3">
               <div>
-                <div className="text-[14.5px] font-medium text-ink">Bei welchen Mails?</div>
-                <div className="text-[12.5px] text-ink-3">
+                <div className="text-[15px] font-medium text-ink">Bei welchen Mails?</div>
+                <div className="text-[13px] text-ink-3">
                   {prefs.mailScope === 'everything'
                     ? 'Jede Mail – auch Newsletter, automatische und schon gelesene.'
                     : prefs.mailScope === 'important'
@@ -408,49 +409,42 @@ function pushHint(reason: string, status: number): string {
   return 'Gerät entfernen und auf dem Gerät Push neu aktivieren.';
 }
 
-type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
-let deferredPrompt: InstallPrompt | null = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e as InstallPrompt;
-});
-
 function InstallSection() {
-  const [canPrompt, setCanPrompt] = useState(!!deferredPrompt);
-  useEffect(() => {
-    const on = () => setCanPrompt(true);
-    window.addEventListener('beforeinstallprompt', on);
-    return () => window.removeEventListener('beforeinstallprompt', on);
-  }, []);
-  if (isStandalone()) return null;
+  const install = useInstall();
+  const standalone = isStandalone();
   return (
-    <Section title="App installieren" description="Als App installiert startet Perfume Cloud wie eine normale App – mit eigenem Icon, im Vollbild und mit Benachrichtigungen.">
-      {isIos() ? (
-        <ol className="space-y-2 text-[14px] text-ink-2">
-          <li>
-            1. In <b>Safari</b> unten auf <Share className="inline h-4 w-4" /> <b>Teilen</b> tippen
-          </li>
-          <li>
-            2. <b>Zum Home-Bildschirm</b> wählen und <b>Hinzufügen</b>
-          </li>
-          <li>3. Die App ab jetzt über das Icon öffnen</li>
-        </ol>
-      ) : canPrompt ? (
-        <Button
-          icon={<Download className="h-4 w-4" />}
-          onClick={async () => {
-            await deferredPrompt?.prompt();
-            deferredPrompt = null;
-            setCanPrompt(false);
-          }}
-        >
-          Jetzt installieren
-        </Button>
-      ) : (
-        <p className="text-[14px] text-ink-2">
-          In <b>Edge</b> oder <b>Chrome</b>: rechts in der Adressleiste auf das Installieren-Symbol klicken (oder Menü → „App installieren“). Auf dem Mac in Safari: Ablage → „Zum Dock hinzufügen“.
-        </p>
-      )}
+    <Section
+      title={standalone ? 'App auf weiteren Geräten' : 'App installieren'}
+      description={
+        standalone
+          ? 'Für iPhone und Computer: diesen Link auf dem Gerät öffnen – dort steht Schritt für Schritt, wie die App draufkommt.'
+          : 'Als App installiert startet Perfume Cloud wie eine normale App – mit eigenem Icon, im eigenen Fenster und mit Benachrichtigungen.'
+      }
+    >
+      {!standalone &&
+        (isIos() ? (
+          <ol className="mb-3 space-y-2 text-[14px] text-ink-2">
+            <li>
+              1. In <b>Safari</b> unten auf <Share className="inline h-4 w-4" /> <b>Teilen</b> tippen
+            </li>
+            <li>
+              2. <b>Zum Home-Bildschirm</b> wählen und <b>Hinzufügen</b>
+            </li>
+            <li>3. Die App ab jetzt über das Icon öffnen</li>
+          </ol>
+        ) : install.canPrompt ? (
+          <Button className="mb-3" icon={<Download className="h-4 w-4" />} onClick={() => void install.prompt()}>
+            Jetzt installieren
+          </Button>
+        ) : (
+          <p className="mb-3 text-[14px] text-ink-2">
+            In <b>Edge</b> oder <b>Chrome</b>: rechts in der Adressleiste auf das Installieren-Symbol klicken (oder Menü → „App installieren“). Auf dem Mac in Safari: Ablage → „Zum Dock hinzufügen“.
+          </p>
+        ))}
+      <CopyRow value={installUrl()} label="Link kopiert" />
+      <a href="/app" target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline">
+        Anleitung mit QR-Code öffnen <ExternalLink className="h-4 w-4" />
+      </a>
     </Section>
   );
 }
@@ -523,7 +517,7 @@ function WidgetSection() {
           6. <b>Kalender-Widget:</b> ein zweites Widget hinzufügen, ebenfalls <b>Perfume Cloud</b> auswählen und bei „Parameter“ <b>kalender</b> eintragen. Es zeigt deine nächsten Termine mit Feiertagen und Aktionstagen.
         </li>
       </ol>
-      <p className="mt-3 text-[12.5px] text-ink-3">
+      <p className="mt-3 text-[13px] text-ink-3">
         Klappt genauso auf dem Sperrbildschirm. Das Widget aktualisiert sich etwa alle 15 Minuten (iOS entscheidet den genauen Zeitpunkt). Der Zugang darin ist persönlich und kann nur lesen.
       </p>
 
@@ -542,7 +536,7 @@ function WidgetSection() {
             </a>
           </div>
           <textarea readOnly className="field h-32 font-mono text-[11px] leading-snug" value={script} onFocus={(e) => e.target.select()} />
-          <p className="text-[12.5px] text-warn">Dieses Skript enthält deinen persönlichen Schlüssel – nur in dein eigenes Scriptable einfügen.</p>
+          <p className="text-[13px] text-warn">Dieses Skript enthält deinen persönlichen Schlüssel – nur in dein eigenes Scriptable einfügen.</p>
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -561,7 +555,7 @@ function WidgetSection() {
               Zugang sperren
             </Button>
           )}
-          {active && <span className="text-[12.5px] text-good">Widget-Zugang ist aktiv</span>}
+          {active && <span className="text-[13px] text-good">Widget-Zugang ist aktiv</span>}
         </div>
       )}
     </Section>
@@ -622,10 +616,10 @@ function Team() {
             <li key={u.id} className="flex flex-wrap items-center gap-3 py-3">
               <Avatar user={u} size={36} />
               <div className="min-w-0 flex-1">
-                <div className="text-[14.5px] font-medium text-ink">
+                <div className="text-[15px] font-medium text-ink">
                   {u.name} {u.id === me.id && <span className="text-ink-3">(du)</span>}
                 </div>
-                <div className="truncate text-[12.5px] text-ink-3">{u.email}</div>
+                <div className="truncate text-[13px] text-ink-3">{u.email}</div>
               </div>
               {u.role === 'admin' && <Chip tone="accent">Admin</Chip>}
               {u.role !== 'admin' && !!u.club_access && (
@@ -725,7 +719,7 @@ function Team() {
             <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-2/70 px-3.5 py-2.5 sm:col-span-2">
               <span className="text-[14px] text-ink">
                 Einladung per E-Mail schicken
-                <span className="block text-[12.5px] text-ink-3">Mit Link zum Passwort-Festlegen – verschickt über euer info@-Postfach.</span>
+                <span className="block text-[13px] text-ink-3">Mit Link zum Passwort-Festlegen – verschickt über euer info@-Postfach.</span>
               </span>
               <Toggle label="Einladung per E-Mail" checked={form.invite} onChange={(v) => setForm({ ...form, invite: v })} />
             </label>
@@ -831,7 +825,7 @@ function LiveStatusView({ live, now }: { live: LiveStatus; now: number }) {
         </ul>
       )}
       {live.lastMail && (
-        <p className="mt-2 text-[12.5px] text-ink-3">
+        <p className="mt-2 text-[13px] text-ink-3">
           Letzte Mail {relative(live.lastMail.at, now)} gemeldet, {seconds(live.lastMail.delay)} nach dem Eingang.
         </p>
       )}
@@ -847,7 +841,7 @@ function seconds(ms: number): string {
 function CopyRow({ value, label }: { value: string; label: string }) {
   return (
     <div className="mt-2 flex items-center gap-2">
-      <input className="field min-w-0 flex-1 font-mono text-[12.5px]" readOnly value={value} onFocus={(e) => e.target.select()} />
+      <input className="field min-w-0 flex-1 font-mono text-[13px]" readOnly value={value} onFocus={(e) => e.target.select()} />
       <Button
         variant="secondary"
         className="shrink-0 px-3 sm:px-4"
@@ -939,7 +933,7 @@ function MaintenanceSection() {
           Datenbank aktualisieren
         </Button>
         {d && (
-          <span className="text-[12.5px] text-ink-3">
+          <span className="text-[13px] text-ink-3">
             Version {d.version} · {d.driver === 'mysql' ? 'MySQL' : 'SQLite'} · PHP {d.php}
           </span>
         )}
@@ -969,8 +963,8 @@ function MaintenanceSection() {
               return (
                 <li key={p.id} className="py-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-[14.5px] font-medium text-ink">{p.name}</span>
-                    <span className="text-[12.5px] text-ink-3">{p.lastSeen ? `zuletzt online ${relative(p.lastSeen, now)}` : 'noch nie online'}</span>
+                    <span className="text-[15px] font-medium text-ink">{p.name}</span>
+                    <span className="text-[13px] text-ink-3">{p.lastSeen ? `zuletzt online ${relative(p.lastSeen, now)}` : 'noch nie online'}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     <Chip tone={p.pushDevices ? 'good' : 'warn'}>
@@ -1185,7 +1179,7 @@ function CalendarFeedSection() {
             <CalendarDays className="h-4 w-4" /> Im Kalender abonnieren
           </a>
           <div className="flex gap-2">
-            <input className="field font-mono text-[12.5px]" readOnly value={links.url} onFocus={(e) => e.target.select()} aria-label="Abo-Link" />
+            <input className="field font-mono text-[13px]" readOnly value={links.url} onFocus={(e) => e.target.select()} aria-label="Abo-Link" />
             <Button
               variant="secondary"
               icon={<Copy className="h-4 w-4" />}
@@ -1322,7 +1316,7 @@ function MyMailboxSection() {
       ) : mb && !editing ? (
         <div className="rounded-2xl border border-line p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2 text-[14.5px] font-semibold text-ink">
+            <div className="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-ink">
               <Mail className="h-4 w-4 shrink-0 text-accent" />
               <span className="truncate">{mb.email}</span>
             </div>
@@ -1436,7 +1430,7 @@ function CheckSteps({ check }: { check?: MailCheck | null }) {
               <span className="font-medium text-ink">{st.label}</span> <span className="text-ink-2">– {st.detail}</span>
             </span>
           </div>
-          {st.hint && <p className="ml-6 mt-1 rounded-lg bg-warn/10 px-2.5 py-1.5 text-[12.5px] leading-relaxed text-warn">{st.hint}</p>}
+          {st.hint && <p className="ml-6 mt-1 rounded-lg bg-warn/10 px-2.5 py-1.5 text-[13px] leading-relaxed text-warn">{st.hint}</p>}
         </li>
       ))}
     </ol>
@@ -1562,16 +1556,16 @@ function IntegrationsPanel() {
             <Button type="submit" icon={<ShoppingBag className="h-4 w-4" />} loading={busy === 'shop'}>
               Speichern & testen
             </Button>
-            {data.shopify.configured && <span className="text-[12.5px] text-ink-3">Letzter Abgleich: {data.shopify.lastSync ? relative(data.shopify.lastSync, now) : 'noch nie'}</span>}
+            {data.shopify.configured && <span className="text-[13px] text-ink-3">Letzter Abgleich: {data.shopify.lastSync ? relative(data.shopify.lastSync, now) : 'noch nie'}</span>}
           </div>
           <StatusLine status={data.test ?? data.shopify.status} />
         </form>
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
-          <label className="text-[13.5px] text-ink-2" htmlFor="th">
+          <label className="text-[14px] text-ink-2" htmlFor="th">
             „Knapper Bestand“ ab
           </label>
           <input id="th" type="number" min={0} className="field w-24" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
-          <span className="text-[13.5px] text-ink-2">Stück</span>
+          <span className="text-[14px] text-ink-2">Stück</span>
           <Button size="sm" variant="secondary" onClick={() => run('th', async () => setData(await api('PUT', '/admin/settings', { low_stock_threshold: threshold })))}>
             Übernehmen
           </Button>
@@ -1586,10 +1580,10 @@ function IntegrationsPanel() {
           {boxes.map((b, i) => (
             <div key={i} className="rounded-2xl border border-line p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-[14.5px] font-semibold text-ink">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-ink">
                   <Mail className="h-4 w-4 text-accent" /> {b.email || 'Neues Postfach'}
                 </div>
-                <button type="button" className="text-[12.5px] text-ink-3 hover:text-bad" onClick={() => setBoxes(boxes.filter((_, j) => j !== i))}>
+                <button type="button" className="text-[13px] text-ink-3 hover:text-bad" onClick={() => setBoxes(boxes.filter((_, j) => j !== i))}>
                   Entfernen
                 </button>
               </div>
@@ -1657,7 +1651,7 @@ function IntegrationsPanel() {
                     );
                   })}
                 </div>
-                <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-ink-3">
+                <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-ink-3">
                   {b.visible_to.length ? (
                     <>
                       <Lock className="h-3.5 w-3.5" /> Nur sichtbar für {b.visible_to.map((id) => usersMap[id]?.name.split(' ')[0] ?? '?').join(', ')} – nur diese bekommen Mails und Push.
@@ -1701,7 +1695,7 @@ function IntegrationsPanel() {
         title="Mails verschicken"
         description="Einladungen und Testmails gehen über euer Team-Postfach – mit denselben Zugangsdaten wie beim Abruf. Bei netcup ist der Server für den Versand derselbe wie für den Abruf (z. B. mxf9a2.netcup.net), Port 465 (SSL/TLS) oder 587 (STARTTLS)."
       >
-        <p className="text-[13.5px] text-ink-2">
+        <p className="text-[14px] text-ink-2">
           Absender:{' '}
           <b className="text-ink">{data.mail?.sender ?? 'kein Team-Postfach mit Passwort – bitte oben info@ eintragen'}</b>
         </p>
@@ -1749,7 +1743,7 @@ function IntegrationsPanel() {
         </div>
         {senderBox?.id && <CheckSteps check={checks[senderBox.id]} />}
         {data.mail?.lastError && (
-          <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-3">
+          <p className="mt-3 flex items-start gap-2 text-[13px] text-ink-3">
             <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               Letzter Fehler beim Abruf ({data.mail.lastError.mailbox}, {relative(data.mail.lastError.at, now)}): {data.mail.lastError.message}
@@ -1788,14 +1782,14 @@ function IntegrationsPanel() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[14px] font-medium text-ink">Feiertage anzeigen</p>
-              <p className="text-[12.5px] text-ink-3">Neujahr, Ostern, Weihnachten … in Rot</p>
+              <p className="text-[13px] text-ink-3">Neujahr, Ostern, Weihnachten … in Rot</p>
             </div>
             <Toggle label="Feiertage anzeigen" checked={data.settings.holidays_on} onChange={(v) => saveCalendar({ holidays_on: v })} />
           </div>
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[14px] font-medium text-ink">Aktionstage für den Shop</p>
-              <p className="text-[12.5px] text-ink-3">Valentinstag, Muttertag, Black Friday, Cyber Monday …</p>
+              <p className="text-[13px] text-ink-3">Valentinstag, Muttertag, Black Friday, Cyber Monday …</p>
             </div>
             <Toggle label="Aktionstage anzeigen" checked={data.settings.shop_days_on} onChange={(v) => saveCalendar({ shop_days_on: v })} />
           </div>
@@ -1814,7 +1808,7 @@ function IntegrationsPanel() {
           <li>Diesen Pfad als Skript eintragen (PHP 8.3), Ausführen: Cron-Stil <code className="rounded bg-surface-2 px-1">* * * * *</code> (jede Minute), Benachrichtigung: keine.</li>
         </ol>
         <CopyRow value={data.cron.script} label="Skript kopiert" />
-        <p className="mt-4 text-[12.5px] text-ink-3">
+        <p className="mt-4 text-[13px] text-ink-3">
           Alternativ „URL abrufen“ mit dieser Adresse, ebenfalls jede Minute. Das klappt nur, wenn PHP auf eurem Hosting als FPM läuft; sonst holt die App Mails dabei einmal pro Minute.
         </p>
         <CopyRow value={data.cron.url} label="Adresse kopiert" />

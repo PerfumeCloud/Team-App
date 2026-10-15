@@ -24,9 +24,9 @@ export function EventRow({ e, users, onOpen, showDate }: { e: CalEvent; users: R
           {showDate ? `${showDate} · ` : ''}
           {timeLabel(e)}
         </div>
-        <div className="truncate text-[14.5px] font-medium text-ink">{e.title || 'Ohne Titel'}</div>
+        <div className="truncate text-[15px] font-medium text-ink">{e.title || 'Ohne Titel'}</div>
         {e.location && (
-          <div className="flex items-center gap-1 truncate text-[12.5px] text-ink-2">
+          <div className="flex items-center gap-1 truncate text-[13px] text-ink-2">
             <MapPin className="h-3 w-3 shrink-0" /> <span className="truncate">{e.location}</span>
           </div>
         )}
@@ -35,7 +35,7 @@ export function EventRow({ e, users, onOpen, showDate }: { e: CalEvent; users: R
         {e.attendees.length ? (
           e.attendees.slice(0, 3).map((id) => <Avatar key={id} user={users[id]} size={22} ring />)
         ) : (
-          <span className="text-[11.5px] text-ink-3">Team</span>
+          <span className="text-[12px] text-ink-3">Team</span>
         )}
       </div>
     </button>
@@ -58,7 +58,7 @@ export function SpecialRow({ s, showDate, onOpen }: { s: SpecialDay; showDate?: 
           {showDate ? `${showDate} · ` : ''}
           {hol ? 'Feiertag' : 'Aktionstag'}
         </div>
-        <div className="truncate text-[14.5px] font-medium text-ink">{s.title}</div>
+        <div className="truncate text-[15px] font-medium text-ink">{s.title}</div>
       </div>
     </button>
   );

@@ -73,7 +73,7 @@ export function TaskCard({ task, onOpen, compact, draggable }: { task: Task; onO
         <TaskCheck task={task} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className={cx('text-[14.5px] font-medium leading-snug text-ink', done && 'line-through decoration-ink-3')}>{task.title}</div>
+        <div className={cx('text-[15px] font-medium leading-snug text-ink', done && 'line-through decoration-ink-3')}>{task.title}</div>
         {!compact && task.description && <p className="mt-1 line-clamp-2 text-[13px] text-ink-2">{task.description}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {task.priority === 'high' && !done && (
@@ -310,7 +310,7 @@ function TaskForm({ task, onClose }: { task: Task; onClose: () => void }) {
         <button onClick={() => navigate('/postfach')} className="flex w-full items-center gap-3 rounded-xl bg-surface-2 px-3.5 py-3 text-left">
           <Inbox className="h-4 w-4 shrink-0 text-ink-3" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[13.5px] font-medium text-ink">{sourceMail.subject}</div>
+            <div className="truncate text-[14px] font-medium text-ink">{sourceMail.subject}</div>
             <div className="truncate text-[12px] text-ink-3">
               {sourceMail.from_name || sourceMail.from_email} · {sourceMail.mailbox}
             </div>
@@ -366,7 +366,7 @@ function TaskForm({ task, onClose }: { task: Task; onClose: () => void }) {
               <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md bg-surface-2 px-3.5 py-2.5">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[13px] font-semibold text-ink">{usersMap[c.user_id]?.name ?? 'Jemand'}</span>
-                  <span className="text-[11.5px] text-ink-3">{relative(c.created_at, now)}</span>
+                  <span className="text-[12px] text-ink-3">{relative(c.created_at, now)}</span>
                 </div>
                 <p className="mt-0.5 whitespace-pre-wrap text-[14px] leading-relaxed text-ink">{c.body}</p>
                 {c.user_id === me?.id && (
