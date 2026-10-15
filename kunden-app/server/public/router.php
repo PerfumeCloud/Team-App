@@ -1,7 +1,7 @@
 <?php
 // Nur für die lokale Entwicklung mit `php -S` – ersetzt die .htaccess.
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-if (preg_match('#^/api(/|$)#', $path)) {
+if (preg_match('#^/api(/|$)#', $path) || preg_match('#^/r/[A-Za-z0-9]{3,20}/?$#', $path)) {
     require __DIR__ . '/api.php';
     return true;
 }

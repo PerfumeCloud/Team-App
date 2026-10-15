@@ -32,18 +32,20 @@ final class Admin
         $p = Points::program();
         $since30 = $now - 30 * $day;
 
-        $members = (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at IS NOT NULL');
+        // Testkonten aus dem Probelauf zählen nirgends mit
+        $nt = 'member_id NOT IN (SELECT id FROM club_members WHERE test = 1)';
+        $members = (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at IS NOT NULL AND test = 0');
         $tiers = [];
         foreach (Points::program()['tiers'] as $t) {
             $tiers[$t['key']] = ['name' => $t['name'], 'count' => 0];
         }
-        foreach (Db::all('SELECT tier, COUNT(*) AS n FROM club_members WHERE joined_at IS NOT NULL GROUP BY tier') as $r) {
+        foreach (Db::all('SELECT tier, COUNT(*) AS n FROM club_members WHERE joined_at IS NOT NULL AND test = 0 GROUP BY tier') as $r) {
             $key = isset($tiers[$r['tier']]) ? $r['tier'] : array_key_first($tiers);
             $tiers[$key]['count'] += (int) $r['n'];
         }
 
-        $orderPts = static fn (string $where, array $params = []) => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_orders WHERE $where", $params);
-        $ledgerPts = static fn (string $where, array $params = []) => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_ledger WHERE $where", $params);
+        $orderPts = static fn (string $where, array $params = []) => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_orders WHERE $where AND $nt", $params);
+        $ledgerPts = static fn (string $where, array $params = []) => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_ledger WHERE $where AND $nt", $params);
         $bonusWhere = "status = 'available' AND points > 0 AND kind NOT IN ('refund')";
 
         $earned = $orderPts("status = 'available'") + $ledgerPts($bonusWhere);
@@ -53,18 +55,18 @@ final class Admin
         $available = $orderPts("status = 'available'") + $ledgerPts("status = 'available'");
 
         $bonus = [];
-        foreach (Db::all("SELECT kind, COUNT(*) AS n, COALESCE(SUM(points), 0) AS pts FROM club_ledger WHERE status = 'available' AND points > 0 AND kind NOT IN ('refund', 'redeem') GROUP BY kind") as $r) {
+        foreach (Db::all("SELECT kind, COUNT(*) AS n, COALESCE(SUM(points), 0) AS pts FROM club_ledger WHERE status = 'available' AND points > 0 AND kind NOT IN ('refund', 'redeem') AND $nt GROUP BY kind") as $r) {
             $bonus[$r['kind']] = ['count' => (int) $r['n'], 'points' => (int) $r['pts'], 'title' => Points::TITLES[$r['kind']] ?? $r['kind']];
         }
 
         $codes = [];
-        foreach (Db::all("SELECT status, COUNT(*) AS n, COALESCE(SUM(value_cents), 0) AS v FROM club_codes WHERE status <> 'failed' GROUP BY status") as $r) {
+        foreach (Db::all("SELECT status, COUNT(*) AS n, COALESCE(SUM(value_cents), 0) AS v FROM club_codes WHERE status <> 'failed' AND $nt GROUP BY status") as $r) {
             $codes[$r['status']] = ['count' => (int) $r['n'], 'cents' => (int) $r['v']];
         }
-        $used30 = Db::one("SELECT COUNT(*) AS n, COALESCE(SUM(value_cents), 0) AS v FROM club_codes WHERE status = 'used' AND used_at >= ?", [$since30]);
+        $used30 = Db::one("SELECT COUNT(*) AS n, COALESCE(SUM(value_cents), 0) AS v FROM club_codes WHERE status = 'used' AND used_at >= ? AND $nt", [$since30]);
 
-        $orders = Db::one("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS c FROM club_orders WHERE status <> 'void'");
-        $orders30 = Db::one("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS c FROM club_orders WHERE status <> 'void' AND ordered_at >= ?", [$since30]);
+        $orders = Db::one("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS c FROM club_orders WHERE status <> 'void' AND $nt");
+        $orders30 = Db::one("SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS c FROM club_orders WHERE status <> 'void' AND ordered_at >= ? AND $nt", [$since30]);
 
         // Beitritte je Monat (letzte 12 Monate)
         $months = [];
@@ -72,7 +74,7 @@ final class Admin
         for ($i = 0; $i < 12; $i++) {
             $months[$start->modify("+$i months")->format('Y-m')] = 0;
         }
-        foreach (Db::all('SELECT joined_at FROM club_members WHERE joined_at >= ?', [$start->getTimestamp() * 1000]) as $r) {
+        foreach (Db::all('SELECT joined_at FROM club_members WHERE joined_at >= ? AND test = 0', [$start->getTimestamp() * 1000]) as $r) {
             $k = date('Y-m', intdiv((int) $r['joined_at'], 1000));
             if (isset($months[$k])) {
                 $months[$k]++;
@@ -81,9 +83,9 @@ final class Admin
 
         return [
             'members' => $members,
-            'new_7' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at >= ?', [$now - 7 * $day]),
-            'new_30' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at >= ?', [$since30]),
-            'active_30' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at IS NOT NULL AND last_seen_at >= ?', [$since30]),
+            'new_7' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at >= ? AND test = 0', [$now - 7 * $day]),
+            'new_30' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at >= ? AND test = 0', [$since30]),
+            'active_30' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at IS NOT NULL AND test = 0 AND last_seen_at >= ?', [$since30]),
             'joins_by_month' => array_map(static fn ($k, $v) => ['month' => $k, 'count' => $v], array_keys($months), $months),
             'tiers' => array_map(static fn ($k, $v) => ['key' => $k] + $v, array_keys($tiers), $tiers),
             'points' => [
@@ -104,6 +106,8 @@ final class Admin
             'orders' => ['count' => (int) $orders['n'], 'revenue_cents' => (int) $orders['c']],
             'orders_30' => ['count' => (int) $orders30['n'], 'revenue_cents' => (int) $orders30['c']],
             'push_members' => (int) Db::value('SELECT COUNT(DISTINCT member_id) FROM club_push_subs'),
+            'survey' => Surveys::stats($since30, $now + 1),
+            'referrals' => Referrals::stats($since30, $now + 1),
             'feedback' => Feedback::stats(),
             'at' => $now,
         ];
@@ -129,7 +133,7 @@ final class Admin
 
     public static function members(string $q = '', int $limit = 100, string $tier = ''): array
     {
-        $where = 'joined_at IS NOT NULL';
+        $where = 'joined_at IS NOT NULL AND test = 0';
         $params = [];
         if ($q !== '') {
             $where .= ' AND (email LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR ref_code = ?)';

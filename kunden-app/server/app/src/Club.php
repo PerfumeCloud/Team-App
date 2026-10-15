@@ -150,7 +150,14 @@ final class Club
                 Util::log('Austritt, Shopify: ' . $e->getMessage());
             }
         }
+        try {
+            Referrals::leave($m);
+        } catch (\Throwable $e) {
+            Util::log('Austritt, Empfehlungscode: ' . $e->getMessage());
+        }
         Db::tx(static function () use ($m): void {
+            // Bewertungen bleiben ohne Zuordnung zum Mitglied (sie gehören zur Bestellung)
+            Db::exec('UPDATE club_surveys SET member_id = NULL WHERE member_id = ?', [$m['id']]);
             foreach (['club_ledger', 'club_codes', 'club_orders', 'club_order_cache', 'club_push_subs', 'club_push_queue', 'club_claims'] as $t) {
                 Db::exec("DELETE FROM $t WHERE member_id = ?", [$m['id']]);
             }
@@ -191,6 +198,7 @@ final class Club
             $out['push'] = Push::state($m);
             $out['feedback'] = Broadcasts::openFeedback($m);
             $out['bonus'] = Bonus::status($m);
+            $out['survey'] = Surveys::memberState($m);
         }
         return $out;
     }

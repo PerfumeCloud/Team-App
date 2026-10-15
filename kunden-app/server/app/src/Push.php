@@ -33,6 +33,10 @@ final class Push
         'birthday' => ['label' => 'Geburtstag', 'cat' => 'points', 'title' => 'Alles Gute, {vorname}!', 'body' => 'Zum Geburtstag schenken wir dir {punkte} Punkte.'],
         'referral' => ['label' => 'Empfehlung belohnt', 'cat' => 'points', 'title' => 'Danke fürs Weitersagen', 'body' => '{freund} hat zum ersten Mal bestellt. Dafür bekommst du {punkte} Punkte.'],
         'promo_start' => ['label' => 'Aktion startet', 'cat' => 'news', 'title' => '{aktion}: {faktor} Punkte', 'body' => 'Bis {datum} sammelst du {faktor} Punkte auf jede Bestellung.'],
+        'survey' => ['label' => 'Bewertung nach der Zustellung', 'cat' => 'orders', 'title' => 'Wie gefällt dir {duft}?', 'body' => 'Ein Tipp auf die Sterne genügt. Danke, {vorname}!'],
+        'reorder' => ['label' => 'Nachkauf-Erinnerung', 'cat' => 'news', 'title' => 'Zeit für Nachschub?', 'body' => 'Falls {duft} langsam leer wird: Hier kannst du ihn mit einem Tipp nachbestellen.'],
+        'referral_pending' => ['label' => 'Bestellung über den Empfehlungslink', 'cat' => 'points', 'title' => 'Über deinen Link wurde bestellt', 'body' => '{punkte} Punkte sind für dich vorgemerkt. Sie kommen, sobald die Bestellung angekommen ist.'],
+        'referral_order' => ['label' => 'Empfehlung über den Link belohnt', 'cat' => 'points', 'title' => 'Danke fürs Weitersagen', 'body' => 'Für eine Bestellung über deinen Link bekommst du {punkte} Punkte.'],
     ];
 
     /** Platzhalter je Vorlage (für die Hilfe im Admin-Bereich). */
@@ -50,6 +54,10 @@ final class Push
         'birthday' => ['vorname', 'punkte', 'kontostand'],
         'referral' => ['vorname', 'freund', 'punkte'],
         'promo_start' => ['vorname', 'aktion', 'faktor', 'datum'],
+        'survey' => ['vorname', 'duft', 'bestellung', 'punkte'],
+        'reorder' => ['vorname', 'duft'],
+        'referral_pending' => ['vorname', 'punkte'],
+        'referral_order' => ['vorname', 'punkte', 'kontostand'],
     ];
 
     private static bool $flushDeferred = false;
@@ -140,7 +148,7 @@ final class Push
     /** Mitglieder mit mindestens einem Gerät, die diese Kategorie erlauben. */
     public static function recipients(string $cat, ?string $minTier = null): array
     {
-        $rows = Db::all('SELECT m.* FROM club_members m WHERE m.joined_at IS NOT NULL AND EXISTS (SELECT 1 FROM club_push_subs s WHERE s.member_id = m.id)');
+        $rows = Db::all('SELECT m.* FROM club_members m WHERE m.joined_at IS NOT NULL AND m.test = 0 AND EXISTS (SELECT 1 FROM club_push_subs s WHERE s.member_id = m.id)');
         $tiers = Tiers::KEYS;
         $min = $minTier !== null ? array_search($minTier, $tiers, true) : false;
         return array_values(array_filter($rows, static function ($m) use ($cat, $min, $tiers) {
@@ -191,7 +199,7 @@ final class Push
         if (!$tpl || !$tpl['enabled'] || !self::prefs($m)[$tpl['cat']]) {
             return false;
         }
-        if (self::devices($m['id']) === 0) {
+        if (self::devices(Trial::deviceMemberId($m['id'])) === 0) {
             return false;
         }
         $vars += [
@@ -199,6 +207,9 @@ final class Push
             'kontostand' => number_format(Points::balance($m['id']), 0, ',', '.'),
         ];
         $title = self::fill((string) (($custom['title'] ?? null) ?: $tpl['title']), $vars);
+        if ((int) ($m['test'] ?? 0) === 1) {
+            $title = 'Probelauf · ' . $title;
+        }
         $body = self::fill((string) (($custom['body'] ?? null) ?: $tpl['body']), $vars);
         $now = Util::now();
 
@@ -282,7 +293,7 @@ final class Push
             if (Db::exec("UPDATE club_push_queue SET status = 'sending' WHERE id = ? AND status = 'queued'", [$r['id']]) !== 1) {
                 continue;
             }
-            $subs = $subsCache[$r['member_id']] ??= Db::all('SELECT * FROM club_push_subs WHERE member_id = ?', [$r['member_id']]);
+            $subs = $subsCache[$r['member_id']] ??= Db::all('SELECT * FROM club_push_subs WHERE member_id = ?', [Trial::deviceMemberId($r['member_id'])]);
             if (!$subs) {
                 Db::exec("UPDATE club_push_queue SET status = 'no_device', sent_at = ? WHERE id = ?", [Util::now(), $r['id']]);
                 continue;

@@ -18,7 +18,8 @@ final class Api
                 if ($key === '' || !hash_equals($key, (string) ($_SERVER['HTTP_X_CLUB_KEY'] ?? ''))) {
                     throw new HttpError(403, 'Ungültiger Schlüssel.');
                 }
-            } elseif ($method !== 'GET' && $method !== 'HEAD' && ($_SERVER['HTTP_X_PC'] ?? '') !== '1') {
+            } elseif ($method !== 'GET' && $method !== 'HEAD' && ($_SERVER['HTTP_X_PC'] ?? '') !== '1' && !preg_match('#^/abmelden/[0-9a-f]{32}$#', $path)) {
+                // Ausnahme: Abmelden mit einem Klick aus dem Mailprogramm (List-Unsubscribe-Post, RFC 8058) – ändert nur den Widerspruch
                 // Schutz gegen Anfragen von fremden Seiten: Schreibende Anfragen brauchen den eigenen Header
                 throw new HttpError(403, 'Ungültige Anfrage.');
             }
@@ -124,6 +125,23 @@ final class Api
                 return $inv;
             }],
 
+            // ----- Bewertung nach der Zustellung (öffentlich über den Link aus Mail/Push) -----
+            ['GET', '/bewertung/([0-9a-f]{32})', static fn (string $t) => Surveys::publicView(Surveys::byToken($t))],
+            ['POST', '/bewertung/([0-9a-f]{32})', static fn (string $t) => Surveys::answer($t, Http::body())],
+            ['POST', '/bewertung/([0-9a-f]{32})/abmelden', static fn (string $t) => Surveys::optOut($t, 'link')],
+            ['GET', '/abmelden/([0-9a-f]{32})', static fn (string $t) => self::redirect('/abmelden/' . $t)],
+            ['POST', '/abmelden/([0-9a-f]{32})', static fn (string $t) => Surveys::optOut($t, 'one-click')],
+
+            // ----- Empfehlungslink {app}/r/CODE → Shop mit Rabatt für Freunde -----
+            ['GET', '/r/([A-Za-z0-9]{3,20})/?', static function (string $code) {
+                try {
+                    return self::redirect(Referrals::click($code));
+                } catch (\Throwable $e) {
+                    Util::log('Empfehlungslink: ' . $e->getMessage());
+                    return self::redirect(Shopify::shopUrl() . '/');
+                }
+            }],
+
             // ----- Kundinnen und Kunden -----
             ['GET', '/me', static function () {
                 $m = Auth::requireMember();
@@ -144,6 +162,11 @@ final class Api
                 $m = Auth::requireJoined();
                 Bonus::setBirthday($m, (string) (Http::body()['birthday'] ?? ''));
                 return Club::me(Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]));
+            }],
+            ['PUT', '/me/survey-mail', static function () {
+                $m = Auth::requireJoined();
+                Surveys::setMemberMail($m, !empty(Http::body()['on']));
+                return Surveys::memberState(Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]));
             }],
             ['POST', '/me/review', static function () {
                 $m = Auth::requireJoined();
@@ -320,6 +343,57 @@ final class Api
                 return Push::test($own);
             }],
 
+            ['GET', '/admin/surveys', static function () {
+                Auth::requireAdmin();
+                return self::surveyAdmin();
+            }],
+            ['PUT', '/admin/surveys', static function () {
+                Auth::requireAdmin();
+                Surveys::save(Http::body());
+                return self::surveyAdmin();
+            }],
+            ['GET', '/admin/surveys/preview', static fn () => Surveys::preview((string) (Http::query('kind') ?? 'survey'), Auth::requireAdmin())],
+            ['POST', '/admin/surveys/test', static function () {
+                $a = Auth::requireAdmin();
+                Util::limit('surveytest:' . $a['id'], 10, 600, 'Bitte warte ein paar Minuten bis zum nächsten Test.');
+                $r = Surveys::test($a, (string) (Http::body()['kind'] ?? 'survey'));
+                Push::flush();
+                return $r;
+            }],
+            ['GET', '/admin/referrals', static function () {
+                $a = Auth::requireAdmin();
+                return self::referralAdmin($a);
+            }],
+            ['PUT', '/admin/referrals', static function () {
+                $a = Auth::requireAdmin();
+                Referrals::save(Http::body());
+                return self::referralAdmin($a);
+            }],
+            ['POST', '/admin/referrals/test', static function () {
+                $a = Auth::requireAdmin();
+                $own = Db::one('SELECT * FROM club_members WHERE email = ? AND joined_at IS NOT NULL AND test = 0', [$a['email']]);
+                if (!$own) {
+                    throw new HttpError(409, 'Mit ' . $a['email'] . ' bist du kein Club-Mitglied. Tritt dem Club mit dieser Adresse bei, dann bekommst du deinen eigenen Link zum Testen.');
+                }
+                if (!Referrals::enabled()) {
+                    throw new HttpError(409, 'Bitte die Empfehlungslinks erst einschalten und speichern.');
+                }
+                $row = Referrals::ensureDiscount($own);
+                $push = Push::devices($own['id']) > 0
+                    ? Push::test($own, '[Test] ' . Push::fill(Push::templates()['referral_order']['title'], []), Push::fill(Push::templates()['referral_order']['body'], ['punkte' => (string) Referrals::pointsFor(5900)]), '/konto')
+                    : null;
+                return [
+                    'link' => Referrals::link($own),
+                    'code' => $row['code'],
+                    'status' => $row['status'],
+                    'error' => $row['error'],
+                    'push' => $push,
+                    'message' => $row['status'] === 'active'
+                        ? 'Dein Code ' . $row['code'] . ' ist in Shopify angelegt. Öffne den Link in einem privaten Fenster – der Rabatt sollte im Warenkorb stehen.'
+                        : 'Der Code konnte nicht angelegt werden: ' . $row['error'],
+                ];
+            }],
+
             ['GET', '/admin/invites', static function () {
                 Auth::requireAdmin();
                 return Invites::overview();
@@ -425,6 +499,18 @@ final class Api
                 return ['ok' => true];
             }],
 
+            ['GET', '/internal/customer', static fn () => Internal::customer((string) (Http::query('email') ?? ''))],
+            ['GET', '/internal/weekly', static fn () => Internal::weekly((int) (Http::query('from') ?? 0), (int) (Http::query('to') ?? 0))],
+            ['POST', '/internal/alerts/claim', static fn () => Internal::claimAlerts()],
+            ['GET', '/internal/trial', static fn () => Trial::view()],
+            ['POST', '/internal/trial/start', static fn () => Trial::start(self::teamUser(), Http::body())],
+            ['POST', '/internal/trial/step', static fn () => Trial::step((string) (Http::body()['step'] ?? ''))],
+            ['POST', '/internal/trial/sync', static function () {
+                $r = Jobs::run('probelauf');
+                return Trial::view(['message' => is_string($r['orders'] ?? null) ? 'Abgleich: ' . $r['orders'] : ($r['skipped'] ?? 'Abgleich gelaufen')]);
+            }],
+            ['POST', '/internal/trial/cleanup', static fn () => Trial::cleanup()],
+
             // ----- Cronjob (netcup: „URL abrufen“ alle 15 Minuten) -----
             ['GET', '/cron', static function () {
                 $key = (string) Config::get('cron_key', '');
@@ -442,6 +528,31 @@ final class Api
             }
         }
         throw new HttpError(404, 'Nicht gefunden.');
+    }
+
+    private static function surveyAdmin(): array
+    {
+        return [
+            'config' => Surveys::config(),
+            'overview' => Surveys::overview(),
+            'defaults' => ['privacy_url' => Surveys::privacyUrl(), 'imprint_url' => Surveys::imprintUrl()],
+            'mail_configured' => Mailer::configured(),
+            'feedback_email' => Feedback::email(),
+            'templates' => array_values(array_filter(Push::templates(), static fn ($t) => in_array($t['key'], ['survey', 'reorder'], true))),
+        ];
+    }
+
+    private static function referralAdmin(array $admin): array
+    {
+        $own = Db::one('SELECT * FROM club_members WHERE email = ? AND joined_at IS NOT NULL AND test = 0', [$admin['email']]);
+        return [
+            'config' => Referrals::config(),
+            'overview' => Referrals::overview(),
+            'program' => ['redeem_points' => (int) Points::program()['redeem_points'], 'redeem_cents' => (int) Points::program()['redeem_cents'], 'wait_days' => (int) Points::program()['wait_days']],
+            'shopify' => Shopify::configured(),
+            'own' => $own ? ['link' => Referrals::link($own), 'status' => Referrals::status($own)] : null,
+            'templates' => array_values(array_filter(Push::templates(), static fn ($t) => in_array($t['key'], ['referral_pending', 'referral_order'], true))),
+        ];
     }
 
     private static function status(): array

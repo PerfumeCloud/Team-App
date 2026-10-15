@@ -280,7 +280,7 @@ final class Points
     }
 
     /** Wann wurde die Bestellung zugestellt? (letzte Sendung) */
-    private static function deliveredAt(array $o, int $now): ?int
+    public static function deliveredAt(array $o, int $now): ?int
     {
         $list = array_values(array_filter($o['fulfillments'] ?? [], static fn ($f) => ($f['status'] ?? 'SUCCESS') === 'SUCCESS'));
         if (!$list || ($o['displayFulfillmentStatus'] ?? '') !== 'FULFILLED') {
@@ -305,6 +305,9 @@ final class Points
     {
         $prog ??= self::program();
         $now = Util::now();
+        if ((int) ($member['test'] ?? 0) === 1) {
+            $o = Trial::adjust($o, $member);
+        }
         self::markCodesUsed($member, $o);
         $id = (string) $o['id'];
         $old = Db::one('SELECT * FROM club_orders WHERE order_id = ?', [$id]);
@@ -419,7 +422,7 @@ final class Points
         for ($page = 0; $page < 20; $page++) {
             $d = Shopify::graphql(
                 'query ClubSync($q: String!, $after: String) { orders(first: 50, after: $after, query: $q, sortKey: UPDATED_AT) {
-                    pageInfo { hasNextPage endCursor } nodes { updatedAt customer { id } ' . self::ORDER_FIELDS . ' } } }',
+                    pageInfo { hasNextPage endCursor } nodes { updatedAt ' . Surveys::ORDER_EXTRA . ' ' . self::ORDER_FIELDS . ' } } }',
                 ['q' => "updated_at:>='$cursor'", 'after' => $after]
             );
             $orders = $d['orders']['nodes'] ?? [];
@@ -436,9 +439,25 @@ final class Points
                     $newest = (string) $o['updatedAt'];
                 }
                 $m = $members[$o['customer']['id'] ?? ''] ?? null;
+                // Probelauf (0-€-Testbestellung eines Admins): läuft nur über das Testkonto
+                if (Trial::isTrialOrder($o)) {
+                    Trial::onOrder($o);
+                    continue;
+                }
                 if ($m) {
                     $changed += self::upsertOrder($m, $o, $prog) ? 1 : 0;
                     $members[$m['shopify_id']] = Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]) ?? $m;
+                }
+                // Befragung und Empfehlungen betreffen alle Bestellungen, nicht nur die von Mitgliedern
+                try {
+                    Surveys::consider($o, $m);
+                } catch (\Throwable $e) {
+                    Util::log('Befragung ' . ($o['name'] ?? '') . ': ' . $e->getMessage());
+                }
+                try {
+                    Referrals::consider($o);
+                } catch (\Throwable $e) {
+                    Util::log('Empfehlung ' . ($o['name'] ?? '') . ': ' . $e->getMessage());
                 }
             }
             if (!($d['orders']['pageInfo']['hasNextPage'] ?? false)) {
@@ -457,7 +476,7 @@ final class Points
     public static function trackDeliveries(): string
     {
         $rows = Db::all(
-            "SELECT order_id, member_id FROM club_orders WHERE shipped_at > ? AND delivered_at IS NULL AND status <> 'void' ORDER BY shipped_at DESC LIMIT 100",
+            "SELECT order_id, member_id FROM club_orders WHERE shipped_at > ? AND delivered_at IS NULL AND status <> 'void' AND order_id LIKE 'gid://%' ORDER BY shipped_at DESC LIMIT 100",
             [Util::now() - 21 * self::DAY_MS]
         );
         if (!$rows) {
@@ -571,6 +590,7 @@ final class Points
         'referred' => 'Startbonus über eine Empfehlung',
         'start' => 'Startbonus',
         'expire' => 'Punkte verfallen',
+        'survey' => 'Danke fürs Bewerten',
     ];
 
     /** Alle Buchungen, neueste zuerst. */
@@ -905,7 +925,7 @@ final class Points
 
     public static function pushMetafields(int $max = 80): string
     {
-        $rows = Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND meta_dirty = 1 LIMIT ' . $max);
+        $rows = Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND meta_dirty = 1 AND test = 0 LIMIT ' . $max);
         $done = 0;
         foreach (array_chunk($rows, 6) as $chunk) {
             $fields = [];

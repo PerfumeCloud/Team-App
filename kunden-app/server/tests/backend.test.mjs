@@ -62,7 +62,7 @@ function order(n, { ago, amount, paid = true, shippedAgo = null, delivered = fal
     currentSubtotalPriceSet: { shopMoney: { amount: amount.toFixed(2), currencyCode: 'EUR' } },
     currentTotalPriceSet: { shopMoney: { amount: (amount + 4.9).toFixed(2), currencyCode: 'EUR' } },
     totalRefundedSet: { shopMoney: { amount: '0.00' } },
-    lineItems: { nodes: [{ title: 'Sunset Dune', variantTitle: '50 ml', quantity: 1, image: { url: 'https://cdn.shopify.com/flakon.webp', altText: null } }] },
+    lineItems: { nodes: [{ title: 'Sunset Dune', variantTitle: '50 ml', quantity: 1, currentQuantity: 1, isGiftCard: false, image: { url: 'https://cdn.shopify.com/flakon.webp', altText: null }, product: { id: 'gid://shopify/Product/77', handle: 'sunset-dune', onlineStoreUrl: 'https://www.perfumecloud.de/products/sunset-dune' } }] },
     fulfillments: fulfilled
       ? [{
           status: 'SUCCESS',
@@ -923,6 +923,400 @@ test('Admin: Mitglied mit Stufe, Boni und Push-Verlauf', async () => {
   assert.equal(r.data.open_claims, 0);
   assert.equal(r.data.push.devices, 1);
   assert.ok(r.data.checklist.some((x) => x.key === 'team_db' && x.ok === false));
+});
+
+// ---------- Club 1.2: Befragung, Empfehlungslinks, Probelauf ----------
+
+const GAST = 'gid://shopify/Customer/50';
+const NEU = 'gid://shopify/Customer/60';
+const ALT = 'gid://shopify/Customer/61';
+async function addOrders(list) {
+  const m = await getMock();
+  for (const o of list) {
+    o.updatedAt = iso(500);
+    const i = m.orders.findIndex((x) => x.id === o.id);
+    if (i >= 0) m.orders[i] = o; else m.orders.push(o);
+  }
+  await setMock({ orders: m.orders });
+}
+const internalReq = (method, path, body) => fetch(`${app}/api/internal${path}`, {
+  method, headers: { 'Content-Type': 'application/json', 'X-Club-Key': setting('internal_key') }, body: body ? JSON.stringify(body) : undefined,
+}).then(async (res) => ({ status: res.status, data: await res.json() }));
+const surveyOf = (orderId) => sql('SELECT * FROM club_surveys WHERE order_id = ?', [orderId])[0];
+const annaPoints = async () => (await anna.req('GET', '/me')).data.points.balance;
+
+test('Befragung: Einstellungen werden geprüft, aus ist aus', async () => {
+  let r = await admin.req('GET', '/admin/surveys');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.config.enabled, false);
+  assert.equal(r.data.config.questions.length, 2);
+  assert.match(r.data.defaults.privacy_url, /\/policies\/privacy-policy$/);
+  const q = (text, type = 'stars', options = []) => ({ text, type, options });
+  r = await admin.req('PUT', '/admin/surveys', { questions: [q('a'), q('b'), q('c'), q('d')] });
+  assert.equal(r.status, 422, 'höchstens drei Fragen');
+  r = await admin.req('PUT', '/admin/surveys', { questions: [q('Wieder kaufen?', 'choice', ['Ja'])] });
+  assert.equal(r.status, 422, 'Auswahl braucht zwei Antworten');
+  r = await admin.req('PUT', '/admin/surveys', { review_url: 'http://unsicher.example' });
+  assert.equal(r.status, 422);
+
+  // Ausgeschaltet: neue Bestellungen bekommen keine Befragung
+  await addOrders([order(4000, { ago: 12 * DAY, amount: 30, shippedAgo: 2 * DAY, delivered: true })]);
+  await cron();
+  assert.equal(surveyOf('gid://shopify/Order/4000'), undefined);
+
+  r = await admin.req('PUT', '/admin/surveys', {
+    enabled: true, delay_days: 0, min_gap_days: 0, points: 10, mail_newsletter: true,
+    review_url: 'https://www.perfumecloud.de/pages/bewertungen',
+    questions: [q('Wie zufrieden bist du mit Versand und Verpackung?'), q('Würdest du ihn wieder kaufen?', 'choice', ['Ja', 'Vielleicht', 'Nein'])],
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.config.enabled, true);
+  assert.ok(r.data.config.since > Date.now() - 60000);
+  // Für die Tests: Bestellungen der letzten Tage zählen schon
+  const cfg = setting('survey');
+  cfg.since = Date.now() - 10 * DAY;
+  sql("UPDATE club_settings SET v = ? WHERE k = 'survey'", [JSON.stringify(cfg)]);
+});
+
+test('Befragung: nach der Zustellung per Push bzw. nur mit Einwilligung per Mail', async () => {
+  await setMock({
+    customers: {
+      ...(await getMock()).customers,
+      [GAST]: { id: GAST, email: 'gast@example.de', firstName: 'Gerd', tags: [], marketing: 'SUBSCRIBED' },
+    },
+  });
+  const still = order(4003, { ago: 3 * DAY, amount: 20, shippedAgo: 2 * DAY, delivered: true, customer: 'gid://shopify/Customer/51' });
+  still.email = 'still@example.de';
+  await addOrders([
+    order(4001, { ago: 3 * DAY, amount: 49, shippedAgo: 2 * DAY, delivered: true }),
+    order(4002, { ago: 3 * DAY, amount: 35, shippedAgo: 2 * DAY, delivered: true, customer: GAST }),
+    still,
+    order(4004, { ago: 1 * DAY, amount: 25 }),
+  ]);
+  await cron();
+  const a = surveyOf('gid://shopify/Order/4001');
+  assert.equal(a.status, 'sent', JSON.stringify(a));
+  assert.equal(a.channel, 'push', 'Anna: Push, keine Mail ohne Einwilligung');
+  const p = await waitPush(annaPhone, (x) => x.title === 'Wie gefällt dir Sunset Dune?');
+  assert.equal(p.url, `/bewertung/${a.token}`);
+
+  const g = surveyOf('gid://shopify/Order/4002');
+  assert.equal(g.channel, 'mail', 'Newsletter-Abonnent: Mail');
+  const mail = await waitMail((x) => x.to === 'gast@example.de');
+  assert.equal(mail.subject, 'Gerd, wie gefällt dir dein Duft?');
+  assert.equal(mail.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+  assert.match(mail.headers['List-Unsubscribe'], new RegExp(`/api/abmelden/${g.token}>$`));
+  assert.match(mail.text, /Keine Bewertungsanfragen mehr: http.*\/abmelden\//);
+  assert.match(mail.body, new RegExp(`/bewertung/${g.token}\\?s=5&amp;p=0`), 'Sterne direkt in der Mail');
+  assert.match(mail.body, /Impressum/);
+
+  const n = surveyOf('gid://shopify/Order/4003');
+  assert.equal(n.status, 'skipped');
+  assert.equal(n.reason, 'no_consent', 'ohne Einwilligung keine Mail');
+  assert.equal(surveyOf('gid://shopify/Order/4004').status, 'waiting');
+  assert.equal(surveyOf('gid://shopify/Order/4000'), undefined);
+});
+
+test('Befragung: Sterne, Danke-Punkte, Hinweis ans Team bei schlechter Bewertung', async () => {
+  const a = surveyOf('gid://shopify/Order/4001');
+  const guest = new Client();
+  let r = await guest.req('GET', `/bewertung/${a.token}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.state, 'open');
+  assert.equal(r.data.items[0].title, 'Sunset Dune');
+  assert.equal(r.data.points, 10);
+  assert.equal(r.data.questions.length, 2);
+  assert.equal((await guest.req('GET', '/bewertung/' + 'f'.repeat(32))).status, 404);
+  const key = r.data.items[0].key;
+
+  r = await guest.req('POST', `/bewertung/${a.token}`, { ratings: { [key]: 4 } });
+  assert.equal(r.data.state, 'open', 'Zwischenspeichern');
+  r = await guest.req('POST', `/bewertung/${a.token}`, { ratings: { [key]: 9 } });
+  assert.equal(r.status, 422);
+  r = await guest.req('POST', `/bewertung/${a.token}`, { answers: { wieder: 'Vielleicht' } }, { 'X-PC': '' });
+  assert.equal(r.status, 403, 'Schutz-Header nötig');
+
+  const before = await annaPoints();
+  const fbBefore = mails().filter((x) => x.to === 'info@perfumecloud.de').length;
+  const qid = r.data?.questions?.[1]?.id ?? (await guest.req('GET', `/bewertung/${a.token}`)).data.questions[1].id;
+  r = await guest.req('POST', `/bewertung/${a.token}`, { ratings: { [key]: 2 }, answers: { [qid]: 'Nein' }, comment: 'Der Flakon kam beschädigt an.', done: true });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.state, 'answered');
+  assert.equal(r.data.thanks.points, 10, 'Punkte unabhängig von der Bewertung');
+  assert.equal(r.data.thanks.low, true);
+  assert.equal(r.data.thanks.review.url, 'https://www.perfumecloud.de/pages/bewertungen', 'Shop-Bewertung für alle (kein Aussortieren)');
+  assert.equal(r.data.thanks.referral, null);
+  assert.equal(await annaPoints(), before + 10);
+  // Nochmal abschicken: keine doppelten Punkte
+  await guest.req('POST', `/bewertung/${a.token}`, { ratings: { [key]: 2 }, done: true });
+  assert.equal(await annaPoints(), before + 10);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM club_ledger WHERE kind = 'survey'")[0].n, 1);
+
+  const fb = await waitMail((x) => x.to === 'info@perfumecloud.de' && /Bewertung 2 ★ zu #4001/.test(x.subject));
+  assert.equal(fb.reply_to, 'anna@example.de');
+  assert.match(fb.text, /Der Flakon kam beschädigt an/);
+  assert.equal(mails().filter((x) => x.to === 'info@perfumecloud.de').length, fbBefore + 1, 'nur ein Hinweis');
+
+  // Team-App holt den Hinweis ab (einmal)
+  r = await internalReq('POST', '/alerts/claim', {});
+  assert.equal(r.data.alerts.length, 1);
+  assert.equal(r.data.alerts[0].kind, 'low_rating');
+  assert.equal(r.data.alerts[0].payload.order_name, '#4001');
+  assert.equal(r.data.alerts[0].payload.stars, 2);
+  assert.equal(r.data.alerts[0].payload.tier, 'Gold');
+  assert.deepEqual(r.data.alerts[0].payload.items, [{ title: 'Sunset Dune (50 ml)', stars: 2 }]);
+  r = await internalReq('POST', '/alerts/claim', {});
+  assert.equal(r.data.alerts.length, 0);
+  assert.equal(surveyOf('gid://shopify/Order/4001').reorder_at, null, 'keine Nachkauf-Erinnerung nach Enttäuschung');
+});
+
+test('Befragung: Gast mit 5 Sternen, Abmelden mit einem Klick, Kundeninfos und Wochenzahlen', async () => {
+  const g = surveyOf('gid://shopify/Order/4002');
+  const c = new Client();
+  const v = (await c.req('GET', `/bewertung/${g.token}`)).data;
+  assert.equal(v.member, false);
+  assert.equal(v.points, 0);
+  let r = await c.req('POST', `/bewertung/${g.token}`, { ratings: { [v.items[0].key]: 5 }, done: true });
+  assert.equal(r.data.thanks.points, 0);
+  assert.equal(r.data.thanks.review.label, 'Bewertung im Shop schreiben');
+  assert.equal(r.data.thanks.join.welcome_points, 50, 'Nicht-Mitglieder sehen den Club');
+  assert.equal(r.data.thanks.referral, null);
+
+  // Abmelden aus dem Mailprogramm (ohne Schutz-Header, RFC 8058)
+  const res = await fetch(`${app}/api/abmelden/${g.token}`, { method: 'POST', body: 'List-Unsubscribe=One-Click', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+  assert.equal(res.status, 200);
+  assert.equal(sql('SELECT COUNT(*) AS n FROM club_survey_optout')[0].n, 1);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM club_survey_optout WHERE email_hash LIKE '%@%'")[0].n, 0, 'nur der Hash');
+  const get = await fetch(`${app}/api/abmelden/${g.token}`, { redirect: 'manual' });
+  assert.equal(get.status, 302, 'Link-Vorschau meldet nicht ab');
+  assert.equal(get.headers.get('location'), `/abmelden/${g.token}`);
+  // Neue Bestellung derselben Person: keine Anfrage mehr
+  await addOrders([order(4012, { ago: 2 * DAY, amount: 35, shippedAgo: 2 * DAY, delivered: true, customer: GAST })]);
+  await cron();
+  assert.equal(surveyOf('gid://shopify/Order/4012').reason, 'optout');
+
+  r = await internalReq('GET', '/customer?email=ANNA@example.de');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.member, true);
+  assert.equal(r.data.tier.name, 'Gold');
+  assert.equal(r.data.ratings.count, 1);
+  assert.equal(r.data.ratings.last.comment, 'Der Flakon kam beschädigt an.');
+  assert.match(r.data.admin_url, /\/admin\/mitglieder\/[0-9a-f-]{36}$/);
+  r = await internalReq('GET', '/customer?email=gast@example.de');
+  assert.equal(r.data.member, false);
+  assert.equal(r.data.ratings.avg, 5);
+
+  r = await internalReq('GET', `/weekly?from=${Date.now() - 7 * DAY}&to=${Date.now() + 1000}`);
+  assert.equal(r.data.survey.count, 2);
+  assert.equal(r.data.survey.avg, 3.5);
+  assert.equal(r.data.survey.low, 1);
+  assert.equal(typeof r.data.members_total, 'number');
+
+  r = await admin.req('GET', '/admin/surveys');
+  assert.equal(r.data.overview.answered, 2);
+  assert.equal(r.data.overview.optouts, 1);
+  assert.equal(r.data.overview.products[0].title, 'Sunset Dune');
+});
+
+test('Befragung: Schalter in der App, Test an mich, Vorschau, Nachkauf-Erinnerung', async () => {
+  let r = await anna.req('PUT', '/me/survey-mail', { on: true });
+  assert.equal(r.data.mail, true);
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.survey.mail, true);
+  assert.equal(r.data.survey.enabled, true);
+
+  r = await admin.req('GET', '/admin/surveys/preview?kind=survey');
+  assert.match(r.data.html, /&#9733;/);
+  assert.match(r.data.subject, /wie gefällt dir dein Duft\?$/);
+  const week = () => internalReq('GET', `/weekly?from=${Date.now() - DAY}&to=${Date.now() + 1000}`).then((x) => x.data.survey.sent);
+  const sentBefore = await week();
+  r = await admin.req('POST', '/admin/surveys/test', {});
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.message, /Mail an marius@example\.de/);
+  assert.match(r.data.link, /\/bewertung\/[0-9a-f]{32}$/);
+  await waitMail((x) => x.to === 'marius@example.de' && /wie gefällt dir dein Duft/.test(x.subject));
+  assert.equal(await week(), sentBefore, 'Tests zählen nicht');
+
+  // Zweite Bestellung von Anna kommt an → Anfrage jetzt auch per Mail (Schalter an)
+  await addOrders([order(4004, { ago: 1 * DAY, amount: 25, shippedAgo: 1 * DAY, delivered: true })]);
+  await cron();
+  const s = surveyOf('gid://shopify/Order/4004');
+  assert.equal(s.channel, 'push+mail');
+  r = await new Client().req('POST', `/bewertung/${s.token}`, { ratings: { p77: 5 }, done: true });
+  assert.equal(r.data.thanks.points, 10);
+
+  // Nachkauf-Erinnerung: fällig → Push mit Link zum Duft
+  await admin.req('PUT', '/admin/surveys', { reorder: true, reorder_days: 60 });
+  sql('UPDATE club_surveys SET reorder_at = ? WHERE id = ?', [Date.now() - 1000, s.id]);
+  await cron();
+  const p = await waitPush(annaPhone, (x) => x.title === 'Zeit für Nachschub?');
+  assert.equal(p.url, 'https://www.perfumecloud.de/products/sunset-dune');
+  assert.ok(surveyOf('gid://shopify/Order/4004').reorder_sent_at);
+  await admin.req('PUT', '/admin/surveys', { reorder: false });
+});
+
+test('Empfehlungslink: Rabatt für Freunde, Punkte je Bestellung – auch ohne Beitritt', async () => {
+  let r = await admin.req('PUT', '/admin/referrals', { friend_type: 'percent', friend_value: 150 });
+  assert.equal(r.status, 422);
+  r = await admin.req('PUT', '/admin/referrals', {
+    enabled: true, friend_type: 'percent', friend_value: 15, reward_type: 'percent', reward_percent: 10, reward_min_cents: 2000, new_customers_only: true,
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.overview.friend_text, '15 % Rabatt auf die erste Bestellung');
+  assert.equal(r.data.overview.reward_text, '10 % des Bestellwerts als Punkte (ab 20 € Bestellwert)');
+
+  r = await anna.req('GET', '/me');
+  const ref = r.data.bonus.referral.link;
+  assert.match(ref.link, /\/r\/[A-Z2-9]{6}$/);
+  assert.equal(ref.friend_text, '15 % Rabatt auf die erste Bestellung');
+  const refCode = ref.link.split('/r/')[1];
+
+  // Klick: Code in Shopify anlegen und in den Shop weiterleiten
+  const ua = { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1' };
+  let res = await fetch(`${app}/r/${refCode}`, { redirect: 'manual', headers: ua });
+  assert.equal(res.status, 302);
+  const loc = res.headers.get('location');
+  assert.match(loc, /^https:\/\/www\.perfumecloud\.de\/discount\/ANNA-[A-Z2-9]{6}\?redirect=%2F$/);
+  const code = decodeURIComponent(loc.split('/discount/')[1].split('?')[0]);
+  let disc = Object.values((await getMock()).discounts).find((d) => d.code === code);
+  assert.equal(disc.input.customerGets.value.percentage, 0.15);
+  assert.equal(disc.input.appliesOncePerCustomer, true);
+  assert.deepEqual(disc.input.context, { all: 'ALL' });
+  await fetch(`${app}/r/${refCode}`, { redirect: 'manual', headers: { 'User-Agent': 'WhatsApp/2.23' } });
+  await fetch(`${app}/r/${refCode.toLowerCase()}/`, { redirect: 'manual', headers: ua });
+  assert.equal(Object.values((await getMock()).discounts).filter((d) => d.code === code).length, 1, 'Code nur einmal angelegt');
+  assert.equal(sql('SELECT SUM(n) AS n FROM club_referral_clicks')[0].n, 2, 'Vorschau-Bots zählen nicht');
+  res = await fetch(`${app}/r/UNBEKANNT`, { redirect: 'manual' });
+  assert.equal(res.headers.get('location'), 'https://www.perfumecloud.de/');
+
+  await setMock({
+    customers: {
+      ...(await getMock()).customers,
+      [NEU]: { id: NEU, email: 'neu@example.de', firstName: 'Nina', tags: [], numberOfOrders: 1 },
+      [ALT]: { id: ALT, email: 'alt@example.de', firstName: 'Olaf', tags: [], numberOfOrders: 4 },
+    },
+  });
+  const before = await annaPoints();
+  await addOrders([
+    order(5001, { ago: 17 * DAY, amount: 60, shippedAgo: 16 * DAY, delivered: true, customer: NEU, codes: [code] }),
+    order(5002, { ago: 2 * DAY, amount: 80, shippedAgo: 1 * DAY, customer: ANNA, codes: [code.toLowerCase()] }),
+    order(5003, { ago: 2 * DAY, amount: 80, customer: ALT, codes: [code] }),
+    order(5004, { ago: 2 * DAY, amount: 15, customer: 'gid://shopify/Customer/62', codes: [code] }),
+  ]);
+  await cron();
+  const rows = Object.fromEntries(sql('SELECT order_name, status, reason, points FROM club_referral_orders').map((x) => [x.order_name, x]));
+  assert.equal(rows['#5001'].status, 'credited');
+  assert.equal(rows['#5001'].points, 120, '10 % von 60 € = 6 € = 120 Punkte');
+  assert.equal(rows['#5002'].reason, 'self');
+  assert.equal(rows['#5003'].reason, 'existing');
+  assert.equal(rows['#5004'].reason, 'min');
+  assert.equal(await annaPoints(), before + 120);
+  const p = await waitPush(annaPhone, (x) => x.title === 'Danke fürs Weitersagen' && /deinen Link/.test(x.body));
+  assert.equal(p.body, 'Für eine Bestellung über deinen Link bekommst du 120 Punkte.');
+  await waitPush(annaPhone, (x) => x.title === 'Über deinen Link wurde bestellt');
+
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.bonus.referral.link.orders, 1);
+  assert.equal(r.data.bonus.referral.link.earned_points, 120);
+  assert.equal(r.data.bonus.referral.link.clicks, 2);
+  r = await internalReq('GET', `/weekly?from=${Date.now() - 30 * DAY}&to=${Date.now() + 1000}`);
+  assert.equal(r.data.referrals.orders, 1);
+  assert.equal(r.data.referrals.clicks, 2);
+  r = await internalReq('GET', '/customer?email=anna@example.de');
+  assert.equal(r.data.referrals.orders, 1);
+  assert.match(r.data.ref_link, /\/r\//);
+  r = await admin.req('GET', '/admin/referrals');
+  assert.equal(r.data.overview.orders_90, 1);
+  assert.equal(r.data.overview.top[0].name, 'Anna Berg');
+
+  // Dankeseite nach 5 Sternen zeigt den Empfehlungslink
+  await addOrders([order(4005, { ago: 2 * DAY, amount: 25, shippedAgo: 2 * DAY, delivered: true })]);
+  await cron();
+  r = await new Client().req('POST', `/bewertung/${surveyOf('gid://shopify/Order/4005').token}`, { ratings: { p77: 5 }, done: true });
+  assert.equal(r.data.thanks.referral.link, ref.link);
+
+  // Rabatt geändert → Code wird neu angelegt; ausgeschaltet → Code gelöscht, Link führt zur Club-Einladung
+  await admin.req('PUT', '/admin/referrals', { friend_value: 20 });
+  await cron();
+  disc = Object.values((await getMock()).discounts).filter((d) => d.code === code);
+  assert.equal(disc.length, 1);
+  assert.equal(disc[0].input.customerGets.value.percentage, 0.2);
+  await admin.req('PUT', '/admin/referrals', { enabled: false });
+  await cron();
+  assert.equal(Object.values((await getMock()).discounts).filter((d) => d.code === code).length, 0);
+  res = await fetch(`${app}/r/${refCode}`, { redirect: 'manual', headers: ua });
+  assert.match(res.headers.get('location'), new RegExp(`/\\?einladung=${refCode}$`));
+  await admin.req('PUT', '/admin/referrals', { enabled: true });
+});
+
+test('Probelauf: Schnelltest mit allen Schritten, Push auf die Geräte des Admins, Aufräumen', async () => {
+  const user = { id: 'team-marius', name: 'Anna Admin', email: 'anna@example.de' };
+  const statsBefore = (await internalReq('GET', '/stats')).data;
+  let r = await internalReq('GET', '/trial');
+  assert.equal(r.data.active, false);
+  r = await internalReq('POST', '/trial/start', { user, mode: 'sim', amount_cents: 5900 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.device_member, true);
+  assert.equal((await internalReq('POST', '/trial/start', { user, mode: 'sim' })).status, 409);
+  assert.equal((await internalReq('POST', '/trial/step', { step: 'delivered' })).status, 409, 'erst bestellen');
+
+  for (const step of ['ordered', 'pending', 'shipped', 'delivered', 'survey', 'credited', 'referral', 'tier']) {
+    r = await internalReq('POST', '/trial/step', { step });
+    assert.equal(r.status, 200, step + ': ' + JSON.stringify(r.data));
+  }
+  const done = Object.fromEntries(r.data.steps.map((s) => [s.key, s.done]));
+  assert.deepEqual(Object.values(done), [true, true, true, true, true, true, true, true], JSON.stringify(r.data.steps));
+  // Punkte der Testbestellung (eine laufende Aktion verdoppelt sie) + Empfehlung (10 % von 59 € = 118 Punkte)
+  const orderPts = sql("SELECT points FROM club_orders WHERE order_id LIKE 'probelauf:%'")[0].points;
+  assert.ok(orderPts >= 59);
+  assert.equal(r.data.balance, orderPts + 118);
+  for (const title of ['Probelauf · Dein Paket ist unterwegs', 'Probelauf · Dein Duft ist angekommen', 'Probelauf · Wie gefällt dir Sunset Dune?', `Probelauf · +${orderPts} Punkte`, 'Probelauf · Danke fürs Weitersagen', 'Probelauf · Willkommen in Silber']) {
+    await waitPush(annaPhone, (x) => x.title === title);
+  }
+  assert.ok(r.data.steps.find((s) => s.key === 'shipped').push.status === 'sent');
+  await waitMail((x) => x.to === 'anna@example.de' && /wie gefällt dir dein Duft/.test(x.subject));
+
+  // Testkonto zählt nirgends mit
+  const stats = (await internalReq('GET', '/stats')).data;
+  assert.equal(stats.members, statsBefore.members);
+  assert.equal(stats.points.earned, statsBefore.points.earned);
+  assert.ok(!(await admin.req('GET', '/admin/members')).data.members.some((m) => /Probelauf/.test(m.name)));
+
+  r = await internalReq('POST', '/trial/cleanup', {});
+  assert.equal(r.data.ok, true);
+  assert.equal(r.data.order, null);
+  assert.equal(sql('SELECT COUNT(*) AS n FROM club_members WHERE test = 1')[0].n, 0);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM club_orders WHERE order_id LIKE 'probelauf:%'")[0].n, 0);
+  assert.equal((await internalReq('GET', '/trial')).data.active, false);
+});
+
+test('Probelauf: echte 0-€-Bestellung mit Einmal-Codes', async () => {
+  const user = { id: 'team-marius', name: 'Anna Admin', email: 'anna@example.de' };
+  let r = await internalReq('POST', '/trial/start', { user, mode: 'real', amount_cents: 4000 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.codes.length, 2);
+  assert.match(r.data.shop_link, /\/discount\/PROBE-[A-F0-9]{5}\?redirect=%2F$/);
+  const disc = Object.values((await getMock()).discounts).filter((d) => r.data.codes.includes(d.code));
+  assert.equal(disc.length, 2);
+  assert.equal(disc.find((d) => d.op === 'ClubTrialCode').input.customerGets.value.percentage, 1);
+  assert.equal(disc.find((d) => d.op === 'ClubTrialCode').input.usageLimit, 1);
+  assert.equal((await internalReq('POST', '/trial/step', { step: 'ordered' })).status, 409, 'echte Bestellung kommt aus dem Shop');
+
+  const annaOrdersBefore = sql('SELECT COUNT(*) AS n FROM club_orders WHERE member_id = ?', [annaId])[0].n;
+  const o = order(6001, { ago: 1000, amount: 0, codes: [r.data.codes[0]] });
+  await addOrders([o]);
+  r = await internalReq('POST', '/trial/sync', {});
+  assert.equal(r.data.order.name, '#6001');
+  assert.equal(r.data.order.real, true);
+  const pending = r.data.steps.find((s) => s.key === 'pending');
+  assert.equal(pending.done, true);
+  assert.match(pending.detail, /^80 Punkte/, 'zählt wie 40 € (laufende Aktion: doppelte Punkte)');
+  assert.equal(sql('SELECT COUNT(*) AS n FROM club_orders WHERE member_id = ?', [annaId])[0].n, annaOrdersBefore, 'echtes Konto bleibt unberührt');
+
+  r = await internalReq('POST', '/trial/cleanup', {});
+  assert.deepEqual(r.data.order, { id: 'gid://shopify/Order/6001', name: '#6001' });
+  assert.equal(Object.values((await getMock()).discounts).filter((d) => /^PROBE-/.test(d.code)).length, 0, 'Codes gelöscht');
+  assert.equal(sql("SELECT COUNT(*) AS n FROM club_surveys WHERE order_id = 'gid://shopify/Order/6001'")[0].n, 0);
 });
 
 test('Abmelden und Austreten', async () => {

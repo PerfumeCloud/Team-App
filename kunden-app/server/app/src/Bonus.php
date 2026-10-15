@@ -149,6 +149,10 @@ final class Bonus
         if (Db::value("SELECT 1 FROM club_ledger WHERE kind = 'referral' AND ref = ?", [$member['id']])) {
             return;
         }
+        // Schon über den Empfehlungslink (Code in der Bestellung) belohnt – nicht doppelt
+        if (Referrals::rewardedViaLink((string) $member['referred_by'], (string) $member['shopify_id'])) {
+            return;
+        }
         $referrer = Db::one('SELECT * FROM club_members WHERE id = ? AND joined_at IS NOT NULL', [$member['referred_by']]);
         if (!$referrer) {
             return;
@@ -227,8 +231,8 @@ final class Bonus
         }
         $now = Util::now();
         $rows = $memberId
-            ? Db::all('SELECT * FROM club_members WHERE id = ? AND joined_at IS NOT NULL AND newsletter_at IS NULL', [$memberId])
-            : Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND newsletter_at IS NULL AND (newsletter_checked_at IS NULL OR newsletter_checked_at < ?) ORDER BY newsletter_checked_at LIMIT 100', [$now - 3600 * 1000]);
+            ? Db::all('SELECT * FROM club_members WHERE id = ? AND joined_at IS NOT NULL AND newsletter_at IS NULL AND test = 0', [$memberId])
+            : Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND newsletter_at IS NULL AND test = 0 AND (newsletter_checked_at IS NULL OR newsletter_checked_at < ?) ORDER BY newsletter_checked_at LIMIT 100', [$now - 3600 * 1000]);
         $n = 0;
         foreach (array_chunk($rows, 50) as $chunk) {
             $d = Shopify::graphql(
@@ -345,9 +349,11 @@ final class Bonus
             'birthday_bonus_this_year' => (bool) Db::value("SELECT 1 FROM club_ledger WHERE member_id = ? AND kind = 'birthday' AND ref = ?", [$member['id'], 'birthday-' . $year]),
             'newsletter' => $member['newsletter_at'] !== null,
             'referral' => [
-                'code' => (int) $p['bonus_referrer'] > 0 || (int) $p['bonus_referred'] > 0 ? self::refCode($member) : null,
+                'code' => (int) $p['bonus_referrer'] > 0 || (int) $p['bonus_referred'] > 0 || Referrals::enabled() ? self::refCode($member) : null,
                 'invited' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE referred_by = ?', [$member['id']]),
                 'rewarded' => (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral'", [$member['id']]),
+                // Empfehlungslink mit Rabatt für Freunde (Punkte je Bestellung, auch ohne Club-Beitritt)
+                'link' => Referrals::status($member),
             ],
             'claims' => self::claims($member['id']),
         ];

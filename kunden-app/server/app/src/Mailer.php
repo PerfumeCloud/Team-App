@@ -55,11 +55,14 @@ final class Mailer
         return $env !== false && $env !== '' ? $env : null;
     }
 
-    /** @return array{sent:bool, message:string} */
-    public static function send(string $to, string $subject, string $text, ?string $html = null, ?string $replyTo = null): array
+    /**
+     * @param array<string,string> $headers zusätzliche Kopfzeilen, z. B. List-Unsubscribe
+     * @return array{sent:bool, message:string}
+     */
+    public static function send(string $to, string $subject, string $text, ?string $html = null, ?string $replyTo = null, array $headers = []): array
     {
         if ($log = self::logFile()) {
-            @file_put_contents($log, Util::json(['to' => $to, 'subject' => $subject, 'text' => $text, 'reply_to' => $replyTo, 'html' => $html !== null]) . "\n", FILE_APPEND | LOCK_EX);
+            @file_put_contents($log, Util::json(['to' => $to, 'subject' => $subject, 'text' => $text, 'reply_to' => $replyTo, 'html' => $html !== null, 'headers' => $headers ?: null, 'body' => $html]) . "\n", FILE_APPEND | LOCK_EX);
             return ['sent' => true, 'message' => 'Mail protokolliert.'];
         }
         if (!self::configured()) {
@@ -67,7 +70,7 @@ final class Mailer
         }
         $c = self::config();
         try {
-            self::smtp($c, $to, self::message($c, $to, $subject, $text, $html, $replyTo));
+            self::smtp($c, $to, self::message($c, $to, $subject, $text, $html, $replyTo, $headers));
             return ['sent' => true, 'message' => 'Mail an ' . $to . ' verschickt.'];
         } catch (\Throwable $e) {
             Util::log('SMTP: ' . $e->getMessage());
@@ -157,7 +160,7 @@ final class Mailer
         return self::send((string) $member['email'], 'Willkommen im ' . $p['name'], $text, $html);
     }
 
-    private static function message(array $c, string $to, string $subject, string $text, ?string $html, ?string $replyTo = null): string
+    private static function message(array $c, string $to, string $subject, string $text, ?string $html, ?string $replyTo = null, array $extra = []): string
     {
         $from = $c['from_email'] ?: $c['user'];
         $boundary = 'pcc' . bin2hex(random_bytes(8));
@@ -173,6 +176,12 @@ final class Mailer
         ];
         if ($replyTo !== null && filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
             $headers[] = "Reply-To: <$replyTo>";
+        }
+        foreach ($extra as $name => $value) {
+            // Nur einfache Kopfzeilen ohne Zeilenumbrüche
+            if (preg_match('/^[A-Za-z][A-Za-z0-9-]{1,40}$/', (string) $name) && !preg_match('/[\r\n]/', (string) $value)) {
+                $headers[] = $name . ': ' . $value;
+            }
         }
         if ($html === null) {
             $headers[] = 'Content-Type: text/plain; charset=utf-8';

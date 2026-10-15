@@ -30,8 +30,11 @@ final class Jobs
             if ($shop) {
                 $summary['orders'] = self::safe(static fn () => Points::syncRecent(), $errors);
                 $summary['deliveries'] = self::safe(static fn () => Points::trackDeliveries(), $errors);
+                $summary['survey_track'] = self::safe(static fn () => Surveys::track(), $errors);
             }
             $summary['released'] = self::safe(static fn () => Points::release() . ' freigegeben', $errors);
+            $summary['referrals'] = self::safe(static fn () => Referrals::release(), $errors);
+            $summary['surveys'] = self::safe(static fn () => Surveys::run(), $errors);
             if ($shop) {
                 $summary['codes'] = self::safe(static fn () => Points::checkCodes(), $errors);
             }
@@ -40,6 +43,7 @@ final class Jobs
                 $summary['tiers'] = self::safe(static fn () => Tiers::runDaily(), $errors);
                 $summary['birthdays'] = self::safe(static fn () => Bonus::runBirthdays(), $errors);
                 $summary['code_warnings'] = self::safe(static fn () => Points::warnCodes() . ' Hinweise', $errors);
+                $summary['survey_cleanup'] = self::safe(static fn () => Surveys::cleanup(), $errors);
             }
             if ($shop && self::due('hourly_last', 'Y-m-d H')) {
                 $summary['newsletter'] = self::safe(static fn () => Bonus::runNewsletter(), $errors);
@@ -49,6 +53,7 @@ final class Jobs
             $summary['invites'] = self::safe(static fn () => Invites::run(), $errors);
             $summary['push'] = self::safe(static fn () => Push::flush(), $errors);
             if ($shop) {
+                $summary['referral_codes'] = self::safe(static fn () => Referrals::syncCodes(), $errors);
                 $summary['metafields'] = self::safe(static fn () => Points::pushMetafields(), $errors);
                 $summary['shop'] = self::safe(static fn () => ShopSync::run(), $errors);
             }

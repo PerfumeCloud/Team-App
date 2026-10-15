@@ -12,6 +12,9 @@ DirectoryIndex index.html
   # API
   RewriteRule ^api(/.*)?$ api.php [L,QSA]
 
+  # Empfehlungslink: /r/CODE → Weiterleitung in den Shop (zählt den Klick)
+  RewriteRule ^r/[A-Za-z0-9]{3,20}/?$ api.php [L,QSA]
+
   # Vorhandene Dateien direkt ausliefern
   RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule ^ - [L]

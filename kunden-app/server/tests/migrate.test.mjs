@@ -68,7 +68,7 @@ after(() => {
 test('Version 1.0 wird beim ersten Aufruf auf 1.1 umgebaut – ohne Datenverlust', async () => {
   const status = await (await fetch(`${app}/api/status`)).json();
   assert.equal(status.installed, true, JSON.stringify(status));
-  assert.equal(status.version, '1.1.0');
+  assert.equal(status.version, '1.2.0');
 
   const tables = tableList();
   for (const old of ['settings', 'admins', 'members', 'sessions', 'ledger', 'codes', 'order_cache']) {
@@ -93,7 +93,7 @@ test('Version 1.0 wird beim ersten Aufruf auf 1.1 umgebaut – ohne Datenverlust
   assert.equal(l.credited_at, l.created_at);
   const program = JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'program'")[0].v);
   assert.equal(program.welcome_points, 50, 'Einstellungen bleiben erhalten');
-  assert.equal(JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'schema_version'")[0].v), '1.1.0');
+  assert.equal(JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'schema_version'")[0].v), '1.2.0');
   assert.ok(JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'internal_key'")[0].v).length > 20);
 });
 

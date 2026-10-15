@@ -125,6 +125,21 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
             $since = $mm[1] ?? '1970-01-01T00:00:00Z';
             $list = array_values(array_filter($state['orders'], static fn ($o) => $o['updatedAt'] >= $since));
             usort($list, static fn ($a, $b) => strcmp($a['updatedAt'], $b['updatedAt']));
+            // Kundendaten wie bei Shopify an der Bestellung (Name, Anzahl Bestellungen, Newsletter)
+            $list = array_map(static function ($o) use ($state, $ordersOf) {
+                $cid = $o['customer']['id'] ?? null;
+                $c = $cid ? ($state['customers'][$cid] ?? null) : null;
+                if ($c) {
+                    $o['customer'] = [
+                        'id' => $cid,
+                        'firstName' => $c['firstName'] ?? null,
+                        'numberOfOrders' => (string) ($c['numberOfOrders'] ?? count($ordersOf($cid))),
+                        'defaultEmailAddress' => ['emailAddress' => $c['email'], 'marketingState' => $c['marketing'] ?? 'NOT_SUBSCRIBED'],
+                    ];
+                    $o['email'] ??= $c['email'];
+                }
+                return $o;
+            }, $list);
             $data = ['orders' => ['pageInfo' => ['hasNextPage' => false, 'endCursor' => null], 'nodes' => $list]];
             break;
         case 'ClubFind':
@@ -176,6 +191,7 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
                 : null, $v['ids'])];
             break;
         case 'ClubTrack':
+        case 'ClubSurveyTrack':
             $byId = array_column($state['orders'], null, 'id');
             $data = ['nodes' => array_map(static fn ($id) => $byId[$id] ?? null, $v['ids'])];
             break;
@@ -208,14 +224,21 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
             $data = ['segmentUpdate' => ['segment' => ['id' => $v['id']], 'userErrors' => []]];
             break;
         case 'ClubCode':
+        case 'ClubRefCode':
+        case 'ClubTrialCode':
+        case 'ClubTrialShip':
             $in = $v['input'];
+            if ($op === 'ClubRefCode' && !empty($state['discounts']) && in_array($in['code'], array_column($state['discounts'], 'code'), true)) {
+                $data = ['discountCodeBasicCreate' => ['codeDiscountNode' => null, 'userErrors' => [['field' => ['code'], 'message' => 'Code must be unique', 'code' => 'TAKEN']]]];
+                break;
+            }
             if ($state['failDiscount']) {
                 $data = ['discountCodeBasicCreate' => ['codeDiscountNode' => null, 'userErrors' => [['field' => ['code'], 'message' => 'Simulierter Fehler', 'code' => 'INVALID']]]];
                 break;
             }
             $id = 'gid://shopify/DiscountCodeNode/' . (++$state['nextId']);
-            $state['discounts'][$id] = ['code' => $in['code'], 'usage' => 0, 'input' => $in];
-            $data = ['discountCodeBasicCreate' => ['codeDiscountNode' => ['id' => $id], 'userErrors' => []]];
+            $state['discounts'][$id] = ['code' => $in['code'], 'usage' => 0, 'input' => $in, 'op' => $op];
+            $data = [$op === 'ClubTrialShip' ? 'discountCodeFreeShippingCreate' : 'discountCodeBasicCreate' => ['codeDiscountNode' => ['id' => $id], 'userErrors' => []]];
             break;
         case 'ClubCodeCheck':
             $d = $state['discounts'][$v['id']] ?? null;
