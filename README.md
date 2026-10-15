@@ -80,7 +80,11 @@ Web-App (PWA) für Kundinnen und Kunden im Design des Shops (Elfenbein, Dünen, 
 - **Im Shop:** „Mit dieser Bestellung sammelst du 59 Punkte“ in Warenkorb und Header, live mit dem Warenkorb, Abschnitt „Club-Regeln“ (`kunden-app/shopify-theme/`)
 - **Mails über Shopify Messaging:** Willkommen im Club, „Du hast 5 € Rabatt bereit“ (`kunden-app/shopify-mails/`)
 
+- **Befragung nach der Lieferung** (ein Tipp auf die Sterne, bis zu 3 Fragen, Punkte fürs Mitmachen, Mail nur mit Einwilligung, schlechte Bewertungen als Aufgabe in der Team-App) und **Empfehlungslinks** (Rabatt für Freunde, Punkte je Bestellung auch ohne Beitritt) – beide im Admin einstellbar und anfangs aus
+- **Probelauf** für Admins in der Team-App: Schnelltest oder echte 0-€-Bestellung, jeder Schritt per Knopf, Aufräumen storniert und löscht alles
+
 ➡️ **Anleitung (online stellen, Shopify verbinden):** [docs/KUNDEN-APP.md](docs/KUNDEN-APP.md)
+➡️ **Teilnahmebedingungen:** [docs/TEILNAHMEBEDINGUNGEN.md](docs/TEILNAHMEBEDINGUNGEN.md) · **Rechtliches fürs neue Shop-Theme:** [docs/DATENSCHUTZ-MERKLISTE.md](docs/DATENSCHUTZ-MERKLISTE.md)
 
 ### Aufbau
 

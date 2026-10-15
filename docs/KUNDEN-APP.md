@@ -11,6 +11,8 @@ Die Club-App ist eine **Web-App** für eure Kundinnen und Kunden unter `https://
 - **Bestellungen verfolgen**: Status, Zeitleiste, Sendungsnummer mit Link, Artikel, Punkte je Bestellung
 - **Push-Mitteilungen** bekommen: Paket unterwegs, Punkte gutgeschrieben oder abgezogen (mit Grund), Prämie bereit, Punkte verfallen bald, neue Düfte
 - **Feedback** geben (Gut / Neutral / Schlecht, optional mit Text), es geht an info@
+- nach der Lieferung **ihre Düfte bewerten**: ein Tipp auf die Sterne, Punkte fürs Mitmachen (ab Version 1.2, Teil L)
+- einen **Empfehlungslink** teilen: Freunde bekommen Rabatt, das Mitglied Punkte je Bestellung, auch ohne Beitritt der Freunde (ab Version 1.2, Teil M)
 - die App auf den **Home-Bildschirm** legen
 
 **Fürs Team:** Club-Admin unter `app.perfumecloud.de/admin` mit Regeln, Stufen, Verfall, Boni, Aktionen, Warteliste, Push-Texten und Feedback. In der **Team-App** gibt es den Bereich **Members Club** mit Statistik, „Nachricht an Mitglieder senden“ (mit Prüfung und Freigabe) und einem direkten Link in den Club-Admin. Wer im Team ist, landet nach der Anmeldung in der Club-App direkt im Admin-Bereich.
@@ -20,6 +22,7 @@ Die Club-App ist eine **Web-App** für eure Kundinnen und Kunden unter `https://
 | Teil | Wer | Dauer |
 |---|---|---|
 | **Update 1.0 → 1.1 (Club 2.0)** | Marius, wenn die App schon läuft | ca. 10 Min. |
+| **Update 1.1 → 1.2** | Marius, wenn die App schon läuft | ca. 10 Min. |
 | **A – App online stellen** | Marius, einmalig am Computer | ca. 25 Min. |
 | **B – Shopify-App für Punkte und Codes** | Marius | ca. 10 Min. |
 | **C – Anmeldung mit dem Kundenkonto** | Marius | ca. 10 Min. |
@@ -31,6 +34,8 @@ Die Club-App ist eine **Web-App** für eure Kundinnen und Kunden unter `https://
 | **I – Punkteanzeige im Shop** | Marius, nach Freigabe | ca. 15 Min. |
 | **J – Willkommens- und Erinnerungs-Mail (Shopify)** | Marius oder Ben/Keanu | ca. 15 Min. |
 | **K – Warteliste einladen (Launch)** | gemeinsam entscheiden | ca. 5 Min. |
+| **L – Befragung nach der Lieferung** | gemeinsam entscheiden | ca. 15 Min. |
+| **M – Empfehlungslinks** | gemeinsam entscheiden | ca. 10 Min. |
 
 **Bereitlegen:** Zugang zum netcup **CCP**, zum **Shopify-Admin** (Inhaber-Konto) und die Datei **`perfumecloud-club-upload.zip`** (aus dem Chat mit Claude oder auf GitHub unter **Actions** → letzter grüner Lauf „Kunden-App“ → **kunden-app-upload**).
 
@@ -64,6 +69,16 @@ Nur nötig, wenn die App schon läuft (bei euch: `app.perfumecloud.de` mit Versi
 5. Danach **Teil H** (Team-App verbinden). Die Teile I bis K sind unabhängig davon.
 
 > Ist **Teil G** eingerichtet, kommt das Update automatisch, sobald es auf `main` liegt.
+
+## Update 1.1 → 1.2 (Befragung, Empfehlungslinks, Probelauf)
+
+Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungslinks sind nach dem Update aus**, für Kundinnen und Kunden ändert sich erst etwas, wenn ihr sie einschaltet.
+
+1. Neue **`perfumecloud-club-upload.zip`** wie in A5 hochladen und mit „Vorhandene Dateien ersetzen“ entpacken.
+2. `https://app.perfumecloud.de/admin` öffnen. Die App ergänzt die Datenbank selbst.
+3. **Shopify-Rechte prüfen** (Teil B, Schritt 2): Für Befragung und Empfehlungslinks braucht die App **Name und E-Mail** zu Bestellungen (geschützte Kundendaten). Fehlt die Freigabe, laufen Punkte und alles andere weiter, nur steht auf der **Übersicht** ein roter Hinweis.
+4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, und Admins finden dort den **Probelauf**.
+5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
 
 ---
 
@@ -119,7 +134,10 @@ Die App liest damit Bestellungen, legt Rabattcodes an und schreibt Punkte in die
    - `write_customers`
    - `write_discounts`
    - optional `read_all_orders` (nur nötig, damit Bestellungen älter als 60 Tage in der App erscheinen; muss bei Shopify beantragt werden)
-3. Version **freigeben** und die App im Shop **Perfume Cloud** **installieren**.
+   - optional `read_products` (ab 1.2: Die Nachkauf-Erinnerung führt dann direkt zum Duft statt auf die Startseite des Shops)
+
+   **Geschützte Kundendaten** (für Warteliste, Befragung und Empfehlungslinks): In der App im Dev Dashboard **Protected customer data access** öffnen (falls nicht vorhanden: <https://partners.shopify.com> → **Apps** → **Perfume Cloud Club** → **API-Zugriffsanfragen**). **Protected customer data** → **Zugriff anfragen**, Grund z. B. „Treueprogramm: Punkte, Bewertungsanfragen und Empfehlungen zu Bestellungen“, dann bei den Feldern **Name** und **E-Mail** anhaken (Adresse und Telefon braucht der Club nicht) → **Speichern**. Bei einer App nur für den eigenen Shop gilt das sofort.
+3. Version **freigeben** und die App im Shop **Perfume Cloud** **installieren** (bei neuen Rechten: im Shopify-Admin unter **Apps** das Update bestätigen).
 4. In den **Einstellungen** der App **Client-ID** und **Client-Secret** kopieren.
 5. Club-Admin → **Einstellungen** → **Shopify-App (Admin API)**: Shop-Adresse `ks8yin-mg.myshopify.com`, Client-ID und Secret einfügen → **Speichern und testen**. Grüner Haken = verbunden.
 
@@ -162,9 +180,9 @@ Gleicht alle 15 Minuten neue Bestellungen ab, schreibt Punkte nach der Rückgabe
 
 ## Teil E – Teilnahmebedingungen und Link im Shop
 
-1. Shopify-Admin → **Onlineshop** → **Seiten** → **Perfume Cloud Club – Teilnahmebedingungen**. Claude hat sie mit den Regeln der App vorbereitet, inklusive Stufen, Boni und **Verfall** (Punkte nach 24 Monaten, Codes nach 90 Tagen). **Bitte lesen und anpassen** (z. B. Mindestalter, Frist bei Programmende), dann **Sichtbar** schalten. Das ist eine Vorlage, keine Rechtsberatung. Ändert ihr später Fristen, Stufen oder Boni im Club-Admin, passt bitte auch diese Seite an. Den Verfall darf es für bereits gesammelte Punkte erst geben, wenn er in den Bedingungen steht.
+1. Shopify-Admin → **Onlineshop** → **Seiten** → **Perfume Cloud Club – Teilnahmebedingungen**. Claude hat sie mit den Regeln der App vorbereitet, inklusive Stufen, Boni und **Verfall** (Punkte nach 24 Monaten, Codes nach 90 Tagen). **Neue Fassung mit Befragung und Empfehlungslinks:** [TEILNAHMEBEDINGUNGEN.md](TEILNAHMEBEDINGUNGEN.md). Zum Einfügen den Editor der Seite auf **HTML** (`<>`) umschalten und den Inhalt von `kunden-app/shopify-pages/club-teilnahmebedingungen.html` hineinkopieren (oder Claude nach eurer Freigabe Bescheid sagen). **Bitte lesen und anpassen** (z. B. Mindestalter, Frist bei Programmende), dann **Sichtbar** schalten. Das ist eine Vorlage, keine Rechtsberatung. Ändert ihr später Fristen, Stufen oder Boni im Club-Admin, passt bitte auch diese Seite an. Den Verfall darf es für bereits gesammelte Punkte erst geben, wenn er in den Bedingungen steht.
 2. Club-Admin → **Einstellungen → Verbindungen → Links** → Teilnahmebedingungen: `https://www.perfumecloud.de/pages/club` → **Speichern**.
-3. **Datenschutzerklärung** im Shop (Einstellungen → Richtlinien) um einen Absatz ergänzen, Vorschlag:
+3. **Datenschutzerklärung** im Shop (Einstellungen → Richtlinien) um einen Absatz ergänzen. Alle Absätze für Club, Befragung, Empfehlungslinks und Push stehen in [DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md). Der Grundabsatz für den Club:
    > **Perfume Cloud Club (Treueprogramm).** Wenn du dem Club beitrittst, verarbeiten wir in unserer Club-App (app.perfumecloud.de) deinen Namen, deine E-Mail-Adresse, deine Kundennummer, deine Bestellungen (Nummer, Datum, Betrag, Status, Artikel, Sendungsnummer), deinen Punktestand und deine Stufe, um das Treueprogramm durchzuführen (Art. 6 Abs. 1 lit. b DSGVO). Freiwillig kannst du deinen Geburtstag (Tag und Monat, für den Geburtstagsbonus) angeben, Push-Mitteilungen auf deinem Gerät erlauben und uns Feedback schicken. Push-Mitteilungen schaltest du in der App jederzeit wieder aus. Die Anmeldung läuft über dein Shopify-Kundenkonto. Die App wird bei der netcup GmbH, Daimlerstraße 25, 76185 Karlsruhe, gehostet. Wenn du austrittst, löschen wir deine Club-Daten; Bestelldaten bleiben im Rahmen der gesetzlichen Aufbewahrungspflichten im Shop gespeichert.
 4. **Link im Shop:** Im Footer des Themes steht schon „Web-App · Bald“. Sobald die App läuft, dort auf `https://app.perfumecloud.de` verlinken (Onlineshop → Themes → Anpassen → Footer). Gerne auch einen Menüpunkt „Club“ im Hauptmenü. Claude ändert das Live-Theme nur nach eurer Freigabe.
 
@@ -276,6 +294,46 @@ Wer im Shop den Tag **warteliste** trägt, bekommt beim Beitritt einmalig den **
 
 ---
 
+## Teil L – Befragung nach der Lieferung
+
+Ein paar Tage nach der Zustellung fragt der Club, wie die Düfte gefallen: **ein Tipp auf die Sterne je Duft**, danach höchstens **drei kurze Fragen** und ein Kommentar. Das klappt auch für Kundinnen und Kunden, die nicht im Club sind (dann ohne Punkte).
+
+**So fragt die App (rechtlich bewusst so gebaut):**
+- **Push** an Mitglieder, die Mitteilungen zu „Bestellungen & Versand“ erlaubt haben, und als Hinweis in der App.
+- **E-Mail nur mit Einwilligung**: Mitglieder schalten das in der App unter **Konto → Auch per E-Mail fragen** selbst ein. Newsletter-Abonnenten nur, wenn ihr **E-Mail an Newsletter-Abonnenten** einschaltet. Das bitte erst, wenn der Einwilligungstext beim Newsletter Bewertungsanfragen nennt (Merkliste, Punkt 3).
+- Jede Mail hat einen **Abmeldelink** (auch als Ein-Klick-Abmeldung im Mailprogramm), Datenschutz und Impressum.
+- **Punkte gibt es fürs Mitmachen**, egal wie die Bewertung ausfällt.
+- Der Link **„Bewertung im Shop“** erscheint nach dem Absenden bei **allen**, nicht nur bei guten Bewertungen. Wer nur Zufriedene zur öffentlichen Bewertung schickt, verfälscht das Bild, und das ist rechtlich heikel. Der **Empfehlungslink** erscheint ab durchschnittlich 4 Sternen.
+
+**Einschalten:** Club-Admin → **Aktionen → Befragung**.
+1. **Wann und wie:** Tage nach der Zustellung (Standard 3), ohne Zustellmeldung Tage nach dem Versand (8), höchstens eine Anfrage je Person in X Tagen (30), Link gültig (30 Tage), Wege (Push, Mail mit Einwilligung, Mail an Newsletter-Abonnenten).
+2. **Fragen:** bis zu drei, je als Sterne, Auswahl (Antworten mit Komma getrennt) oder Text. Kommentarfeld an/aus.
+3. **Danke & Hinweise:** Punkte fürs Mitmachen (Standard 10), **Hinweis ans Team ab** (Standard 2 Sterne oder weniger: Mail an die Feedback-Adresse und Aufgabe in der Team-App), Link und Beschriftung für **Bewertung im Shop**.
+4. **Nachkauf-Erinnerung** (optional): z. B. 75 Tage nach der Lieferung eine Erinnerung zum besten bewerteten Duft. Nicht nach einer schlechten Bewertung und nicht, wenn schon nachbestellt wurde. Per Push an Mitglieder mit „Aktionen & neue Düfte“, per Mail nur an Newsletter-Abonnenten.
+5. **E-Mail:** Betreff, Einleitung, Absender, Datenschutz- und Impressum-Link, **Antworten aufbewahren** (Standard 24 Monate, danach anonym).
+6. **Speichern**, dann prüfen: **Vorschau Anfrage** / **Vorschau Nachkauf** zeigt die Mail, **Test an mich** / **Nachkauf an mich** schickt sie an deine eigene Adresse (und als Push, wenn du mit derselben E-Mail im Club bist). Das geht auch, solange die Befragung noch aus ist.
+7. **Befragung einschalten** → **Speichern**. Befragt werden nur Bestellungen ab dem Einschalten.
+
+**Auswertung** (unten auf der Seite, 90 Tage): verschickt, beantwortet, Durchschnitt, Abmeldungen, Verteilung der Sterne, Düfte mit Bewertung, letzte Antworten mit Kommentar und warum Anfragen nicht verschickt wurden (z. B. keine Einwilligung, kürzlich schon gefragt). Die Zahlen stehen auch in der Team-App unter **Members Club → Statistik** und im Wochenrückblick.
+
+## Teil M – Empfehlungslinks
+
+Jedes Mitglied bekommt in der App (Übersicht und **Konto → Freunde einladen**) einen Link wie `app.perfumecloud.de/r/K2M4QX`. Er führt in den Shop und legt einen persönlichen Rabattcode in den Warenkorb (z. B. `ANNA-K2M4QX`). Bestellt jemand mit dem Code, bekommt das Mitglied Punkte, **auch wenn die Person nicht dem Club beitritt**. Zugeordnet wird über den Code in der Bestellung, ohne Tracking-Cookie. Gezählt werden nur Klicks je Tag.
+
+**Einschalten:** Club-Admin → **Aktionen → Empfehlungslinks**.
+1. **Rabatt für Freunde:** Prozent oder fester Betrag, Mindestbestellwert, **nur für die erste Bestellung** (einmal je Kundin/Kunde; Bestellungen von Bestandskunden bringen keine Punkte), optional **nur Kundensegment „Club: Neukunden“** (Shopify prüft dann an der Kasse, ob jemand noch nie bestellt hat; das Segment legt die App bei Bedarf selbst an), Kombinierbarkeit mit Versand-, Bestell- und Produktrabatten.
+2. **Belohnung fürs Mitglied:** feste **Punkte** je Bestellung oder ein **Anteil** am Warenwert als Punkte-Gegenwert (die Beispielrechnung darunter zeigt, was das bei 59 € bedeutet), ab Bestellwert, **höchstens** X belohnte Bestellungen je 12 Monate.
+3. **Empfehlungslinks einschalten** → **Speichern**.
+4. **Testen:** **Code anlegen und Push an mich** legt deinen eigenen Code in Shopify an und schickt dir einen Push. Deinen Link siehst du dort, wenn du mit deiner Admin-Adresse im Club bist (eigene Bestellungen bringen keine Punkte). Wer den Ablauf ganz durchspielen will: Team-App → **Members Club → Probelauf** (Schritt „Empfehlung belohnt“).
+
+   Ändert ihr später Rabatt oder Kombinierbarkeit, legt die App alle Codes in Shopify neu an (im Hintergrund, 20 je Cronjob-Lauf).
+
+**So läuft eine Empfehlung:** Bestellung mit Code → Mitglied bekommt einen Push „Über deinen Link wurde bestellt“ → Punkte sind „unterwegs“ → 14 Tage nach dem Versand gutgeschrieben (wie eigene Bestellungen) → Push „Danke fürs Weitersagen“. Eigene Bestellungen, Bestandskunden (wenn eingestellt), stornierte Bestellungen und Bestellungen unter dem Mindestwert bringen nichts. Wird eine Bestellung nach der Gutschrift storniert, zieht die App die Punkte wieder ab. Unten auf der Seite stehen die letzten Bestellungen über Links mit Grund, falls es keine Punkte gab, und die besten Empfehler.
+
+Die bisherige **Club-Einladung** (Bonus „Freunde einladen“ in den Regeln) bleibt daneben bestehen. Für dieselbe Person gibt es aber nur einmal Punkte.
+
+---
+
 ## Club-Admin im Alltag (`app.perfumecloud.de/admin`)
 
 - **Übersicht:** Mitglieder, offene Punkte (und was sie als Rabatt wert wären), Club-Umsatz, Codes, Abgleich mit Shopify, Checkliste für die Einrichtung.
@@ -285,6 +343,8 @@ Wer im Shop den Tag **warteliste** trägt, bekommt beim Beitritt einmalig den **
   - **Bewertungen:** Mitglieder melden eine Bewertung, ihr bestätigt sie hier, dann gibt es die Punkte.
   - **Warteliste:** siehe Teil K.
   - **Feedback:** alle Antworten (Gut / Neutral / Schlecht mit Begründung). Jede geht zusätzlich per Mail an info@.
+  - **Befragung:** siehe Teil L.
+  - **Empfehlungslinks:** siehe Teil M.
 - **Push:** alle Mitteilungen mit Text und Vorschau zum Bearbeiten und Ein-/Ausschalten (Versand, Zustellung, Punkte gutgeschrieben/abgezogen/eingelöst, Prämie bereit, Verfall, Stufe, Geburtstag, Empfehlung, Aktion). Platzhalter wie `{punkte}`, `{grund}`, `{kontostand}`, `{vorname}`. **Ruhezeit** (Standard 21–8 Uhr): Mitteilungen warten bis morgens. Zahlen zu Zustellungen und Fehlern stehen oben.
 - **Einstellungen:**
   - **Regeln & Stufen:** Punkte je Euro, Wert einer Prämie, Höchstwert je Code, Kombinierbarkeit, Einlösen pausieren; **Verfall** (Punkte nach Monaten, Codes nach Tagen, Erinnerung vorher); **Stufen** Bronze/Silber/Gold mit Punkten je Euro, Schwelle und Vorteilen; **Bonuspunkte**; **Startbonus**. Gilt sofort, App-Texte und Shop ziehen automatisch nach.
@@ -320,3 +380,7 @@ Wer im Shop den Tag **warteliste** trägt, bekommt beim Beitritt einmalig den **
 | Team-App: „Club noch nicht verbunden“ | Teil H4: Adresse und Schlüssel aus Club-Admin → System eintragen. Die Adresse der App muss gespeichert sein (einmal in den Club-Einstellungen speichern). |
 | Punkteanzeige im Shop fehlt | Die App hat das Metafeld `club.programm` noch nicht geschrieben: im Club-Admin einmal Einstellungen speichern oder auf der Übersicht **Jetzt abgleichen**. Ist der Warenwert 0, bleibt die Zeile ausgeblendet. |
 | Mail aus Shopify kommt nicht an | Nur mit Newsletter-Einwilligung (Teil J). In Shopify Flow unter **Ausführungen** sieht man jeden Lauf. |
+| Übersicht: „Shopify gibt Name und E-Mail zu Bestellungen frei“ ist rot | Teil B, Schritt 2: geschützte Kundendaten (Name, E-Mail) freigeben. Punkte laufen trotzdem weiter, nur Befragung und Empfehlungen haben dann keine Namen und Adressen. Der Hinweis verschwindet beim nächsten Abgleich. |
+| Befragung: Anfragen werden nicht verschickt | Unten in **Aktionen → Befragung** steht der Grund (z. B. „keine Einwilligung“, „kürzlich schon gefragt“). Befragt werden nur Bestellungen ab dem Einschalten und erst nach der Zustellung. |
+| Empfehlungslink führt nur auf die Startseite | Empfehlungslinks sind aus, oder der Code konnte in Shopify nicht angelegt werden (`write_discounts`, Shopify-Test im Admin). |
+| Keine Punkte für eine Empfehlung | **Aktionen → Empfehlungslinks → Bestellungen über Links** zeigt den Grund (eigene Bestellung, Bestandskunde, storniert, Mindestwert, Obergrenze). |
