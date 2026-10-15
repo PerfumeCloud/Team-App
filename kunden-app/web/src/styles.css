@@ -403,11 +403,11 @@ a.karte:hover{transform:translateY(-2px);border-color:rgba(35,33,32,.4);box-shad
 .vorteil-liste{list-style:none;margin:0;padding:0;display:grid;gap:.4rem}
 .vorteil-liste li{display:flex;gap:.4rem;align-items:center}
 .vorteil-liste input{height:2.5rem;font-size:.9375rem;padding:0 1rem}
-input.schalter-input{appearance:none;width:3rem;height:1.75rem;border-radius:999px;padding:0;flex:none;position:relative;background:rgba(35,33,32,.18);border:0;cursor:pointer;transition:background-color .2s;display:inline-block;vertical-align:middle}
-input.schalter-input::after{content:"";position:absolute;left:.2rem;top:.2rem;width:1.35rem;height:1.35rem;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .25s var(--weich)}
-input.schalter-input:checked{background:var(--amber)}
-input.schalter-input:checked::after{transform:translateX(1.25rem)}
-input.schalter-input:disabled{opacity:.55;cursor:not-allowed}
+input[type="checkbox"].schalter-input{appearance:none;width:3rem;height:1.75rem;border-radius:999px;padding:0;flex:none;position:relative;background:rgba(35,33,32,.18);border:0;cursor:pointer;transition:background-color .2s;display:inline-block;vertical-align:middle}
+input[type="checkbox"].schalter-input::after{content:"";position:absolute;left:.2rem;top:.2rem;width:1.35rem;height:1.35rem;border:0;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .25s var(--weich)}
+input[type="checkbox"].schalter-input:checked{background:var(--amber)}
+input[type="checkbox"].schalter-input:checked::after{width:1.35rem;height:1.35rem;border:0;transform:translateX(1.25rem)}
+input[type="checkbox"].schalter-input:disabled{opacity:.55;cursor:not-allowed}
 code{font-family:ui-monospace,Menlo,monospace;font-size:.85em;padding:.05em .35em;border-radius:.35em;background:rgba(35,33,32,.07)}
 
 /* Kundenansicht des Teams */
@@ -510,10 +510,10 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.85em;padding:.05em .35e
 .schalter{display:flex;justify-content:space-between;gap:1rem;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--linie);cursor:pointer;font-size:.9875rem}
 .schalter:last-child{border-bottom:0}
 .schalter small{display:block;color:var(--leise);font-size:.8125rem}
-.schalter input{appearance:none;width:3rem;height:1.75rem;border-radius:999px;padding:0;flex:none;position:relative;background:rgba(35,33,32,.18);border:0;cursor:pointer;transition:background-color .2s}
-.schalter input::after{content:"";position:absolute;left:.2rem;top:.2rem;width:1.35rem;height:1.35rem;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .25s var(--weich)}
-.schalter input:checked{background:var(--amber)}
-.schalter input:checked::after{transform:translateX(1.25rem)}
+.schalter input[type="checkbox"]{appearance:none;display:inline-block;width:3rem;height:1.75rem;border-radius:999px;padding:0;flex:none;position:relative;background:rgba(35,33,32,.18);border:0;cursor:pointer;transition:background-color .2s}
+.schalter input[type="checkbox"]::after{content:"";position:absolute;left:.2rem;top:.2rem;width:1.35rem;height:1.35rem;border:0;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .25s var(--weich)}
+.schalter input[type="checkbox"]:checked{background:var(--amber)}
+.schalter input[type="checkbox"]:checked::after{width:1.35rem;height:1.35rem;border:0;transform:translateX(1.25rem)}
 .reiter{display:flex;gap:.3rem;flex-wrap:wrap}
 .reiter a,.reiter button{display:inline-flex;align-items:center;height:2.5rem;padding:0 1rem;border-radius:999px;border:1px solid rgba(35,33,32,.2);text-decoration:none;font-size:.9375rem;background:rgba(255,255,255,.4);cursor:pointer}
 .reiter a[aria-current="page"],.reiter button[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--styx)}
