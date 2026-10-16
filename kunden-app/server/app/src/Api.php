@@ -473,6 +473,7 @@ final class Api
 
             // ----- Team-App (Server zu Server, Header X-Club-Key) -----
             ['GET', '/internal/ping', static fn () => ['ok' => true, 'version' => APP_VERSION, 'team_mode' => Db::team(), 'app_url' => Util::baseUrl(), 'program' => Points::program()['name']]],
+            ['GET', '/internal/widget', static fn () => Internal::widget()],
             ['GET', '/internal/stats', static fn () => Admin::stats() + ['promotion' => Promotions::publicActive(), 'open_claims' => (int) Db::value("SELECT COUNT(*) FROM club_claims WHERE status = 'open'"), 'app_url' => Util::baseUrl()]],
             ['POST', '/internal/kick', static function () {
                 $out = ['broadcasts' => Broadcasts::run(), 'promotions' => Promotions::runStarts(), 'push' => Push::flush()];

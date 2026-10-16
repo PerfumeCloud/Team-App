@@ -207,6 +207,11 @@ Benachrichtigungen kommen auch bei geschlossenem App-Fenster, solange der Comput
 4. Auf dem Home-Bildschirm auf eine freie Stelle lange drücken. Dann **Bearbeiten**, **Widget hinzufügen**, **Scriptable** wählen, eine Größe (klein, mittel oder groß) auswählen und **Widget hinzufügen** tippen.
 5. Das neue Widget lange drücken, **Widget bearbeiten** wählen und bei **Script** **Perfume Cloud** auswählen.
 6. **Kalender-Widget:** ein zweites Widget hinzufügen, ebenfalls **Perfume Cloud** wählen und bei **Parameter** `kalender` eintragen. Es zeigt die nächsten Termine, Feiertage und Aktionstage.
+7. **Club-Widget** (nur für Admins und Personen mit Club-Zugang): ein weiteres Widget hinzufügen und bei **Parameter** `club` eintragen. Es zeigt die Zahl der Mitglieder, wie viele heute und in den letzten 7 Tagen dazugekommen sind, die Verteilung auf Bronze, Silber und Gold, die neuesten Mitglieder (nur Vorname und erster Buchstabe des Nachnamens), die Durchschnittsbewertung der letzten 30 Tage und eine laufende Aktion. Antippen öffnet die Club-Seite der Team-App. Wer Club-Zugang hat, sieht die Mitgliederzahl außerdem im normalen Widget.
+
+Die Club-Zahlen holt die Team-App höchstens alle 5 Minuten vom Club. Ist der Club kurz nicht erreichbar, zeigt das Widget bis zu einer Stunde die letzten Zahlen.
+
+**Nach einem Update** der Team-App das Skript einmal neu kopieren (Schritte 2 und 3, dabei den alten Text in Scriptable ersetzen). Die Widgets auf dem Bildschirm bleiben, wie sie sind.
 
 Das geht genauso auf dem **Sperrbildschirm**: Sperrbildschirm lange drücken, **Anpassen** und dort Widgets hinzufügen.
 
@@ -314,6 +319,7 @@ Gilt auch für das Update von 1.4 direkt auf 1.6. Alle Daten bleiben erhalten.
 4. In der **Planung** liegt bei Marius die Aufgabe **„Postfach auswertung@perfumecloud.de anlegen“**. Abarbeiten wie in **Teil K**.
 5. **Einstellungen → Vorlagen**: Textbausteine durchsehen (Teil L).
 6. Den Club auf Version 1.2 bringen: [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.1 → 1.2**.
+7. **iPhone-Widget**: Skript einmal neu kopieren und in Scriptable ersetzen (Teil D). Neu: das Club-Widget mit dem Parameter `club`.
 
 ## Teil K – Auswertungen und Datensicherung
 

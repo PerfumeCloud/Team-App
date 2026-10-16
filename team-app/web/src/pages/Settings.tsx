@@ -527,9 +527,14 @@ function WidgetSection() {
         <li>
           6. <b>Kalender-Widget:</b> ein zweites Widget hinzufügen, ebenfalls <b>Perfume Cloud</b> auswählen und bei „Parameter“ <b>kalender</b> eintragen. Es zeigt deine nächsten Termine mit Feiertagen und Aktionstagen.
         </li>
+        <li>
+          7. <b>Club-Widget</b> (nur mit Club-Zugang): bei „Parameter“ <b>club</b> eintragen. Es zeigt Mitglieder, Neuzugänge, Stufen, die neuesten Mitglieder (nur
+          Vorname und Initial) und die Bewertungen. Mit Club-Zugang steht die Mitgliederzahl auch im normalen Widget.
+        </li>
       </ol>
       <p className="mt-3 text-[13px] text-ink-3">
-        Klappt genauso auf dem Sperrbildschirm. Das Widget aktualisiert sich etwa alle 15 Minuten (iOS entscheidet den genauen Zeitpunkt). Der Zugang darin ist persönlich und kann nur lesen.
+        Klappt genauso auf dem Sperrbildschirm. Das Widget aktualisiert sich etwa alle 15 Minuten (iOS entscheidet den genauen Zeitpunkt). Der Zugang darin ist persönlich und kann nur lesen. Nach einem
+        Update der Team-App das Skript einmal neu kopieren, damit neue Anzeigen dazukommen.
       </p>
 
       {script ? (

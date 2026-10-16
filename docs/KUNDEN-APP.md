@@ -77,7 +77,7 @@ Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungsl
 1. Neue **`perfumecloud-club-upload.zip`** wie in A5 hochladen und mit „Vorhandene Dateien ersetzen“ entpacken.
 2. `https://app.perfumecloud.de/admin` öffnen. Die App ergänzt die Datenbank selbst.
 3. **Shopify-Rechte prüfen** (Teil B, Schritt 2): Für Befragung und Empfehlungslinks braucht die App **Name und E-Mail** zu Bestellungen (geschützte Kundendaten). Fehlt die Freigabe, laufen Punkte und alles andere weiter, nur steht auf der **Übersicht** ein roter Hinweis.
-4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, und Admins finden dort den **Probelauf**.
+4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort den **Probelauf**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
 
 ---

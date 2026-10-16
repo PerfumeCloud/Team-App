@@ -80,6 +80,8 @@ final class Widget
             'today' => $shopify ? Stats::today() : null,
             'toShip' => $shopify ? count(Stats::toShip()) : null,
             'importantMails' => count($mails),
+            // Nur für Admins und Personen mit Club-Zugang
+            'club' => Auth::clubAccess($user) && Club::configured() ? self::club() : null,
             'events' => Calendar::upcoming($user),
             'mails' => array_map(static fn ($m) => [
                 'from' => (string) ($m['from_name'] ?: $m['from_email']),
@@ -98,5 +100,26 @@ final class Widget
                 ], array_slice($tasks, 0, 4)),
             ],
         ];
+    }
+
+    /**
+     * Club-Zahlen fürs Widget, 5 Minuten zwischengespeichert – auch Fehlversuche, damit das Widget nie auf
+     * einen nicht erreichbaren Club wartet. Dann bis zu einer Stunde der letzte gute Stand.
+     */
+    private static function club(): ?array
+    {
+        $cached = Settings::get('widget_club');
+        $cached = is_array($cached) ? $cached : ['at' => 0, 'data' => null, 'data_at' => 0];
+        $now = Util::now();
+        if ($now - (int) $cached['at'] < 5 * 60000) {
+            return $now - (int) ($cached['data_at'] ?? 0) < 3600000 ? $cached['data'] : null;
+        }
+        try {
+            $cached = ['at' => $now, 'data' => Club::request('GET', '/internal/widget'), 'data_at' => $now];
+        } catch (\Throwable) {
+            $cached['at'] = $now;
+        }
+        Settings::set('widget_club', $cached);
+        return $now - (int) ($cached['data_at'] ?? 0) < 3600000 ? $cached['data'] : null;
     }
 }

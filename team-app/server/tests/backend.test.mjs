@@ -77,6 +77,14 @@ const clubServer = http.createServer((req, res) => {
         push_members: 25, feedback: { gut: 10, neutral: 2, schlecht: 1 }, promotion: null, open_claims: 2, app_url: clubUrl, at: Date.now(),
       });
     }
+    if (route === 'GET /api/internal/widget') {
+      return send(200, {
+        members: 42, new_today: 1, new_7: 3,
+        tiers: [{ key: 'bronze', name: 'Bronze', count: 30 }, { key: 'silber', name: 'Silber', count: 10 }, { key: 'gold', name: 'Gold', count: 2 }],
+        recent: [{ name: 'Anna B.', tier: 'bronze', at: Date.now() }],
+        survey: { avg: 4.5, count: 4, low: 0 }, promotion: null,
+      });
+    }
     if (route === 'POST /api/internal/kick') return send(200, { push: '1 Push-Nachrichten verschickt' });
     if (route === 'POST /api/internal/alerts/claim') return send(200, { alerts: club.alerts.splice(0) });
     // Probelauf (vereinfacht): Zustand im Speicher
@@ -916,6 +924,17 @@ test('Club: Verbindung, Rechte, Statistik, Nachricht an Mitglieder, Club-Admin-L
   assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.clubConfigured, true);
   assert.equal((await admin.req('GET', '/admin/maintenance')).data.people.find((p) => p.id === kimId).clubAccess, true);
 
+  // iPhone-Widget: Club-Zahlen nur mit Club-Zugang, kurz zwischengespeichert
+  const { data: wa } = await admin.req('POST', '/widget/token');
+  const { data: wk } = await kim.req('POST', '/widget/token');
+  const widgetOf = async (t) => (await new Client().req('GET', `/widget?token=${encodeURIComponent(t.token)}`)).data;
+  const before = clubCalls.filter((c) => c.path === '/api/internal/widget').length;
+  const wAdmin = await widgetOf(wa);
+  assert.equal(wAdmin.club.members, 42);
+  assert.equal(wAdmin.club.recent[0].name, 'Anna B.');
+  assert.equal((await widgetOf(wk)).club.new_today, 1);
+  assert.equal(clubCalls.filter((c) => c.path === '/api/internal/widget').length, before + 1, 'zweiter Abruf aus dem Zwischenspeicher');
+
   // Nachricht an Mitglieder: Vorlagen und Empfänger
   const ov = await kim.req('GET', '/club/broadcasts');
   assert.equal(ov.status, 200);
@@ -973,6 +992,10 @@ test('Club: Verbindung, Rechte, Statistik, Nachricht an Mitglieder, Club-Admin-L
   // Zugang wieder entziehen
   await admin.req('PUT', `/admin/users/${kimId}`, { club_access: false });
   assert.equal((await kim.req('GET', '/club/broadcasts')).status, 403);
+  assert.equal((await widgetOf(wk)).club, null, 'ohne Club-Zugang keine Club-Zahlen im Widget');
+  assert.equal((await widgetOf(wa)).club.members, 42);
+  await admin.req('DELETE', '/widget/token');
+  await kim.req('DELETE', '/widget/token');
   assert.equal((await kim.req('POST', '/club/sso')).status, 403);
 
   // „Datenbank aktualisieren“ bringt auch den Club auf den neuesten Stand

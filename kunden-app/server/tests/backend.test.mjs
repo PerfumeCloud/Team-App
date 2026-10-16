@@ -836,6 +836,18 @@ test('Team-App: Statistik, Nachricht an Mitglieder mit Prüfung und Freigabe, Fe
   assert.ok(r.data.points.earned > 0);
   assert.equal(r.data.points.redeemed, 100, 'drei Codes, zwei davon zurückgebucht');
 
+  // Zahlen fürs iPhone-Widget der Team-App: nur Vorname und Initial, keine Mail-Adressen
+  r = await internal('GET', '/widget');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.members, 3);
+  assert.deepEqual(r.data.tiers.map((t) => [t.key, t.count]), [['bronze', 2], ['silber', 1], ['gold', 0]]);
+  assert.ok(r.data.new_7 >= r.data.new_today);
+  assert.equal(r.data.recent.length, 3);
+  assert.ok(r.data.recent.some((m) => m.name === 'Anna B.'), JSON.stringify(r.data.recent));
+  assert.doesNotMatch(JSON.stringify(r.data), /@|Berg/);
+  assert.ok('avg' in r.data.survey && 'count' in r.data.survey);
+  assert.equal((await fetch(`${app}/api/internal/widget`, { headers: { 'X-Club-Key': 'falsch' } })).status, 403);
+
   const lena = { id: 'team-lena', name: 'Lena', email: 'lena@example.de' };
   const tom = { id: 'team-tom', name: 'Tom', email: 'tom@example.de' };
   r = await internal('GET', '/broadcasts');

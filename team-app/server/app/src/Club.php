@@ -114,6 +114,8 @@ final class Club
             Settings::setSecret('club_key', trim($in['key']));
         }
         Settings::delete('club_status');
+        // Zahlen im iPhone-Widget kommen sonst noch vom alten Club
+        Settings::delete('widget_club');
     }
 
     /** https://app.perfumecloud.de – ohne / am Ende und ohne /api (falls mitkopiert). */

@@ -166,6 +166,74 @@ test('Großes Widget zeigt nächsten Termin', { skip: !!process.env.WIDGET_URL }
   assert.match(r.texts.join(' | '), /NÄCHSTER TERMIN \| Heute · 15:00–16:00 \| Meeting Flakon-Manufaktur/);
 });
 
+const DAY = 86400000;
+const CLUB = {
+  members: 1284,
+  new_today: 3,
+  new_7: 12,
+  tiers: [
+    { key: 'bronze', name: 'Bronze', count: 1100 },
+    { key: 'silber', name: 'Silber', count: 150 },
+    { key: 'gold', name: 'Gold', count: 34 },
+  ],
+  recent: [
+    { name: 'Anna B.', tier: 'gold', at: Date.now() - 60000 },
+    { name: 'Lena K.', tier: 'bronze', at: Date.now() - DAY },
+    { name: 'Tom S.', tier: 'silber', at: Date.now() - 3 * DAY },
+  ],
+  survey: { avg: 4.62, count: 18, low: 1 },
+  promotion: { name: 'Launch-Woche', factor: 2, ends_at: Date.now() + 2 * DAY },
+};
+
+test('Widget zeigt Club-Mitglieder, wenn die Person Club-Zugang hat', { skip: !!process.env.WIDGET_URL }, async () => {
+  const mails = [...SAMPLE.mails, { from: 'Dritte Absenderin', subject: 'Frage zur Probe', mailbox: 'info@', at: Date.now() }];
+  const data = { ...SAMPLE, mails, club: CLUB };
+  const small = (await run({ family: 'small', response: data })).texts.join(' | ');
+  assert.match(small, /1\.284 \| Club · \+3/);
+  const medium = (await run({ family: 'medium', response: data })).texts.join(' | ');
+  assert.match(medium, /1\.284 \| Club · \+3/);
+  assert.match(medium, /Retoure #1038 prüfen/, 'Aufgaben bleiben');
+  const large = (await run({ family: 'large', response: data }));
+  const all = large.texts.join(' | ');
+  assert.match(all, /1\.284 \| im Club · \+3 heute \| Ø 4,6 ★/);
+  assert.ok(large.symbols.includes('crown.fill'));
+  assert.match(all, /Carla/);
+  assert.doesNotMatch(all, /Dritte Absenderin/, 'eine Mail weniger, damit alles passt');
+  // Ohne Club-Zugang (club: null) bleibt alles wie bisher
+  const without = (await run({ family: 'large', response: { ...SAMPLE, mails, club: null } })).texts.join(' | ');
+  assert.doesNotMatch(without, /im Club/);
+  assert.match(without, /Dritte Absenderin/);
+});
+
+for (const family of ['small', 'medium', 'large', 'accessoryRectangular', 'accessoryInline', 'accessoryCircular']) {
+  test(`Club-Widget ${family}`, { skip: !!process.env.WIDGET_URL }, async () => {
+    const r = await run({ family, response: { ...SAMPLE, club: CLUB }, param: 'Club' });
+    const all = r.texts.join(' | ');
+    assert.ok(r.widget && r.completed);
+    assert.match(all, /1\.284/);
+    assert.doesNotMatch(all, /Retoure/, 'nur Club, keine Aufgaben');
+    if (family === 'small') assert.match(all, /Mitglieder \| \+3 \| heute \| \+12 \| 7 Tage \| 4,6 ★/);
+    if (family === 'medium') assert.match(all, /NEU IM CLUB \| Anna B\. \| heute \| Lena K\. \| gestern \| Tom S\./);
+    if (family === 'large') {
+      assert.match(all, /STUFEN \| Bronze \| 1\.100 \| Silber \| 150 \| Gold \| 34/);
+      assert.match(all, /18 Bewert\./);
+      assert.match(all, /Launch-Woche · 2× Punkte bis/);
+    }
+    if (family === 'accessoryInline') assert.match(all, /^👑 1\.284 im Club · \+3 heute$/);
+    if (family === 'accessoryCircular') assert.match(all, /^1\.284 \| Club$/);
+    if (family === 'accessoryRectangular') assert.match(all, /Members Club \| 1\.284 Mitglieder · \+3 heute \| Ø 4,6 ★ · 18 Bewertungen/);
+  });
+}
+
+test('Club-Widget ohne Club-Zugang', { skip: !!process.env.WIDGET_URL }, async () => {
+  const r = await run({ family: 'medium', response: { ...SAMPLE, club: null }, param: 'club' });
+  assert.match(r.texts.join(' | '), /Kein Club-Zugang/);
+  const lock = await run({ family: 'accessoryRectangular', response: { ...SAMPLE, club: null }, param: 'club' });
+  assert.match(lock.texts.join(' | '), /kein Zugang/);
+  const quiet = await run({ family: 'small', response: { ...SAMPLE, club: { ...CLUB, new_today: 0, survey: { avg: null, count: 0, low: 0 }, promotion: null } }, param: 'club' });
+  assert.match(quiet.texts.join(' | '), /\+0 \| heute \| \+12 \| 7 Tage$/);
+});
+
 test('Widget ohne Shopify', { skip: !!process.env.WIDGET_URL }, async () => {
   const r = await run({ family: 'medium', response: { ...SAMPLE, shopify: false, today: null, toShip: null } });
   assert.match(r.texts.join(' | '), /offene Aufgaben/);

@@ -60,6 +60,35 @@ final class Internal
         ];
     }
 
+    /** Kurzfassung fürs iPhone-Widget der Team-App: Mitglieder, neue Beitritte, Stufen, Bewertungen. */
+    public static function widget(): array
+    {
+        $now = Util::now();
+        $base = 'joined_at IS NOT NULL AND test = 0';
+        $since = static fn (int $from) => (int) Db::value("SELECT COUNT(*) FROM club_members WHERE $base AND joined_at >= ?", [$from]);
+        $counts = [];
+        foreach (Db::all("SELECT tier, COUNT(*) AS n FROM club_members WHERE $base GROUP BY tier") as $r) {
+            $counts[$r['tier']] = (int) $r['n'];
+        }
+        // Neueste Mitglieder nur mit Vorname und Initial
+        $recent = array_map(static fn ($m) => [
+            'name' => trim((string) ($m['first_name'] ?: 'Neues Mitglied') . ($m['last_name'] ? ' ' . mb_substr((string) $m['last_name'], 0, 1) . '.' : '')),
+            'tier' => (string) $m['tier'],
+            'at' => (int) $m['joined_at'],
+        ], Db::all("SELECT first_name, last_name, tier, joined_at FROM club_members WHERE $base ORDER BY joined_at DESC LIMIT 5"));
+        $survey = Surveys::stats($now - 30 * Points::DAY_MS, $now);
+        $promo = Promotions::publicActive($now);
+        return [
+            'members' => array_sum($counts),
+            'new_today' => $since((int) strtotime('today') * 1000),
+            'new_7' => $since($now - 7 * Points::DAY_MS),
+            'tiers' => array_map(static fn ($t) => ['key' => $t['key'], 'name' => $t['name'], 'count' => $counts[$t['key']] ?? 0], Tiers::list()),
+            'recent' => $recent,
+            'survey' => ['avg' => $survey['avg'], 'count' => $survey['count'], 'low' => $survey['low']],
+            'promotion' => $promo ? ['name' => $promo['name'], 'factor' => $promo['factor'], 'ends_at' => $promo['ends_at']] : null,
+        ];
+    }
+
     /** Neue Hinweise abholen (z. B. schlechte Bewertung) – die Team-App legt daraus Aufgaben an. */
     public static function claimAlerts(int $max = 20): array
     {
