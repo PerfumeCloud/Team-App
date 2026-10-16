@@ -150,6 +150,7 @@ final class Auth
             'color' => $u['color'],
             'role' => $u['role'],
             'club_access' => (int) ($u['club_access'] ?? 0),
+            'instagram_access' => (int) ($u['instagram_access'] ?? 0),
             'updated_at' => (int) $u['updated_at'],
             'deleted' => (int) $u['deleted'],
         ];
@@ -168,6 +169,8 @@ final class Auth
                 'shipping' => true,
                 'weekly' => true,
                 'feedback' => true,
+                // Instagram: Beitrag zur Prüfung/veröffentlicht, Erinnerung zum Posten, neue Kommentare
+                'instagram' => true,
             ],
             // Push für Mails: 'all' = jede neue Mail, 'everything' = auch Newsletter/automatische, 'important' = nur wichtige
             'mailScope' => 'all',

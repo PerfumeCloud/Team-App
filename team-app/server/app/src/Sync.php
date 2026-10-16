@@ -71,6 +71,8 @@ final class Sync
             'mailLastFetch' => (int) Settings::get('mail_last_fetch', 0),
             // Members Club: Menüpunkt „Club“ nur für Personen mit Club-Zugang
             'clubConfigured' => Auth::clubAccess($me) && Club::configured(),
+            // Instagram: Menüpunkt für Personen mit Instagram-Zugang (Admins auch vor dem Verbinden)
+            'instagram' => Instagram::meta($me),
             'version' => APP_VERSION,
         ];
     }

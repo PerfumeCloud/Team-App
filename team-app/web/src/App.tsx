@@ -15,6 +15,7 @@ const Inbox = lazy(() => import('./pages/Inbox'));
 const Statistics = lazy(() => import('./pages/Statistics'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Club = lazy(() => import('./pages/Club'));
+const Instagram = lazy(() => import('./pages/Instagram'));
 const Install = lazy(() => import('./pages/Install'));
 const Shipping = lazy(() => import('./pages/Shipping'));
 
@@ -122,6 +123,8 @@ export default function App() {
                 <Route path="/statistik" element={<Statistics />} />
                 <Route path="/club" element={<Club />} />
                 <Route path="/club/:tab" element={<Club />} />
+                <Route path="/instagram" element={<Instagram />} />
+                <Route path="/instagram/:tab" element={<Instagram />} />
                 <Route path="/einstellungen" element={<Settings />} />
                 <Route path="/einstellungen/:tab" element={<Settings />} />
                 <Route path="*" element={<Home />} />

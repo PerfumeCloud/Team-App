@@ -4,7 +4,7 @@ declare(strict_types=1);
 // Testhelfer: wird von backend.test.mjs mit PC_CONFIG/PC_STORAGE aufgerufen.
 require dirname(__DIR__) . '/app/bootstrap.php';
 
-use PC\{Db, Settings, MailJob, WebPush, Util, Stats, Sync};
+use PC\{Db, Settings, MailJob, WebPush, Util, Stats, Sync, Instagram};
 
 $cmd = $argv[1] ?? '';
 $arg = $argv[2] ?? '';
@@ -108,6 +108,20 @@ switch ($cmd) {
     case 'columns':
         $cols = static fn (string $t) => array_column(Db::all("PRAGMA table_info($t)"), 'name');
         echo Util::json(['users' => $cols('users'), 'push' => $cols('push_subscriptions'), 'schema' => Settings::get('schema_version')]);
+        break;
+
+    case 'instagram-run':
+        // Cronjob-Teil für Instagram (veröffentlichen, erinnern, abgleichen, verlängern)
+        echo Util::json(['out' => Instagram::run()]);
+        break;
+
+    case 'instagram-age':
+        // Zugang künstlich altern lassen: vor 2 Tagen verlängert, läuft in 5 Tagen ab
+        $t = Settings::get('instagram_token');
+        $t['refreshed'] = time() - 2 * 86400;
+        $t['expires'] = time() + 5 * 86400;
+        Settings::set('instagram_token', $t);
+        echo Util::json(['ok' => true]);
         break;
 
     default:

@@ -14,6 +14,8 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 | **K – Auswertungen und Datensicherung** | Marius | ca. 10 Min. |
 | **L – Antworten, Kundeninfos und Versand** | alle | zum Nachlesen |
 | **M – Probelauf für den Members Club** | Admins | ca. 10 Min. |
+| **N – Instagram** | Marius einmalig (Meta-App), danach alle mit Zugang | ca. 20 Min. |
+| **Update auf 1.7** | Marius, wenn die App schon läuft | ca. 5 Min. + Teil N |
 
 **Bereitlegen:**
 - Zugang zum netcup **Customer Control Panel (CCP)**: <https://www.customercontrolpanel.de>
@@ -321,6 +323,14 @@ Gilt auch für das Update von 1.4 direkt auf 1.6. Alle Daten bleiben erhalten.
 6. Den Club auf Version 1.2 bringen: [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.1 → 1.2**.
 7. **iPhone-Widget**: Skript einmal neu kopieren und in Scriptable ersetzen (Teil D). Neu: das Club-Widget mit dem Parameter `club`.
 
+## Update auf Version 1.7 (wenn die App schon läuft)
+
+Neu: **Instagram** – Auswertung, Beiträge planen und veröffentlichen, Kommentare beantworten. Alle Daten bleiben erhalten.
+
+1. Neue **`perfumecloud-team-app-upload.zip`** wie in A5 hochladen und mit „Vorhandene Dateien ersetzen“ entpacken (oder automatisch über Teil E).
+2. Die App einmal öffnen. Unter **Einstellungen** steht ganz unten „Version 1.7.0“. Falls etwas hakt: **Einstellungen → Integrationen → Wartung → Datenbank aktualisieren**.
+3. Instagram verbinden: **Teil N**.
+
 ## Teil K – Auswertungen und Datensicherung
 
 Alles unter **Einstellungen → Auswertungen** (nur Admins).
@@ -378,6 +388,98 @@ Damit Push-Mitteilungen auf deinem Handy ankommen: in der Club-App (`app.perfume
 
 Testbestellungen zählen nicht in Statistik und Wochenrückblick.
 
+## Teil N – Instagram
+
+Die Team-App verbindet sich mit eurem Instagram-Konto. Im Menü (am Computer links, am Handy über **Statistik → Instagram**) gibt es dann:
+
+- **Übersicht:** Follower und Zuwachs, erreichte Konten, Aufrufe, Interaktionen und Klicks auf Links (7 Tage, mit Vergleich zur Vorwoche), Verläufe, was bei euch funktioniert (Formate, Wochentage, Tageszeiten, Hashtags), die stärksten Beiträge, die Zielgruppe (Alter, Geschlecht, Städte, ab 100 Followern) und die nächsten geplanten Beiträge.
+- **Beiträge:** alle Beiträge mit Reichweite, Likes, Kommentaren, Speicherungen und Interaktionsrate, sortier- und filterbar.
+- **Planer:** Beiträge vorbereiten, prüfen, freigeben und veröffentlichen lassen.
+- **Kommentare:** offene Kommentare der letzten 30 Tage, direkt aus der App beantworten.
+
+Die Zahlen gleicht die App stündlich ab (braucht den Cronjob aus A10). Der **Wochenrückblick** (Teil K2) enthält Follower, erreichte Konten, offene Kommentare und den stärksten Beitrag der Woche.
+
+**Voraussetzung:** Das Instagram-Konto ist ein **professionelles Konto** (Business oder Creator). Umstellen in der Instagram-App: **Einstellungen → Kontotyp und Tools → Zu professionellem Konto wechseln**. Eine Facebook-Seite braucht ihr nicht.
+
+### N1 · Meta-App anlegen (Marius, einmalig, ca. 15 Min.)
+
+Instagram erlaubt den Zugriff nur über eine eigene App im Meta-Entwicklerbereich. Sie ist kostenlos und nur für euer eigenes Konto. Eine Prüfung durch Meta ist dafür nicht nötig. Die Bezeichnungen im Dashboard können je nach Sprache leicht abweichen; die englischen stehen in Klammern.
+
+1. <https://developers.facebook.com/apps> öffnen und mit einem Facebook-Konto anmelden. Beim ersten Mal fragt Meta, ob ihr euch als Entwickler registrieren wollt: bestätigen.
+2. **App erstellen** (Create App). Name z. B. „Perfume Cloud Team“, Kontakt-E-Mail eintragen. Als **Anwendungsfall** (Use case) **„Nachrichten und Inhalte auf Instagram verwalten“** (Manage messaging & content on Instagram) wählen. Unternehmensportfolio: ein vorhandenes wählen oder „Ich möchte noch kein Unternehmensportfolio verbinden“. **App erstellen**.
+3. Im Dashboard links **Anwendungsfälle** (Use cases) → beim Instagram-Anwendungsfall **Anpassen** (Customize) → **API-Einrichtung mit Instagram-Login** (API setup with Instagram login).
+4. **Berechtigungen** (Permissions and features): bei diesen vier jeweils **Hinzufügen** (Add), falls sie nicht schon dabei sind:
+   - `instagram_business_basic`
+   - `instagram_business_content_publish`
+   - `instagram_business_manage_comments`
+   - `instagram_business_manage_insights`
+5. Oben auf der Seite **API-Einrichtung mit Instagram-Login** stehen **Instagram-App-ID** und **Instagram-App-Secret** (auf **Anzeigen** tippen). Beide braucht ihr in N2. Achtung: Die App-ID oben links im Dashboard ist die Facebook-App-ID, die passt **nicht**.
+6. Weiter unten **Instagram-Business-Login einrichten** (Set up Instagram business login) → **Business-Login-Einstellungen** (Business login settings). Bei **OAuth-Weiterleitungs-URIs** (OAuth redirect URIs) die Adresse aus der Team-App eintragen (**Einstellungen → Integrationen → Instagram → Kopieren**), normalerweise `https://team.perfumecloud.de/api/instagram/callback`. **Speichern**.
+7. Links **App-Rollen → Rollen** (App roles → Roles) → **Personen hinzufügen** → **Instagram-Tester** → euren Instagram-Benutzernamen eintragen. Dann auf <https://www.instagram.com/accounts/manage_access/> (mit dem Instagram-Konto angemeldet) unter **Tester-Einladungen** die Einladung **annehmen**.
+
+> 🔐 Das App-Secret ist ein Passwort: nur in die Team-App und in die Notion-Passwortliste, nicht in Chats.
+
+### N2 · In der Team-App verbinden (Marius)
+
+1. **Einstellungen → Integrationen → Instagram**: Instagram-App-ID und Instagram-App-Secret eintragen → **Speichern**.
+2. **Mit Instagram verbinden** → bei Instagram mit dem Konto anmelden, das ihr verbinden wollt → alle Berechtigungen erlauben. Danach geht es automatisch zurück, oben steht „Instagram verbunden mit @…“.
+3. Der erste Abgleich lädt die Beiträge der letzten Monate. Die Zahlen je Beitrag kommen über die nächsten Stunden dazu (pro Stunde 30 Beiträge).
+
+Der Zugang gilt 60 Tage und wird automatisch verlängert. Klappt das nicht (z. B. Instagram-Passwort geändert), bekommen die Admins eine Woche vor Ablauf einen Push und unter **Einstellungen → Integrationen → Instagram** steht ein Hinweis: dann **Neu verbinden**.
+
+**Alternative ohne Weiterleitung:** In der Meta-App unter **API-Einrichtung mit Instagram-Login → Zugriffsschlüssel generieren** (Generate access tokens) das Konto hinzufügen und **Token generieren**. Den Schlüssel in der Team-App unter **Alternative: Zugangsschlüssel direkt einfügen** eintragen. App-ID und Secret trotzdem speichern, sonst kann die App ihn nicht verlängern.
+
+### N3 · Wer darf was
+
+- **Admins** sehen Instagram immer. Für andere unter **Einstellungen → Team** bei der Person **Instagram-Zugang** tippen.
+- **Vier-Augen-Prinzip** (Einstellungen → Integrationen → Instagram, Standard: an): Freigeben muss jemand anderes als die Person, die den Beitrag vorbereitet hat.
+- **Hashtag-Set**: eure Standard-Hashtags, im Planer mit einem Tipp unter den Text gesetzt.
+- Push **„Instagram“** (Einstellungen → Benachrichtigungen): Beitrag zur Prüfung, freigegeben, veröffentlicht oder fehlgeschlagen, Erinnerung zum Posten, neue Kommentare.
+
+### N4 · Beiträge planen
+
+1. **Instagram → Planer → Neuer Beitrag** (oder direkt **Bild**, **Karussell**, **Story**, **Reel**).
+2. **Fotos hinzufügen** (vom Handy oder Computer, auch iPhone-Fotos) oder **Bilder und Text aus dem Shop**. Die App schneidet auf das gewählte Format zu: **4:5** (empfohlen im Feed), **1:1**, **Quer** oder **Original**; Storys **9:16**. Mit den Pfeilen ändert ihr die Reihenfolge. Ab dem zweiten Bild wird ein Bild-Beitrag zum Karussell.
+3. **Text** schreiben. Zähler für Zeichen (max. 2.200), Hashtags (max. 30) und Erwähnungen (max. 20). **Notiz fürs Team** wird nicht veröffentlicht.
+4. **Zeitpunkt**: sofort nach der Freigabe oder geplant. Unter dem Feld steht, wann eure Beiträge laut Auswertung am meisten Konten erreichen.
+5. Die **Vorschau** zeigt den Beitrag wie im Feed. **Zur Prüfung geben**.
+6. Jemand anderes öffnet **Prüfen & freigeben**, sieht Vorschau und Details und tippt **Freigeben**. Oder **Zurückgeben** mit einem Satz, was fehlt.
+7. Bei **Automatisch** veröffentlicht die App zum Zeitpunkt selbst (sofort fällige direkt nach der Freigabe). Ihr bekommt einen Push, im Planer steht der Beitrag unter **Veröffentlicht** mit Link und später mit Zahlen.
+8. Bei **Erinnerung, selbst posten** (und immer bei **Reels**) kommt zum Zeitpunkt ein Push. **Jetzt posten** zeigt die Schritte: Text kopieren, Bilder sichern, in der Instagram-App posten, **Ist gepostet**. Den Link zum Beitrag könnt ihr dazuschreiben; ohne Link ordnet die App ihn beim nächsten Abgleich über den Text zu.
+
+Geht beim Veröffentlichen etwas schief, steht der Grund am Beitrag unter **Nicht veröffentlicht** und es kommt ein Push: **Erneut versuchen** oder **Bearbeiten**. Wer einen freigegebenen Beitrag ändert, macht ihn wieder zum Entwurf; er muss neu geprüft werden. Bereits veröffentlichte Beiträge lassen sich nur in der Instagram-App ändern oder löschen.
+
+**Was über die Schnittstelle nicht geht** und deshalb mit Erinnerung läuft: Reels und Videos, Musik, Story-Sticker (Links, Umfragen), Produkt- und Personen-Markierungen, Collabs.
+
+### N5 · Kommentare
+
+**Instagram → Kommentare** zeigt Kommentare auf euren Beiträgen der letzten 30 Tage, offene zuerst. **Antworten** schreibt direkt als euer Konto auf Instagram (mit Schnellantworten zum Anpassen). **Erledigt** blendet einen Kommentar ohne Antwort aus, z. B. Emojis oder Spam. Neue Kommentare kommen mit dem stündlichen Abgleich, mit Push.
+
+### N6 · Auswertung mit Claude und vorbereitete Beiträge
+
+1. **Instagram → Übersicht** → ganz unten **Zusammenfassung für Claude** → **Kopieren**. Der Text enthält Kennzahlen, Formate, Zeiten, Hashtags und die letzten Beiträge mit Zahlen, aber keine Namen von Kommentierenden.
+2. Im Chat mit Claude einfügen und z. B. schreiben: „Analysiere unser Instagram und bereite 6 Beiträge für die nächsten zwei Wochen vor.“
+3. Claude schickt eine **JSON-Datei** mit Entwürfen. **Planer → Entwürfe importieren** → Datei wählen. Die Entwürfe erscheinen unter **Entwürfe** mit „Importiert“, Produktbilder holt die App aus dem Shop.
+4. Durchsehen, anpassen, **Zur Prüfung geben**, freigeben wie in N4. Ohne eure Freigabe geht nichts raus.
+
+Aufbau der Datei (für Claude oder zum Selbermachen):
+
+```json
+{
+  "posts": [
+    {
+      "kind": "carousel",
+      "caption": "Text mit #hashtags",
+      "note": "Idee, Bildwünsche, Musik …",
+      "scheduled_at": "2026-10-23T18:00:00+02:00",
+      "product": "handle-oder-titel-des-produkts"
+    }
+  ]
+}
+```
+
+`kind`: `image`, `carousel`, `story` oder `reel`. Optional `mode: "manual"` für Erinnerung statt automatisch, `images` mit Bild-Adressen von `cdn.shopify.com`. Höchstens 30 Beiträge pro Datei. Ein Zeitpunkt in der Vergangenheit wird weggelassen.
+
 ## Wenn etwas hakt
 
 | Problem | Lösung |
@@ -406,4 +508,10 @@ Testbestellungen zählen nicht in Statistik und Wochenrückblick.
 | „Letzte Sicherung fehlgeschlagen“ | Die Meldung darunter nennt den Grund. Ohne Sicherungs-Passwort wird nichts gesichert (K3). |
 | Probelauf fehlt unter Members Club | Nur Admins sehen ihn. |
 | Probelauf: „Push nur im Protokoll“ | In der Club-App mit derselben E-Mail wie in der Team-App anmelden und Mitteilungen erlauben (Teil M). |
+| Instagram fehlt im Menü | Nur Admins und Personen mit **Instagram-Zugang** sehen es (N3). Andere sehen es erst, wenn das Konto verbunden ist. |
+| Instagram: „Invalid redirect_uri“ beim Verbinden | Die Weiterleitungs-URI in der Meta-App (N1, Schritt 6) muss genau so lauten wie in der Team-App angezeigt, mit `https://`. |
+| Instagram: „Insufficient developer role“ | Das Instagram-Konto ist noch kein Instagram-Tester der Meta-App oder die Einladung ist nicht angenommen (N1, Schritt 7). |
+| Instagram: „Es fehlen Berechtigungen“ | In der Meta-App die vier Berechtigungen hinzufügen (N1, Schritt 4), dann **Neu verbinden** und bei Instagram alles erlauben. |
+| Instagram: Veröffentlichen schlägt fehl, „Bild nicht abrufbar“ | Instagram holt die Bilder von `team.perfumecloud.de`. Die Adresse muss ohne Passwortschutz (z. B. Plesk-Verzeichnisschutz) erreichbar sein. |
+| Instagram: Beiträge ohne Zahlen | Die Zahlen kommen nach und nach (30 Beiträge pro Stunde). Für Beiträge von vor der Umstellung aufs professionelle Konto liefert Instagram keine Zahlen. |
 | Probelauf: Aufräumen storniert nicht | `write_orders` fehlt (A9a). Die Bestellung im Shopify-Admin von Hand stornieren, „Artikel wieder auf Lager“ anhaken, „Kunden benachrichtigen“ aus. |

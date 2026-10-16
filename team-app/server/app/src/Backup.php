@@ -80,7 +80,7 @@ final class Backup
 
     // ---------- Sichern ----------
 
-    /** Tabellen der Datenbank, die gesichert werden (Team-App + club_…). */
+    /** Tabellen der Datenbank, die gesichert werden (Team-App, club_… und ig_…; Bilder des Instagram-Planers nicht). */
     public static function tables(): array
     {
         $names = Db::driver() === 'mysql'
@@ -88,7 +88,7 @@ final class Backup
             : array_column(Db::all("SELECT name AS n FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"), 'n');
         $team = ['users', 'tasks', 'notes', 'comments', 'emails', 'orders', 'events', 'activity', 'push_subscriptions', 'settings', 'customer_notes', 'reply_templates', 'replies', 'shipments'];
         $out = array_values(array_filter($names, static fn ($n) =>
-            !in_array($n, self::SKIP, true) && (in_array($n, $team, true) || str_starts_with((string) $n, 'club_'))));
+            !in_array($n, self::SKIP, true) && (in_array($n, $team, true) || str_starts_with((string) $n, 'club_') || str_starts_with((string) $n, 'ig_'))));
         sort($out);
         return $out;
     }

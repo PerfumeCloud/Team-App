@@ -31,6 +31,8 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
 import { Section } from '../components/section';
+import { InstagramIcon } from '../components/instagram-icon';
+import { InstagramSection } from '../components/instagram-settings';
 import { CustomerTest, ReportsPanel, SignatureSection, TemplatesPanel } from './SettingsMore';
 import { Avatar, Button, Chip, cx, IconButton, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
@@ -57,6 +59,7 @@ const PUSH_KINDS: { key: PushKind; label: string; hint: string }[] = [
   { key: 'shipping', label: 'Versand-Erinnerung', hint: 'Morgens, wenn Bestellungen zu lange auf den Versand warten' },
   { key: 'feedback', label: 'Unzufriedene Kundin', hint: 'Sofort, wenn jemand nach der Lieferung 1–2 Sterne gibt' },
   { key: 'weekly', label: 'Wochenrückblick', hint: 'Freitags die Zusammenfassung der Woche' },
+  { key: 'instagram', label: 'Instagram', hint: 'Beitrag zur Prüfung oder veröffentlicht, Erinnerung zum Posten, neue Kommentare' },
 ];
 
 export default function Settings() {
@@ -622,7 +625,7 @@ function Team() {
         title="Team"
         description={
           admin
-            ? 'Jede Person bekommt ein eigenes Konto. Am einfachsten per Einladung: Die Person bekommt eine Mail mit einem Link und legt ihr Passwort selbst fest. Admins haben immer Zugang zum Members Club, andere nur mit „Club-Zugang“.'
+            ? 'Jede Person bekommt ein eigenes Konto. Am einfachsten per Einladung: Die Person bekommt eine Mail mit einem Link und legt ihr Passwort selbst fest. Admins haben immer Zugang zum Members Club und zu Instagram, andere nur mit „Club-Zugang“ bzw. „Instagram-Zugang“.'
             : undefined
         }
       >
@@ -640,6 +643,9 @@ function Team() {
               {u.role === 'admin' && <Chip tone="accent">Admin</Chip>}
               {u.role !== 'admin' && !!u.club_access && (
                 <Chip icon={<Crown className="h-3 w-3" />}>Club</Chip>
+              )}
+              {u.role !== 'admin' && !!u.instagram_access && (
+                <Chip icon={<InstagramIcon className="h-3 w-3" />}>Instagram</Chip>
               )}
               {admin && u.id !== me.id && (
                 <div className="flex flex-wrap gap-1">
@@ -671,6 +677,20 @@ function Team() {
                       }}
                     >
                       {u.club_access ? 'Kein Club' : 'Club-Zugang'}
+                    </Button>
+                  )}
+                  {u.role !== 'admin' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<InstagramIcon className="h-3.5 w-3.5" />}
+                      title="Zugang zu Instagram: Auswertung, Beiträge planen und freigeben, Kommentare beantworten"
+                      onClick={async () => {
+                        await api('PUT', `/admin/users/${u.id}`, { instagram_access: !u.instagram_access }).catch((e) => toast(e.message, 'error'));
+                        await sync();
+                      }}
+                    >
+                      {u.instagram_access ? 'Kein Instagram' : 'Instagram-Zugang'}
                     </Button>
                   )}
                   <Button
@@ -1774,6 +1794,7 @@ function IntegrationsPanel() {
       </Section>
 
       <ClubSection />
+      <InstagramSection initial={data.instagram} />
 
       <Section
         title="Kalender: Feiertage & Aktionstage"

@@ -16,6 +16,7 @@ Diese Punkte gehören in die **Datenschutzerklärung**, die **Einwilligungstexte
 | 8 | Fristen und Aufräumen | Team | laufend |
 | 9 | Teilnahmebedingungen veröffentlichen | Shopify-Seite `/pages/club` | vor dem Club-Start |
 | 10 | Impressum und Datenschutz verlinken | Club-App, Mails | erledigt, nur prüfen |
+| 11 | Absatz „Instagram“ | Datenschutzerklärung | sobald Instagram in der Team-App verbunden ist |
 
 ---
 
@@ -78,6 +79,8 @@ Seit Mai 2022 müsst ihr bei Kundenbewertungen im Shop angeben, **ob und wie** i
 | Aufgaben in der Team-App aus schlechten Bewertungen | **von Hand**: erledigte Aufgaben nach spätestens 24 Monaten löschen | Team |
 | Klicks auf Empfehlungslinks | Zahl je Tag und Mitglied, bis zum Austritt | automatisch |
 | Sicherungen auf dem Server | 14 Tage | automatisch |
+| Instagram-Kommentare in der Team-App (Benutzername, Text) | 90 Tage | automatisch |
+| Bilder geplanter Instagram-Beiträge auf dem Server | 30 Tage nach dem Veröffentlichen, gelöschte Entwürfe sofort | automatisch |
 | Wochen-Sicherung per Mail an auswertung@ | **von Hand**: im Postfach eine Regel „Mails mit Betreff ‚Datensicherung‘ nach 8 Wochen löschen“ anlegen oder regelmäßig aufräumen | Marius |
 
 ## 9. Teilnahmebedingungen veröffentlichen
@@ -87,3 +90,16 @@ Neue Fassung: [TEILNAHMEBEDINGUNGEN.md](TEILNAHMEBEDINGUNGEN.md), HTML zum Einf�
 ## 10. Impressum und Datenschutz in Club-App und Mails
 
 Bereits eingebaut: Die Bewertungsseite, die Abmeldeseite und jede Befragungs- und Nachkauf-Mail verlinken auf Datenschutzerklärung (`/policies/privacy-policy`) und Impressum (`/policies/legal-notice`) im Shop. Beide Seiten müssen in Shopify unter **Einstellungen → Richtlinien** gepflegt sein. Liegen sie später unter einer anderen Adresse: Club-Admin → Aktionen → Befragung → E-Mail → „Datenschutz-Link“ und „Impressum-Link“.
+
+## 11. Instagram
+
+Die Team-App ist mit eurem Instagram-Konto verbunden (Auswertung, Beiträge veröffentlichen, Kommentare beantworten). Dafür gilt:
+
+- **Kommentare:** Benutzername, Text, Zeitpunkt und Likes von Kommentaren auf euren Beiträgen werden in der Team-App gespeichert, damit ihr sie beantworten könnt, und nach **90 Tagen automatisch gelöscht**. Die „Zusammenfassung für Claude“ enthält keine Benutzernamen.
+- **Statistik:** Reichweite, Zielgruppe (Alter, Geschlecht, Städte) und Kennzahlen liefert Instagram nur zusammengefasst, ohne einzelne Personen.
+- **Bilder:** Bilder geplanter Beiträge liegen auf eurem Server. Öffentlich abrufbar (über eine nicht erratbare Adresse) sind sie nur zwischen Freigabe und Veröffentlichung, damit Instagram sie abholen kann; danach wieder nur für das Team. 30 Tage nach dem Veröffentlichen werden sie gelöscht.
+- **Bildrechte:** Für jedes Bild und jede Musik müsst ihr die Rechte haben. Bei Personen auf Fotos deren Einwilligung einholen. Werbung mit Partnern (Kooperationen, Gratis-Produkte) kennzeichnen.
+
+Vorschlag für die Datenschutzerklärung (ergänzt den Absatz zu Social Media, falls es ihn schon gibt):
+
+> **Instagram.** Wir betreiben ein Unternehmensprofil auf Instagram (Meta Platforms Ireland Ltd., Merrion Road, Dublin 4, Irland). Für die Statistiken zu unserem Profil (z. B. Reichweite, Alter, Geschlecht und Städte unserer Follower, nur zusammengefasst) sind wir mit Meta gemeinsam verantwortlich (Art. 26 DSGVO); die Vereinbarung von Meta dazu findet ihr unter <https://www.facebook.com/legal/terms/page_controller_addendum>. Wenn du einen unserer Beiträge kommentierst, verarbeiten wir deinen Benutzernamen und deinen Kommentar in unserem internen Team-Werkzeug, um dir zu antworten (Art. 6 Abs. 1 lit. f DSGVO, unser Interesse: Kommunikation mit unserer Community). Diese Daten löschen wir dort nach 90 Tagen. Das Werkzeug läuft auf unserem eigenen Server bei der netcup GmbH in Deutschland. Für die Verarbeitung durch Instagram selbst gilt die Datenschutzrichtlinie von Instagram: <https://privacycenter.instagram.com/policy>.

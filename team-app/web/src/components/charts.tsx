@@ -30,6 +30,19 @@ function niceTicks(max: number, count = 4): number[] {
   return ticks;
 }
 
+/** Achse von knapp unter dem kleinsten bis knapp über dem größten Wert (für Bestände wie Follower). */
+function rangeTicks(min: number, max: number, count = 4): number[] {
+  const span = max - min || Math.max(1, Math.abs(max) * 0.02);
+  const raw = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
+  const start = Math.floor(min / step) * step;
+  const ticks: number[] = [];
+  for (let v = start; v < max + step * 0.999; v += step) ticks.push(v);
+  if (ticks.length < 2) ticks.push(start + step);
+  return ticks;
+}
+
 const dateShort = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short' });
 const dateLong = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
 const parseDay = (iso: string) => {
@@ -43,22 +56,38 @@ export interface SeriesPoint {
   extra?: string;
 }
 
-export function AreaChart({ data, height = 220, format = euro }: { data: SeriesPoint[]; height?: number; format?: (v: number) => string }) {
+export function AreaChart({
+  data,
+  height = 220,
+  format = euro,
+  axis = euroAxis,
+  zero = true,
+}: {
+  data: SeriesPoint[];
+  height?: number;
+  format?: (v: number) => string;
+  /** Beschriftung der Achse (Standard: Euro) */
+  axis?: (v: number) => string;
+  /** false = Achse beginnt nicht bei 0, dann nur Linie ohne Fläche (z. B. Follower-Bestand) */
+  zero?: boolean;
+}) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...data.map((d) => d.value), 0);
-  const ticks = useMemo(() => niceTicks(max), [max]);
-  const longest = Math.max(...ticks.map((t) => euroAxis(t).length));
+  const min = Math.min(...data.map((d) => d.value));
+  const ticks = useMemo(() => (zero || !data.length ? niceTicks(max) : rangeTicks(min, max)), [zero, data.length, min, max]);
+  const longest = Math.max(...ticks.map((t) => axis(t).length));
   const pad = { l: Math.ceil(longest * 6.4) + 14, r: 14, t: 12, b: 28 };
   const w = Math.max(width, 0);
   const innerW = Math.max(w - pad.l - pad.r, 1);
   const innerH = height - pad.t - pad.b;
+  const bottom = ticks[0];
   const top = ticks[ticks.length - 1] || 1;
   const x = (i: number) => pad.l + (data.length <= 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
-  const y = (v: number) => pad.t + innerH - (v / top) * innerH;
+  const y = (v: number) => pad.t + innerH - ((v - bottom) / (top - bottom || 1)) * innerH;
 
   const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join('');
-  const area = data.length ? `${line}L${x(data.length - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z` : '';
+  const area = data.length && zero ? `${line}L${x(data.length - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z` : '';
 
   const labelEvery = Math.max(1, Math.ceil(data.length / Math.max(2, Math.floor(innerW / 76))));
   const xLabels = data
@@ -99,7 +128,7 @@ export function AreaChart({ data, height = 220, format = euro }: { data: SeriesP
             <g key={t}>
               <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} stroke="var(--grid)" strokeWidth={1} shapeRendering="crispEdges" />
               <text x={pad.l - 10} y={y(t)} dy="0.32em" textAnchor="end" className="tnum fill-ink-3 text-[11px]">
-                {euroAxis(t)}
+                {axis(t)}
               </text>
             </g>
           ))}
@@ -108,7 +137,7 @@ export function AreaChart({ data, height = 220, format = euro }: { data: SeriesP
               {dateShort.format(parseDay(d.date))}
             </text>
           ))}
-          <path d={area} fill="var(--chart-wash)" />
+          {area && <path d={area} fill="var(--chart-wash)" />}
           <path d={line} fill="none" stroke="var(--chart)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           {data.length > 0 && hover === null && (
             <circle cx={x(last)} cy={y(data[last].value)} r={4} fill="var(--chart)" stroke="rgb(var(--surface))" strokeWidth={2} />
@@ -141,18 +170,20 @@ export function AreaChart({ data, height = 220, format = euro }: { data: SeriesP
 }
 
 /** Kleine Verlaufslinie ohne Achsen – für Kennzahl-Kacheln. */
-export function Sparkline({ values, height = 36 }: { values: number[]; height?: number }) {
+export function Sparkline({ values, height = 36, zero = true }: { values: number[]; height?: number; zero?: boolean }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const max = Math.max(...values, 1);
+  // zero = false: Verlauf zwischen kleinstem und größtem Wert (Bestände ändern sich prozentual wenig)
+  const min = zero ? 0 : Math.min(...values);
   const n = values.length;
   const px = (i: number) => (n <= 1 ? width / 2 : 2 + (i / (n - 1)) * (width - 6));
-  const py = (v: number) => 3 + (height - 6) * (1 - v / max);
+  const py = (v: number) => 3 + (height - 6) * (1 - (v - min) / (max - min || 1));
   const d = values.map((v, i) => `${i ? 'L' : 'M'}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join('');
   return (
     <div ref={ref} style={{ height }} aria-hidden>
       {width > 0 && n > 0 && (
         <svg width={width} height={height} className="block">
-          <path d={`${d}L${px(n - 1)},${height}L${px(0)},${height}Z`} fill="var(--chart-wash)" />
+          {zero && <path d={`${d}L${px(n - 1)},${height}L${px(0)},${height}Z`} fill="var(--chart-wash)" />}
           <path d={d} fill="none" stroke="var(--chart)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           <circle cx={px(n - 1)} cy={py(values[n - 1])} r={3.5} fill="var(--chart)" stroke="rgb(var(--surface))" strokeWidth={2} />
         </svg>

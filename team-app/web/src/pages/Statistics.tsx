@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { ArrowDownRight, ArrowUpRight, Ban, CalendarCheck, ChartLine, Crown, CircleAlert, PackageCheck, RefreshCw, Settings, Table2, Trophy, TriangleAlert, Truck, Undo2 } from 'lucide-react';
 import { PageHeader } from '../components/AppShell';
+import { InstagramIcon } from '../components/instagram-icon';
 import { AreaChart, BarList, StatTile, Trend } from '../components/charts';
 import { useWeekly, WeeklyPreview } from '../components/weekly';
 import { Button, Chip, cx, EmptyState, IconButton, Segmented, Spinner } from '../components/ui';
@@ -91,6 +92,11 @@ export default function Statistics() {
             {meta?.clubConfigured && (
               <Button size="sm" variant="soft" icon={<Crown className="h-3.5 w-3.5" />} onClick={() => navigate('/club')}>
                 Members Club
+              </Button>
+            )}
+            {meta?.instagram && (
+              <Button size="sm" variant="soft" icon={<InstagramIcon className="h-3.5 w-3.5" />} onClick={() => navigate('/instagram')}>
+                Instagram
               </Button>
             )}
             <IconButton label="Aktualisieren" onClick={() => load(days)}>

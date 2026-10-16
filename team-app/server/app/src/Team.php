@@ -215,6 +215,7 @@ final class Team
                 'pushLastOk' => (int) Db::value('SELECT MAX(last_ok_at) FROM push_subscriptions WHERE user_id = ?', [$u['id']]) ?: null,
                 'pushError' => Db::value('SELECT last_error FROM push_subscriptions WHERE user_id = ? AND fail_count > 0 ORDER BY fail_count DESC', [$u['id']]),
                 'clubAccess' => Auth::clubAccess($u),
+                'instagramAccess' => Instagram::access($u),
                 'mailPush' => !empty(Auth::prefs($u)['push']['mail']),
                 'mailboxes' => MailJob::visibleAddresses($u['id']),
                 'invitePending' => self::invitePending($u['id']),

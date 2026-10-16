@@ -3,7 +3,7 @@ export type UserColor = 'blue' | 'sage' | 'rose' | 'amber' | 'plum' | 'slate';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type Priority = 'low' | 'normal' | 'high';
 export type NoteColor = 'none' | 'cream' | 'blue' | 'sage' | 'rose' | 'sand';
-export type PushKind = 'mail' | 'orders' | 'tasks' | 'comments' | 'reminders' | 'events' | 'shipping' | 'weekly' | 'feedback';
+export type PushKind = 'mail' | 'orders' | 'tasks' | 'comments' | 'reminders' | 'events' | 'shipping' | 'weekly' | 'feedback' | 'instagram';
 export type EventKind = 'termin' | 'meeting' | 'event' | 'frist';
 
 /** Termin im Team-Kalender. Datum/Uhrzeit in Ortszeit; start_time null = ganztägig. */
@@ -36,6 +36,8 @@ export interface User {
   role: 'admin' | 'member';
   /** Zugang zum Members Club (Admins haben ihn immer) */
   club_access?: number;
+  /** Zugang zu Instagram: Auswertung, Planer, Kommentare (Admins haben ihn immer) */
+  instagram_access?: number;
   updated_at: number;
   deleted: number;
 }
@@ -148,6 +150,8 @@ export interface Meta {
   mailLastFetch: number;
   /** Members Club verbunden und diese Person darf ihn sehen */
   clubConfigured?: boolean;
+  /** Instagram: null = kein Zugang (oder noch nicht verbunden und kein Admin) */
+  instagram?: { connected: boolean; username: string | null } | null;
   version?: string;
 }
 
@@ -295,6 +299,7 @@ export interface Integrations {
   cron: { url: string; lastRun: number; jobsLastRun: number; script: string; live: LiveStatus };
   settings: { low_stock_threshold: number; base_url: string; holiday_state: string; holidays_on: boolean; shop_days_on: boolean };
   pushDevices: number;
+  instagram: InstagramSettings;
   tests?: Record<string, MailCheck>;
   test?: { ok: boolean; message: string };
   summary?: Record<string, unknown>;
@@ -640,4 +645,157 @@ export interface ReportsAdmin {
   reports: { email: string; weekly: WeeklyConfig; lastWeekly: { at: number; message: string } | null; days: string[] };
   backup: BackupStatus;
   shipping: ShippingSettings;
+}
+
+// ---------------- Instagram ----------------
+
+export interface InstagramSettings {
+  app_id: string;
+  hasSecret: boolean;
+  /** Muss im Meta App Dashboard als Weiterleitungs-URI eingetragen sein */
+  redirectUri: string;
+  connected: boolean;
+  username: string | null;
+  expires: number | null;
+  connectedAt: number | null;
+  status: { ok: boolean; at: number; message: string } | null;
+  lastSync: number;
+  four_eyes: boolean;
+  hashtags: string;
+  scopes: string[];
+  /** null = unbekannt (Zugang direkt eingefügt) */
+  missingScopes: string[] | null;
+}
+
+export type IgFormat = 'reel' | 'carousel' | 'image' | 'video' | 'story';
+
+export interface IgMedia {
+  id: string;
+  format: IgFormat;
+  caption: string;
+  permalink: string | null;
+  thumb: string | null;
+  posted_at: number;
+  likes: number;
+  comments: number;
+  saved: number | null;
+  shares: number | null;
+  reach: number | null;
+  views: number | null;
+  interactions: number;
+  avg_watch_s: number | null;
+  /** Interaktionen je erreichtem Konto in % */
+  rate: number | null;
+}
+
+export interface IgGroup {
+  count: number;
+  avg: number | null;
+  avg_interactions: number | null;
+  avg_rate: number | null;
+}
+
+export type IgTotals = Partial<Record<'reach' | 'views' | 'accounts_engaged' | 'total_interactions' | 'profile_links_taps' | 'likes' | 'comments' | 'saves' | 'shares', number>>;
+
+export interface IgOverview {
+  connected: boolean;
+  admin: boolean;
+  profile: { username: string; name: string; account_type: string; picture: string; followers: number | null; follows: number | null; media_count: number | null; at: number } | null;
+  status: { ok: boolean; at: number; message: string } | null;
+  lastSync: number;
+  kpis: {
+    followers: number | null;
+    followers_7: number | null;
+    followers_30: number | null;
+    cur: IgTotals;
+    prev: IgTotals;
+    posts_30: number;
+    rate_30: number | null;
+    unanswered: number;
+  };
+  followers_series: { day: string; value: number }[];
+  reach_series: { day: string; value: number }[];
+  media: IgMedia[];
+  analysis: {
+    metric: 'reach' | 'interactions';
+    posts: number;
+    overall: number | null;
+    formats: Partial<Record<IgFormat, IgGroup>>;
+    weekdays: Record<string, IgGroup>;
+    slots: Partial<Record<'morgen' | 'mittag' | 'nachmittag' | 'abend' | 'nacht', IgGroup>>;
+    hashtags: { avg_count: number | null; top: { tag: string; count: number; avg: number | null }[] };
+    captions: { length: Record<string, IgGroup>; question: Record<string, IgGroup> };
+    rhythm: { per_week: number; days_since: number | null };
+    top: string[];
+    tips: { kind: string; text: string }[];
+  };
+  audience: { at: number; age?: { label: string; value: number }[]; gender?: { label: string; value: number }[]; city?: { label: string; value: number }[]; country?: { label: string; value: number }[] } | null;
+  planned: IgPost[];
+  message?: string;
+}
+
+export type IgPostKind = 'image' | 'carousel' | 'story' | 'reel';
+export type IgPostStatus = 'draft' | 'review' | 'approved' | 'publishing' | 'published' | 'failed';
+
+export interface IgPost {
+  id: string;
+  kind: IgPostKind;
+  /** auto = die App veröffentlicht, manual = Erinnerung, ihr postet selbst */
+  mode: 'auto' | 'manual';
+  caption: string;
+  note: string | null;
+  images: { token: string; url: string; w: number; h: number }[];
+  scheduled_at: number | null;
+  status: IgPostStatus;
+  status_label: string;
+  review_note: string | null;
+  error: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  approved_by_name: string | null;
+  published_at: number | null;
+  permalink: string | null;
+  source: 'team' | 'import' | null;
+  metrics: { reach: number | null; likes: number; comments: number; saved: number | null; shares: number | null; interactions: number | null } | null;
+  updated_at: number;
+}
+
+export interface IgPostList {
+  posts: IgPost[];
+  me: { id: string };
+  four_eyes: boolean;
+  hashtags: string;
+  connected: boolean;
+  username: string;
+  shopify: boolean;
+  created?: number;
+  notes?: string[];
+}
+
+export interface IgProduct {
+  id: string;
+  title: string;
+  handle: string;
+  url: string;
+  description: string;
+  price: number | null;
+  images: { url: string; w: number; h: number }[];
+}
+
+export interface IgComment {
+  id: string;
+  username: string;
+  text: string;
+  at: number;
+  likes: number;
+  open: boolean;
+  replied: boolean;
+  replied_by: string | null;
+  post: { caption: string; permalink: string | null; thumb: string | null };
+}
+
+export interface IgComments {
+  comments: IgComment[];
+  unanswered: number;
+  username: string;
 }

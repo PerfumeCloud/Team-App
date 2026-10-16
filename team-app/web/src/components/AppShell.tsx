@@ -6,6 +6,7 @@ import { relative } from '../lib/format';
 import { useStats } from '../lib/stats';
 import { useNow } from '../lib/hooks';
 import { Avatar, cx, Logo } from './ui';
+import { InstagramIcon } from './instagram-icon';
 
 // mobile: false → am Handy nicht in der Leiste unten (Ideen gibt es dort oben rechts als Knopf)
 const NAV = [
@@ -20,6 +21,8 @@ const NAV = [
   { to: '/statistik', label: 'Statistik', icon: ChartLine },
   // Nur mit Club-Zugang; am Handy über Statistik erreichbar
   { to: '/club', label: 'Members Club', icon: Crown, mobile: false, club: true },
+  // Nur mit Instagram-Zugang; am Handy über Statistik erreichbar
+  { to: '/instagram', label: 'Instagram', icon: InstagramIcon, mobile: false, instagram: true },
 ];
 
 function useBadges() {
@@ -65,7 +68,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const badges = useBadges();
   const club = useStore((s) => !!s.meta?.clubConfigured);
   const shop = useStore((s) => !!s.meta?.shopifyConfigured);
-  const nav = NAV.filter((n) => (!n.club || club) && (!n.shop || shop));
+  const instagram = useStore((s) => !!s.meta?.instagram);
+  const nav = NAV.filter((n) => (!n.club || club) && (!n.shop || shop) && (!n.instagram || instagram));
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to));

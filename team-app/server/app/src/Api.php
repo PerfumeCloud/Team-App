@@ -246,6 +246,110 @@ final class Api
             // Einmal-Link (60 Sekunden) in den Club-Admin
             ['POST', '/club/sso', static fn () => Club::request('POST', '/internal/sso', ['user' => Club::user(Auth::requireClub())])],
 
+            // ---- Instagram (1.7) – nur mit Instagram-Zugang, Verbinden nur Admins; der Zugang bleibt auf dem Server ----
+            ['GET', '/instagram', static fn () => Instagram::overview(Instagram::requireAccess())],
+            ['POST', '/instagram/sync', static function () {
+                $me = Instagram::requireAccess();
+                if (Util::now() - (int) Settings::get('instagram_sync_at', 0) < 60000) {
+                    throw new HttpError(429, 'Gerade erst abgeglichen – bitte eine Minute warten.');
+                }
+                @set_time_limit(170);
+                try {
+                    $msg = Instagram::sync();
+                } catch (HttpError $e) {
+                    throw $e;
+                } catch (\Throwable $e) {
+                    throw new HttpError(502, $e->getMessage());
+                }
+                return ['message' => $msg] + Instagram::overview($me);
+            }],
+            ['GET', '/instagram/export', static fn () => ['text' => Instagram::export(Instagram::requireAccess())]],
+            // Anmeldung bei Instagram (Weiterleitung im Browser, daher GET)
+            ['GET', '/instagram/connect', static function () {
+                $me = Auth::user();
+                $target = '/einstellungen/integrationen?instagram=' . rawurlencode('Nur Admins können Instagram verbinden.') . '#instagram';
+                if ($me && $me['role'] === 'admin') {
+                    try {
+                        $target = Instagram::authorizeUrl($me);
+                    } catch (HttpError $e) {
+                        $target = '/einstellungen/integrationen?instagram=' . rawurlencode($e->getMessage()) . '#instagram';
+                    }
+                }
+                header('Cache-Control: no-store');
+                header('Location: ' . $target, true, 302);
+                return null;
+            }],
+            ['GET', '/instagram/callback', static function () {
+                header('Cache-Control: no-store');
+                header('Location: ' . Instagram::callback($_GET), true, 302);
+                return null;
+            }],
+            ['GET', '/instagram/posts', static fn () => InstagramPosts::list(Instagram::requireAccess())],
+            ['POST', '/instagram/posts', static fn () => InstagramPosts::save(Instagram::requireAccess(), Http::body(), null)],
+            ['POST', '/instagram/posts/import', static fn () => InstagramPosts::import(Instagram::requireAccess(), Http::body())],
+            ['PUT', "/instagram/posts/$uuid", static fn (string $id) => InstagramPosts::save(Instagram::requireAccess(), Http::body(), $id)],
+            ['DELETE', "/instagram/posts/$uuid", static function (string $id) {
+                Instagram::requireAccess();
+                InstagramPosts::delete($id);
+                return ['ok' => true];
+            }],
+            ['POST', "/instagram/posts/$uuid/(submit|approve|reject|cancel|retry|done)", static fn (string $id, string $action) => InstagramPosts::action(Instagram::requireAccess(), $id, $action, Http::body())],
+            // Bild als JPEG im Rumpf der Anfrage (die App wandelt Fotos vorher um)
+            ['POST', "/instagram/posts/$uuid/images", static function (string $id) {
+                Instagram::requireAccess();
+                return InstagramPosts::addImage($id, (string) file_get_contents('php://input'));
+            }],
+            ['GET', '/instagram/bild/([a-f0-9]{32})\.jpg', static function (string $token) {
+                InstagramPosts::serve($token);
+                return null;
+            }],
+            ['GET', '/instagram/products', static function () {
+                Instagram::requireAccess();
+                return InstagramPosts::products();
+            }],
+            ['GET', '/instagram/shopify-image', static function () {
+                Instagram::requireAccess();
+                $img = InstagramPosts::fetchShopifyImage((string) (Http::query('url') ?? ''));
+                header('Content-Type: ' . $img['type']);
+                header('Cache-Control: private, max-age=3600');
+                header('X-Content-Type-Options: nosniff');
+                echo $img['raw'];
+                return null;
+            }],
+            ['GET', '/instagram/comments', static function () {
+                Instagram::requireAccess();
+                return InstagramPosts::comments();
+            }],
+            ['POST', '/instagram/comments/(\d{5,30})/reply', static fn (string $id) => InstagramPosts::reply(Instagram::requireAccess(), $id, Http::body())],
+            ['POST', '/instagram/comments/(\d{5,30})/(done|open)', static function (string $id, string $what) {
+                Instagram::requireAccess();
+                return InstagramPosts::markDone($id, $what === 'done');
+            }],
+            ['PUT', '/admin/instagram', static function () {
+                $me = Auth::requireAdmin();
+                $b = Http::body();
+                Instagram::save($me, $b);
+                if (!empty($b['token'])) {
+                    Http::defer(static fn () => Instagram::sync());
+                }
+                return ['instagram' => Instagram::adminSettings()];
+            }],
+            ['POST', '/admin/instagram/test', static function () {
+                Auth::requireAdmin();
+                @set_time_limit(170);
+                try {
+                    Instagram::sync();
+                } catch (\Throwable) {
+                    // steht im Status
+                }
+                return ['instagram' => Instagram::adminSettings()];
+            }],
+            ['DELETE', '/admin/instagram', static function () {
+                Auth::requireAdmin();
+                Instagram::disconnect();
+                return ['instagram' => Instagram::adminSettings()];
+            }],
+
             ['GET', '/widget', static function () {
                 $user = Widget::userForToken((string) (Http::query('token') ?? ''));
                 if (!$user) {
@@ -574,6 +678,10 @@ final class Api
         if (array_key_exists('club_access', $b)) {
             $row['club_access'] = !empty($b['club_access']) ? 1 : 0;
         }
+        // „Instagram-Zugang“: Auswertung, Planer, Kommentare (Admins haben ihn immer)
+        if (array_key_exists('instagram_access', $b)) {
+            $row['instagram_access'] = !empty($b['instagram_access']) ? 1 : 0;
+        }
         if (!empty($b['password'])) {
             $row['password_hash'] = Auth::hashPassword((string) $b['password']);
             Db::exec('DELETE FROM sessions WHERE user_id = ?', [$id]);
@@ -660,6 +768,7 @@ final class Api
                 'base_url' => (string) Config::get('base_url', ''),
             ],
             'pushDevices' => (int) Db::value('SELECT COUNT(*) FROM push_subscriptions'),
+            'instagram' => Instagram::adminSettings(),
         ];
     }
 }

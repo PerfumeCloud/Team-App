@@ -206,6 +206,7 @@ final class Reports
                 [$today, date('Y-m-d', intdiv($end, 1000) + 9 * 86400)]
             )),
             'club' => self::club($start, $end),
+            'instagram' => self::instagram($start, $end),
             'users' => array_column(array_map(static fn ($u) => ['id' => $u['id'], 'name' => explode(' ', $u['name'])[0]], Db::all('SELECT id, name FROM users')), 'name', 'id'),
         ];
     }
@@ -260,6 +261,15 @@ final class Reports
         }
         try {
             return Club::request('GET', '/internal/weekly?from=' . $start . '&to=' . $end);
+        } catch (\Throwable $e) {
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    private static function instagram(int $start, int $end): ?array
+    {
+        try {
+            return Instagram::weekly($start, $end);
         } catch (\Throwable $e) {
             return ['error' => $e->getMessage()];
         }
@@ -365,6 +375,16 @@ final class Reports
                 $rows[] = ['Bestellungen über Empfehlungen', (string) (int) $club['referrals']['orders'], ['', '#6e7177'], (int) ($club['referrals']['clicks'] ?? 0) . ' Klicks auf Empfehlungslinks'];
             }
         }
+        $ig = is_array($d['instagram'] ?? null) && !isset($d['instagram']['error']) ? $d['instagram'] : null;
+        if ($ig) {
+            $rows[] = ['Instagram-Follower', $ig['followers'] !== null ? number_format((int) $ig['followers'], 0, ',', '.') : '–', ['', '#6e7177'], $ig['followers_delta'] !== null ? ($ig['followers_delta'] >= 0 ? '+' : '−') . number_format(abs((int) $ig['followers_delta']), 0, ',', '.') . ' in 7 Tagen' : '@' . $ig['username']];
+            if ($ig['reach'] !== null) {
+                $rows[] = ['Instagram: erreichte Konten', number_format((int) $ig['reach'], 0, ',', '.'), $fmtPct($ig['reach_prev'] !== null ? self::pct((int) $ig['reach'], (int) $ig['reach_prev']) : null), $ig['posts'] . ' Beiträge' . ($ig['link_taps'] !== null ? ' · ' . (int) $ig['link_taps'] . ' Klicks auf Links im Profil' : '')];
+            }
+            if ($ig['unanswered'] > 0 || $ig['planned'] > 0) {
+                $rows[] = ['Instagram: offen', (string) $ig['unanswered'], ['', '#6e7177'], 'Kommentare ohne Antwort · ' . $ig['planned'] . ' Beiträge geplant'];
+            }
+        }
         if (!empty($mail['configured'])) {
             $mc = $mail['current'];
             $rows[] = ['Antwortzeit (Median)', self::hours($mc['median_hours']), $fmtPct($mc['median_hours'] !== null && $mail['previous']['median_hours'] ? self::pct($mc['median_hours'], $mail['previous']['median_hours']) : null, true), $mc['measured'] ? ($mc['within_24h'] . ' % innerhalb von 24 Std. · Ø ' . self::hours($mc['avg_hours'])) : 'noch keine Antworten gemessen'];
@@ -386,6 +406,9 @@ final class Reports
             foreach ($d['shop']['top'] as $i => $p) {
                 $t .= ($i + 1) . '. ' . $p['title'] . ' – ' . $p['qty'] . '× (' . Util::euro($p['revenue']) . ")\n";
             }
+        }
+        if ($ig && $ig['top']) {
+            $t .= "\nStärkster Instagram-Beitrag\n" . ($ig['top']['caption'] !== '' ? $ig['top']['caption'] : 'ohne Text') . ' – ' . ($ig['top']['reach'] !== null ? number_format((int) $ig['top']['reach'], 0, ',', '.') . ' erreichte Konten' : $ig['top']['interactions'] . ' Interaktionen') . ($ig['top']['permalink'] ? "\n" . $ig['top']['permalink'] : '') . "\n";
         }
         if ($d['tasks']['overdue']) {
             $t .= "\nÜberfällige Aufgaben\n";
@@ -423,6 +446,11 @@ final class Reports
             }
             $h .= $section('Top-Düfte', $list);
         }
+        if ($ig && $ig['top']) {
+            $label = ($ig['top']['caption'] !== '' ? $ig['top']['caption'] : 'ohne Text');
+            $h .= $section('Stärkster Instagram-Beitrag', '<div style="padding:6px 0;font-size:14px">' . ($ig['top']['permalink'] ? '<a href="' . $esc((string) $ig['top']['permalink']) . '" style="color:#2f4e85">' . $esc($label) . '</a>' : $esc($label))
+                . ' <span style="color:#6e7177">– ' . $esc($ig['top']['reach'] !== null ? number_format((int) $ig['top']['reach'], 0, ',', '.') . ' erreichte Konten' : $ig['top']['interactions'] . ' Interaktionen') . '</span></div>');
+        }
         if ($d['tasks']['overdue']) {
             $list = '';
             foreach ($d['tasks']['overdue'] as $task) {
@@ -438,6 +466,9 @@ final class Reports
             }
             $h .= $section('Die nächsten Tage', $list);
         }
+        if (isset($d['instagram']['error'])) {
+            $h .= $section('Instagram', '<div style="font-size:13px;color:#6e7177">Instagram-Zahlen gerade nicht abrufbar: ' . $esc((string) $d['instagram']['error']) . '</div>');
+        }
         if (isset($d['club']['error'])) {
             $h .= $section('Club', '<div style="font-size:13px;color:#6e7177">Club-Zahlen gerade nicht abrufbar: ' . $esc((string) $d['club']['error']) . '</div>');
         }
@@ -447,6 +478,9 @@ final class Reports
         $pushBody = Util::euro($cur['revenue']) . ($fmtPct(self::pct($cur['revenue'], $prev['revenue']))[0] !== '' ? ' (' . $fmtPct(self::pct($cur['revenue'], $prev['revenue']))[0] . ')' : '') . ' · ' . $cur['orders'] . ' Bestellungen';
         if ($club && isset($club['survey']['avg']) && $club['survey']['avg'] !== null) {
             $pushBody .= ' · Ø ' . number_format((float) $club['survey']['avg'], 1, ',', '.') . ' ★';
+        }
+        if ($ig && $ig['followers_delta'] !== null) {
+            $pushBody .= ' · Instagram ' . ($ig['followers_delta'] >= 0 ? '+' : '−') . abs((int) $ig['followers_delta']);
         }
         if (!empty($mail['configured']) && $mail['current']['median_hours'] !== null) {
             $pushBody .= ' · Antwort in ' . self::hours($mail['current']['median_hours']);

@@ -2,7 +2,7 @@
 // Aufruf: node --test team-app/server/tests/   (PHP 8.1+ und Python 3 nötig)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,8 +14,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const serverDir = join(here, '..');
 const tmp = mkdtempSync(join(tmpdir(), 'pc-test-'));
 // PC_PUSH_TEST: Push-Adressen dürfen im Test auf http://127.0.0.1 zeigen (Nachbau des Push-Dienstes)
-const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1' };
 const PORT = 18000 + Math.floor(Math.random() * 1000);
+// PC_INSTAGRAM_TEST: alle Instagram-Adressen zeigen auf den Nachbau weiter unten
+const IG_PORT = PORT + 4000;
+const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1', PC_INSTAGRAM_TEST: `http://127.0.0.1:${IG_PORT}` };
 const IMAP_PORT = PORT + 1000;
 const SMTP_PORT = PORT + 2000;
 const CLOSED_PORT = PORT + 3000;
@@ -44,6 +46,106 @@ const pushServer = http.createServer((req, res) => {
     } else {
       res.writeHead(500).end('kaputt');
     }
+  });
+});
+
+// Nachbau von Instagram (Anmeldung, Graph API): /www/oauth/…, /api/oauth/access_token, /graph/…
+const HOUR = 3600000;
+const ig = { followers: 1500, revoked: false, calls: [], created: [], published: [], replies: [], refreshed: 0, tokens: new Set(), media: [] };
+const igMedia = (n, type, product, hoursAgo, caption, reach, likes) => ({
+  id: `m-${n}`, media_type: type, media_product_type: product, caption, permalink: `https://www.instagram.com/p/M${n}/`,
+  media_url: `https://cdn.example/m${n}.jpg`, timestamp: new Date(Date.now() - hoursAgo * HOUR).toISOString(), like_count: likes, comments_count: n === 1 ? 2 : 0, _reach: reach,
+});
+ig.media = [
+  igMedia(1, 'VIDEO', 'REELS', 30, 'Unser Herbstduft – welcher ist euer Favorit? #perfumecloud #parfum', 5200, 310),
+  igMedia(2, 'IMAGE', 'FEED', 80, 'Neu im Shop #perfumecloud', 900, 40),
+  igMedia(3, 'CAROUSEL_ALBUM', 'FEED', 150, 'Duftproben-Set #duftprobe #parfum', 1400, 70),
+  igMedia(4, 'VIDEO', 'REELS', 220, 'Hinter den Kulissen? #perfumecloud', 4100, 260),
+  igMedia(5, 'IMAGE', 'FEED', 300, 'Amber Nights #parfum', 800, 35),
+];
+const igServer = http.createServer((req, res) => {
+  let raw = '';
+  req.on('data', (c) => (raw += c));
+  req.on('end', () => {
+    const url = new URL(req.url, 'http://x');
+    const q = Object.fromEntries(url.searchParams);
+    const body = Object.fromEntries(new URLSearchParams(raw));
+    const p = { ...q, ...body };
+    const path = url.pathname;
+    ig.calls.push({ method: req.method, path, params: p });
+    const send = (status, data) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
+    if (path === '/api/oauth/access_token' && req.method === 'POST') {
+      if (p.code !== 'good-code' || p.client_secret !== 'a1'.repeat(16) || !p.redirect_uri.endsWith('/api/instagram/callback')) {
+        return send(400, { error_type: 'OAuthException', code: 400, error_message: 'Invalid authorization code' });
+      }
+      return send(200, { data: [{ access_token: 'short-1', user_id: '1789', permissions: 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_insights' }] });
+    }
+    if (path === '/graph/access_token') {
+      if (p.access_token !== 'short-1' || p.grant_type !== 'ig_exchange_token') return send(400, { error: { code: 190, message: 'bad' } });
+      ig.tokens.add('IGlong-token-1');
+      return send(200, { access_token: 'IGlong-token-1', token_type: 'bearer', expires_in: 5183944 });
+    }
+    if (path === '/graph/refresh_access_token') {
+      ig.refreshed++;
+      const t = `IGlong-token-r${ig.refreshed}`;
+      ig.tokens.add(t);
+      return send(200, { access_token: t, token_type: 'bearer', expires_in: 5183944 });
+    }
+    if (!path.startsWith('/graph/v24.0/')) return send(404, { error: { code: 100, message: 'Unknown path' } });
+    if (ig.revoked || !ig.tokens.has(p.access_token)) return send(400, { error: { code: 190, message: 'Error validating access token' } });
+    const rest = path.slice('/graph/v24.0'.length);
+    if (rest === '/me') {
+      return send(200, { id: 'app-1', user_id: '1789', username: 'perfumecloud.de', name: 'Perfume Cloud', account_type: 'BUSINESS', profile_picture_url: 'https://cdn.example/p.jpg', followers_count: ig.followers, follows_count: 120, media_count: ig.media.length });
+    }
+    if (rest === '/me/media') return send(200, { data: ig.media.map(({ _reach, ...m }) => m), paging: { cursors: { after: 'end' } } });
+    if (rest === '/me/insights') {
+      const metrics = p.metric.split(',');
+      if (p.metric_type === 'total_value') {
+        if (p.breakdown) return send(200, { data: [{ name: 'follower_demographics', period: 'lifetime', total_value: { breakdowns: [{ dimension_keys: [p.breakdown], results: [{ dimension_values: [p.breakdown === 'age' ? '25-34' : p.breakdown === 'gender' ? 'F' : 'Köln, Nordrhein-Westfalen'], value: 400 }, { dimension_values: [p.breakdown === 'age' ? '35-44' : p.breakdown === 'gender' ? 'M' : 'Düsseldorf, Nordrhein-Westfalen'], value: 250 }] }] } }] });
+        // „website_clicks“ gibt es nicht mehr → wie bei Instagram: Fehler 100 für die ganze Abfrage
+        if (metrics.includes('profile_links_taps') && metrics.length > 1) return send(400, { error: { code: 100, message: '(#100) Incompatible metrics' } });
+        const recent = Number(p.until) > Date.now() / 1000 - 3600;
+        return send(200, { data: metrics.map((name) => ({ name, period: 'day', total_value: { value: (recent ? 2 : 1) * ({ reach: 4000, views: 9000, accounts_engaged: 300, total_interactions: 700, profile_links_taps: 45 }[name] ?? 10) } })) });
+      }
+      const day = (n) => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() - n, 7)).toISOString().replace('.000Z', '+0000');
+      return send(200, { data: [{ name: 'reach', period: 'day', values: [{ value: 600, end_time: day(2) }, { value: 750, end_time: day(1) }] }] });
+    }
+    let m = rest.match(/^\/(m-\d+)\/insights$/);
+    if (m) {
+      const media = ig.media.find((x) => x.id === m[1]);
+      const metrics = p.metric.split(',');
+      // ig_reels_avg_watch_time kennt dieser Nachbau nicht (wie wenn Instagram eine Kennzahl abschafft)
+      if (metrics.includes('ig_reels_avg_watch_time')) return send(400, { error: { code: 100, message: '(#100) metric[5] must be one of the following values' } });
+      const v = { reach: media._reach, views: media._reach * 2, saved: Math.round(media._reach / 50), shares: Math.round(media._reach / 80), total_interactions: media.like_count + Math.round(media._reach / 30) };
+      return send(200, { data: metrics.map((name) => ({ name, period: 'lifetime', values: [{ value: v[name] ?? 0 }] })) });
+    }
+    if (rest === '/m-1/comments') {
+      return send(200, { data: [
+        { id: '180001', text: 'Wie riecht der? 😍', username: 'anna.duft', timestamp: new Date(Date.now() - 2 * HOUR).toISOString(), like_count: 1, replies: { data: [] } },
+        { id: '180002', text: 'Toll!', username: 'ben', timestamp: new Date(Date.now() - 5 * HOUR).toISOString(), like_count: 0, replies: { data: [{ id: '190001', username: 'perfumecloud.de' }] } },
+        { id: '180003', text: 'Eigener Kommentar', username: 'perfumecloud.de', timestamp: new Date().toISOString(), replies: { data: [] } },
+      ] });
+    }
+    m = rest.match(/^\/(\d+)\/replies$/);
+    if (m && req.method === 'POST') {
+      ig.replies.push({ id: m[1], message: p.message });
+      return send(200, { id: '19' + m[1] });
+    }
+    if (rest === '/1789/media' && req.method === 'POST') {
+      const id = `c-${ig.created.length + 1}`;
+      ig.created.push({ id, ...p });
+      return send(200, { id });
+    }
+    m = rest.match(/^\/(c-\d+)$/);
+    if (m) return send(200, { id: m[1], status_code: 'FINISHED' });
+    if (rest === '/1789/media_publish' && req.method === 'POST') {
+      const id = `pub-${ig.published.length + 1}`;
+      ig.published.push({ id, creation_id: p.creation_id });
+      return send(200, { id });
+    }
+    m = rest.match(/^\/(pub-\d+)$/);
+    if (m) return send(200, { id: m[1], permalink: `https://www.instagram.com/p/${m[1].toUpperCase()}/` });
+    send(400, { error: { code: 100, message: `Unsupported request ${req.method} ${rest}` } });
   });
 });
 
@@ -211,6 +313,9 @@ class Client {
 }
 
 const helper = (...args) => JSON.parse(execFileSync('php', [join(here, 'helper.php'), ...args], { env }).toString());
+// Asynchron, wenn PHP dabei einen Nachbau in diesem Prozess aufruft (sonst blockiert Node und der Nachbau antwortet nicht)
+const helperAsync = (...args) =>
+  new Promise((resolve, reject) => execFile('php', [join(here, 'helper.php'), ...args], { env }, (err, out) => (err ? reject(err) : resolve(JSON.parse(out.toString())))));
 
 before(async () => {
   php = spawn('php', ['-S', `127.0.0.1:${PORT}`, '-t', join(serverDir, 'public'), join(serverDir, 'public/router.php')], { env });
@@ -226,6 +331,7 @@ before(async () => {
     }
   });
   await waitFor(imap, 'ready');
+  await new Promise((resolve) => igServer.listen(IG_PORT, '127.0.0.1', resolve));
   pushPort = await listen(pushServer);
   clubUrl = `http://127.0.0.1:${await listen(clubServer)}`;
 });
@@ -235,6 +341,7 @@ after(() => {
   imap?.kill();
   pushServer.close();
   clubServer.close();
+  igServer.close();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -1397,6 +1504,228 @@ test('Wochenrückblick: Kennzahlen mit Vorwoche, Antwortzeit, Vorschau an mich, 
   assert.ok(await eventually(() => smtpMails.filter((x) => x.to.includes('auswertung@example.de')).length >= 2));
   await admin.req('PUT', '/admin/reports', { email: '' });
   assert.equal((await admin.req('GET', '/admin/reports')).data.reports.email, 'auswertung@perfumecloud.de', 'leer = Standardadresse');
+});
+
+/** JPEG in Wunschgröße (mit GD erzeugt). */
+const jpeg = (w, h, type = 'jpeg') =>
+  execFileSync('php', ['-r', `$i = imagecreatetruecolor(${w}, ${h}); imagefill($i, 0, 0, imagecolorallocate($i, 200, 170, 120)); ob_start(); image${type}($i); echo base64_encode(ob_get_clean());`]).toString();
+const upload = async (client, postId, b64) => {
+  const res = await fetch(`${base}/instagram/posts/${postId}/images`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-PC': '1', Cookie: client.cookie }, body: Buffer.from(b64, 'base64') });
+  return { status: res.status, data: await res.json() };
+};
+
+test('Instagram: verbinden, Abgleich, Auswertung, Kommentare, Planer mit Freigabe, Veröffentlichen, Wochenrückblick', async () => {
+  // Ohne Zugang kein Zugriff, Admin sieht den Menüpunkt schon vor dem Verbinden
+  assert.equal((await kim.req('GET', '/instagram')).status, 403);
+  assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.instagram, null);
+  assert.deepEqual((await admin.req('GET', '/sync?since=0')).data.meta.instagram, { connected: false, username: null });
+  let s = (await admin.req('GET', '/admin/integrations')).data.instagram;
+  assert.equal(s.connected, false);
+  assert.match(s.redirectUri, /\/api\/instagram\/callback$/);
+
+  // Verbinden ohne App-Daten → verständlicher Hinweis, Mitglieder dürfen gar nicht
+  const noApp = await fetch(`${base}/instagram/connect`, { headers: { Cookie: admin.cookie }, redirect: 'manual' });
+  assert.match(decodeURIComponent(noApp.headers.get('location')), /App-ID und App-Secret/);
+  assert.equal((await kim.req('PUT', '/admin/instagram', { app_id: '123' })).status, 403);
+  assert.equal((await admin.req('PUT', '/admin/instagram', { app_id: 'abc' })).status, 422);
+  s = (await admin.req('PUT', '/admin/instagram', { app_id: '1234567890', app_secret: 'a1'.repeat(16) })).data.instagram;
+  assert.equal(s.hasSecret, true);
+  const kimConnect = await fetch(`${base}/instagram/connect`, { headers: { Cookie: kim.cookie }, redirect: 'manual' });
+  assert.match(decodeURIComponent(kimConnect.headers.get('location')), /Nur Admins/);
+
+  // Anmeldung bei Instagram: Weiterleitung mit allen Berechtigungen und state
+  const connect = async () => {
+    const r = await fetch(`${base}/instagram/connect`, { headers: { Cookie: admin.cookie }, redirect: 'manual' });
+    assert.equal(r.status, 302);
+    const loc = new URL(r.headers.get('location'));
+    assert.equal(loc.pathname, '/www/oauth/authorize');
+    assert.equal(loc.searchParams.get('client_id'), '1234567890');
+    assert.match(loc.searchParams.get('scope'), /instagram_business_content_publish/);
+    assert.match(loc.searchParams.get('scope'), /instagram_business_manage_insights/);
+    return loc.searchParams.get('state');
+  };
+  const callback = async (qs) => decodeURIComponent((await fetch(`${base}/instagram/callback?${qs}`, { redirect: 'manual' })).headers.get('location'));
+  let state = await connect();
+  assert.match(await callback(`code=good-code&state=falsch`), /abgelaufen/);
+  state = await connect();
+  assert.match(await callback(`error=access_denied&error_reason=user_denied&state=${state}`), /Abgebrochen/);
+  state = await connect();
+  assert.match(await callback(`code=schlecht&state=${state}`), /Verbinden fehlgeschlagen: Instagram: Invalid authorization code/);
+  state = await connect();
+  assert.match(await callback(`code=good-code&state=${state}`), /instagram=ok:perfumecloud\.de#instagram/);
+  s = (await admin.req('GET', '/admin/integrations')).data.instagram;
+  assert.equal(s.connected, true);
+  assert.equal(s.username, 'perfumecloud.de');
+  assert.deepEqual(s.missingScopes, []);
+  assert.ok(s.expires > Date.now() + 50 * 86400000);
+  const raw = helper('sql', "SELECT v FROM settings WHERE k = 'instagram_token'")[0].v;
+  assert.doesNotMatch(raw, /IGlong-token-1/, 'Zugang nur verschlüsselt gespeichert');
+
+  // Abgleich: Profil, Beiträge mit Kennzahlen, Konto-Kennzahlen, Kommentare
+  s = (await admin.req('POST', '/admin/instagram/test')).data.instagram;
+  assert.equal(s.status.ok, true, JSON.stringify(s.status));
+  let o = (await admin.req('GET', '/instagram')).data;
+  assert.equal(o.profile.followers, 1500);
+  assert.equal(o.media.length, 5);
+  const reel = o.media.find((m) => m.id === 'm-1');
+  assert.equal(reel.format, 'reel');
+  assert.equal(reel.reach, 5200);
+  assert.equal(reel.avg_watch_s, null, 'nicht unterstützte Kennzahl übersprungen');
+  assert.equal(reel.rate, Math.round(((310 + Math.round(5200 / 30)) / 5200) * 1000) / 10);
+  assert.equal(o.kpis.cur.reach, 8000);
+  assert.equal(o.kpis.prev.reach, 4000);
+  assert.equal(o.kpis.cur.profile_links_taps, 90, 'einzeln nachgefragt, nachdem die gemeinsame Abfrage scheiterte');
+  assert.equal(o.kpis.unanswered, 1);
+  assert.equal(o.reach_series.length, 2);
+  assert.equal(o.audience.age[0].label, '25-34');
+  assert.equal(o.analysis.formats.reel.count, 2);
+  assert.ok(o.analysis.tips.some((t) => t.kind === 'format' && /Reels kommen bei euch im Schnitt auf 4\.650 erreichte Konten/.test(t.text)), JSON.stringify(o.analysis.tips));
+  assert.ok(o.analysis.tips.some((t) => t.kind === 'comments'));
+  assert.equal(o.analysis.hashtags.top[0].tag, '#perfumecloud');
+  const unsupported = JSON.parse(helper('sql', "SELECT v FROM settings WHERE k = 'instagram_unsupported'")[0].v);
+  assert.ok(unsupported['reel:ig_reels_avg_watch_time'] > Date.now());
+  assert.equal(unsupported['account-total:reach'], undefined);
+
+  // Export für eine Analyse: Zahlen ja, Namen der Kommentierenden nein
+  const ex = (await admin.req('GET', '/instagram/export')).data.text;
+  assert.match(ex, /# Instagram @perfumecloud\.de/);
+  assert.match(ex, /Reels: 2 Beiträge/);
+  assert.doesNotMatch(ex, /anna\.duft/);
+
+  // Kommentare: eigener ausgeblendet, beantworteter erkannt, Antwort aus der App
+  let c = (await admin.req('GET', '/instagram/comments')).data;
+  assert.equal(c.comments.length, 2);
+  assert.equal(c.comments[0].username, 'anna.duft');
+  assert.equal(c.comments[0].open, true);
+  assert.equal(c.comments[1].replied, true);
+  c = (await admin.req('POST', '/instagram/comments/180001/reply', { text: 'Warm und süß – nach Amber und Vanille 🤍' })).data;
+  assert.equal(c.unanswered, 0);
+  assert.equal(c.comments.find((x) => x.id === '180001').replied_by, 'Marius');
+  assert.deepEqual(ig.replies.at(-1), { id: '180001', message: 'Warm und süß – nach Amber und Vanille 🤍' });
+  assert.equal((await admin.req('POST', '/instagram/comments/180001/reply', { text: '' })).status, 422);
+
+  // Kim bekommt Instagram-Zugang
+  assert.equal((await admin.req('PUT', `/admin/users/${kimId}`, { instagram_access: true })).data.user.instagram_access, 1);
+  assert.deepEqual((await kim.req('GET', '/sync?since=0')).data.meta.instagram, { connected: true, username: 'perfumecloud.de' });
+  assert.equal((await kim.req('GET', '/instagram')).status, 200);
+  assert.equal((await admin.req('GET', '/admin/maintenance')).data.people.find((p) => p.id === kimId).instagramAccess, true);
+
+  // Planer: Entwurf, Bild prüfen, Vier-Augen-Prinzip, Freigabe → veröffentlicht
+  let post = (await admin.req('POST', '/instagram/posts', { kind: 'image', caption: 'Neu: Amber Nights 🤍 Was ist euer Herbstduft? #perfumecloud' })).data;
+  assert.equal(post.status, 'draft');
+  assert.equal((await admin.req('POST', '/instagram/posts', { caption: Array.from({ length: 31 }, (_, i) => `#t${i}`).join(' ') })).status, 422);
+  assert.equal((await upload(admin, post.id, jpeg(200, 200))).status, 422, 'zu klein');
+  let up = await upload(admin, post.id, jpeg(1200, 400));
+  assert.equal(up.status, 200, JSON.stringify(up.data));
+  const wide = await admin.req('POST', `/instagram/posts/${post.id}/submit`);
+  assert.equal(wide.status, 422);
+  assert.match(wide.data.error, /Format/);
+  post = (await admin.req('PUT', `/instagram/posts/${post.id}`, { images: [] })).data;
+  assert.equal(post.images.length, 0);
+  up = await upload(admin, post.id, jpeg(1080, 1350, 'png'));
+  assert.equal(up.status, 200, 'PNG wird auf dem Server zu JPEG');
+  assert.equal(up.data.images[0].w, 1080);
+  const token = up.data.images[0].token;
+  const pic = (cookie) => fetch(`${base}/instagram/bild/${token}.jpg`, cookie ? { headers: { Cookie: cookie } } : {});
+  assert.equal((await pic()).status, 404, 'Entwurf: nicht öffentlich');
+  assert.equal((await pic(kim.cookie)).headers.get('content-type'), 'image/jpeg');
+  assert.equal((await admin.req('POST', `/instagram/posts/${post.id}/submit`)).data.status, 'review');
+  const self = await admin.req('POST', `/instagram/posts/${post.id}/approve`);
+  assert.equal(self.status, 403);
+  assert.match(self.data.error, /Vier-Augen/);
+  const back = await kim.req('POST', `/instagram/posts/${post.id}/reject`, { note: 'Bitte Preis ergänzen' });
+  assert.equal(back.data.status, 'draft');
+  assert.equal(back.data.review_note, 'Kim: Bitte Preis ergänzen');
+  await admin.req('PUT', `/instagram/posts/${post.id}`, { caption: 'Neu: Amber Nights für 59 € 🤍 #perfumecloud' });
+  await admin.req('POST', `/instagram/posts/${post.id}/submit`);
+  const done = await kim.req('POST', `/instagram/posts/${post.id}/approve`);
+  assert.equal(done.status, 200, JSON.stringify(done.data));
+  assert.equal(done.data.status, 'published', done.data.error);
+  assert.equal(done.data.permalink, 'https://www.instagram.com/p/PUB-1/');
+  assert.equal(done.data.approved_by_name, 'Kim');
+  const created = ig.created.at(-1);
+  assert.equal(created.caption, 'Neu: Amber Nights für 59 € 🤍 #perfumecloud');
+  assert.equal(created.image_url, `http://127.0.0.1:${PORT}/api/instagram/bild/${token}.jpg`);
+  assert.equal(ig.published.at(-1).creation_id, created.id);
+  assert.equal((await pic()).status, 404, 'nach dem Veröffentlichen wieder privat');
+  assert.equal((await admin.req('PUT', `/instagram/posts/${post.id}`, { caption: 'x' })).status, 409);
+  assert.ok((await admin.req('GET', '/instagram')).data.lastSync > 0, 'Stand des letzten Abgleichs bleibt sichtbar');
+  assert.equal(helper('sql', "SELECT v FROM settings WHERE k = 'instagram_sync_due'")[0]?.v, 'true', 'nächster Cronjob-Lauf gleicht ab');
+
+  // Ohne Vier-Augen-Prinzip: Karussell selbst freigeben, geplant → Bilder öffentlich, bis es raus ist
+  await admin.req('PUT', '/admin/instagram', { four_eyes: false, hashtags: '#perfumecloud #parfum' });
+  let car = (await admin.req('POST', '/instagram/posts', { kind: 'image', caption: 'Drei Düfte für den Herbst', scheduled_at: Date.now() + 2 * HOUR })).data;
+  await upload(admin, car.id, jpeg(1080, 1080));
+  car = (await upload(admin, car.id, jpeg(1080, 1080))).data;
+  assert.equal(car.kind, 'carousel', 'zweites Bild → Karussell');
+  car = (await admin.req('POST', `/instagram/posts/${car.id}/approve`)).data;
+  assert.equal(car.status, 'approved');
+  assert.equal(car.status_label, 'Geplant');
+  const carPic = await fetch(`${base}/instagram/bild/${car.images[0].token}.jpg`);
+  assert.equal(carPic.status, 200, 'geplant: Instagram darf das Bild abholen');
+  helper('sql', `UPDATE ig_posts SET scheduled_at = ${Date.now() - 60000} WHERE id = '${car.id}'`);
+  const run = await helperAsync('instagram-run');
+  assert.match(run.out, /veröffentlicht/);
+  const items = ig.created.slice(-3);
+  assert.equal(items[0].is_carousel_item, 'true');
+  assert.equal(items[2].media_type, 'CAROUSEL');
+  assert.equal(items[2].children, `${items[0].id},${items[1].id}`);
+  let list = (await kim.req('GET', '/instagram/posts')).data;
+  assert.equal(list.posts.find((p) => p.id === car.id).status, 'published');
+  assert.equal(list.hashtags, '#perfumecloud #parfum');
+  assert.equal(list.four_eyes, false);
+
+  // Reel: nur mit Erinnerung, selbst posten und abhaken
+  let r = (await kim.req('POST', '/instagram/posts', { kind: 'reel', mode: 'auto', caption: 'Reel: So füllen wir Proben ab', note: '3 Szenen, Ton: leise Musik' })).data;
+  assert.equal(r.mode, 'manual');
+  r = (await kim.req('POST', `/instagram/posts/${r.id}/approve`)).data;
+  assert.equal(r.status, 'approved');
+  assert.equal((await kim.req('POST', `/instagram/posts/${r.id}/done`, { permalink: 'https://example.com/x' })).status, 422);
+  r = (await kim.req('POST', `/instagram/posts/${r.id}/done`, { permalink: 'https://www.instagram.com/reel/ABC/' })).data;
+  assert.equal(r.status, 'published');
+
+  // Entwürfe importieren (z. B. von Claude vorbereitet)
+  const imp = (await admin.req('POST', '/instagram/posts/import', { posts: [
+    { kind: 'image', caption: 'Herbstduft der Woche', scheduled_at: '2030-01-03T18:30:00+01:00' },
+    { kind: 'reel', caption: 'Reel-Idee: Duft in 10 Sekunden', note: 'Nahaufnahme Flakon' },
+    { kind: 'image', caption: 'Mit Bild aus fremder Quelle', images: ['https://example.com/a.jpg'] },
+  ] })).data;
+  assert.equal(imp.created, 3);
+  assert.ok(imp.notes.some((n) => /Beitrag 3: Bild nicht übernommen/.test(n)));
+  const imported = imp.posts.filter((p) => p.source === 'import');
+  assert.equal(imported.find((p) => p.kind === 'reel').mode, 'manual');
+  assert.equal(imported.find((p) => p.caption === 'Herbstduft der Woche').scheduled_at, Date.parse('2030-01-03T18:30:00+01:00'));
+  assert.equal((await admin.req('DELETE', `/instagram/posts/${imported[0].id}`)).status, 200);
+
+  // Wochenrückblick mit Instagram
+  const wk = (await admin.req('GET', '/reports/weekly')).data;
+  assert.equal(wk.data.instagram.followers, 1500);
+  assert.equal(wk.data.instagram.reach, 8000);
+  assert.match(wk.html, /Instagram-Follower/);
+  assert.match(wk.html, /Stärkster Instagram-Beitrag/);
+
+  // Zugang verlängert sich selbst, entzogener Zugang wird klar gemeldet
+  helper('instagram-age');
+  helper('setting', 'instagram_sync_at', String(Date.now()));
+  assert.match((await helperAsync('instagram-run')).out, /Zugang verlängert/);
+  assert.equal(ig.refreshed, 1);
+  ig.followers = 1512;
+  helper('setting', 'instagram_sync_at', '0');
+  await helperAsync('instagram-run');
+  assert.equal((await admin.req('GET', '/instagram')).data.profile.followers, 1512, 'mit dem neuen Zugang abgeglichen');
+  ig.revoked = true;
+  s = (await admin.req('POST', '/admin/instagram/test')).data.instagram;
+  assert.equal(s.status.ok, false);
+  assert.match(s.status.message, /neu verbinden/);
+  ig.revoked = false;
+
+  // Trennen
+  s = (await admin.req('DELETE', '/admin/instagram')).data.instagram;
+  assert.equal(s.connected, false);
+  assert.equal(s.hasSecret, true, 'App-Daten bleiben für das erneute Verbinden');
+  assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.instagram, null);
+  await admin.req('PUT', `/admin/users/${kimId}`, { instagram_access: false });
+  assert.equal((await kim.req('GET', '/instagram/posts')).status, 403);
 });
 
 test('Login-Sperre nach zu vielen Versuchen', async () => {

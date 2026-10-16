@@ -235,6 +235,7 @@ final class Db
                 role VARCHAR(20) NOT NULL DEFAULT 'member',
                 prefs TEXT NULL,
                 club_access SMALLINT NOT NULL DEFAULT 0,
+                instagram_access SMALLINT NOT NULL DEFAULT 0,
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL,
                 deleted SMALLINT NOT NULL DEFAULT 0",
@@ -399,6 +400,74 @@ final class Db
                 notified SMALLINT NOT NULL DEFAULT 0,
                 user_id VARCHAR(36) NULL,
                 created_at BIGINT NOT NULL",
+            // 1.7: Instagram – geplante Beiträge und ihre Bilder
+            'ig_posts' => "id VARCHAR(36) NOT NULL PRIMARY KEY,
+                kind VARCHAR(20) NOT NULL DEFAULT 'image',
+                mode VARCHAR(10) NOT NULL DEFAULT 'auto',
+                caption TEXT NULL,
+                note TEXT NULL,
+                images TEXT NULL,
+                scheduled_at BIGINT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                review_note VARCHAR(600) NULL,
+                created_by VARCHAR(36) NULL,
+                approved_by VARCHAR(36) NULL,
+                approved_at BIGINT NULL,
+                container_id VARCHAR(40) NULL,
+                media_id VARCHAR(40) NULL,
+                permalink VARCHAR(300) NULL,
+                published_at BIGINT NULL,
+                error VARCHAR(600) NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                reminded_at BIGINT NULL,
+                source VARCHAR(20) NULL,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL,
+                deleted SMALLINT NOT NULL DEFAULT 0",
+            'ig_files' => "token VARCHAR(32) NOT NULL PRIMARY KEY,
+                post_id VARCHAR(36) NOT NULL,
+                w INTEGER NOT NULL,
+                h INTEGER NOT NULL,
+                bytes INTEGER NOT NULL,
+                created_at BIGINT NOT NULL",
+            // 1.7: Instagram – abgeglichene Beiträge mit Kennzahlen, Tageswerte, Kommentare
+            'ig_media' => "id VARCHAR(40) NOT NULL PRIMARY KEY,
+                media_type VARCHAR(30) NULL,
+                product_type VARCHAR(30) NULL,
+                caption TEXT NULL,
+                permalink VARCHAR(300) NULL,
+                media_url TEXT NULL,
+                thumbnail_url TEXT NULL,
+                posted_at BIGINT NOT NULL,
+                likes INTEGER NOT NULL DEFAULT 0,
+                comments INTEGER NOT NULL DEFAULT 0,
+                reach INTEGER NULL,
+                views INTEGER NULL,
+                saved INTEGER NULL,
+                shares INTEGER NULL,
+                interactions INTEGER NULL,
+                avg_watch_ms INTEGER NULL,
+                insights_at BIGINT NULL,
+                synced_at BIGINT NOT NULL",
+            'ig_daily' => "day VARCHAR(10) NOT NULL PRIMARY KEY,
+                followers INTEGER NULL,
+                follows INTEGER NULL,
+                media_count INTEGER NULL,
+                reach INTEGER NULL,
+                views INTEGER NULL,
+                interactions INTEGER NULL,
+                link_taps INTEGER NULL,
+                updated_at BIGINT NOT NULL",
+            'ig_comments' => "id VARCHAR(40) NOT NULL PRIMARY KEY,
+                media_id VARCHAR(40) NOT NULL,
+                username VARCHAR(100) NULL,
+                text TEXT NULL,
+                at BIGINT NOT NULL,
+                likes INTEGER NOT NULL DEFAULT 0,
+                replied SMALLINT NOT NULL DEFAULT 0,
+                done SMALLINT NOT NULL DEFAULT 0,
+                replied_by VARCHAR(36) NULL,
+                synced_at BIGINT NOT NULL",
         ];
 
         $pdo = self::pdo();
@@ -433,6 +502,10 @@ final class Db
                 $pdo->exec("ALTER TABLE emails ADD COLUMN $col $type");
             }
         }
+        // 1.7: Instagram-Zugang für Personen (Admins haben ihn immer)
+        if (!self::hasColumn('users', 'instagram_access')) {
+            $pdo->exec('ALTER TABLE users ADD COLUMN instagram_access SMALLINT NOT NULL DEFAULT 0');
+        }
         MailJob::migrateLegacy();
 
         $indexes = [
@@ -456,6 +529,11 @@ final class Db
             ['replies_created', 'replies', 'created_at', false],
             ['shipments_created', 'shipments', 'created_at', false],
             ['shipments_order', 'shipments', 'order_id', false],
+            ['ig_posts_status', 'ig_posts', 'status', false],
+            ['ig_files_post', 'ig_files', 'post_id', false],
+            ['ig_media_posted', 'ig_media', 'posted_at', false],
+            ['ig_comments_media', 'ig_comments', 'media_id', false],
+            ['ig_comments_at', 'ig_comments', 'at', false],
         ];
         foreach ($indexes as [$idx, $table, $col, $unique]) {
             $u = $unique ? 'UNIQUE ' : '';
