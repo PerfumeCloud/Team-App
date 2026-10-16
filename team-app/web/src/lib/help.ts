@@ -180,17 +180,29 @@ export const HELP: HelpArticle[] = [
     category: 'verbindungen',
     title: 'Shopify: fehlende Berechtigungen bestätigen',
     intro:
-      'Steht z. B. „es fehlen Berechtigungen: read_inventory“, obwohl der Scope in der App-Version angehakt ist: Der Shop muss die neue Version noch bestätigen.',
+      'Steht z. B. „Im Shop noch nicht bestätigt: write_orders“, obwohl der Scope in der App-Version angehakt ist: Der Shop muss die neue Version noch bestätigen. Shopify gibt neue Rechte erst nach dieser Zustimmung frei, auch bei der eigenen App.',
     admin: true,
     keywords: 'scope berechtigung read_inventory write_orders write_merchant_managed_fulfillment_orders read_customers fehlt bestätigen aktualisieren',
     steps: [
       'Team-App → **Einstellungen → Integrationen → Shopify**. Die App sagt, was fehlt: „Im Shop noch nicht bestätigt“ oder „In der App-Version fehlen“.',
-      '**Im Shop noch nicht bestätigt:** auf **In Shopify bestätigen** tippen (öffnet einen neuen Tab). Alternativ Shopify-Admin → **Apps** → **Perfume Cloud Team** öffnen.',
-      'Shopify fragt nach den neuen Rechten → **Aktualisieren** bzw. **Installieren** bestätigen.',
-      'Zurück in der Team-App **Erneut prüfen** tippen. Jetzt steht „alle Berechtigungen da“.',
+      '**Im Shop noch nicht bestätigt:** auf **In Shopify bestätigen** tippen. Das öffnet in einem neuen Tab die Seite, auf der Shopify die neuen Rechte der Team-App zeigt (vorher im Shopify-Admin anmelden, als Inhaber oder mit dem Recht „Apps verwalten“).',
+      'Die Liste ansehen und **Aktualisieren** bzw. **Installieren** wählen.',
+      'Zurück in der Team-App **Erneut prüfen** tippen. Jetzt steht „alle Berechtigungen da“. (Beim nächsten Öffnen der Einstellungen prüft die App das auch von selbst.)',
       '**In der App-Version fehlen:** im Dev Dashboard eine neue Version mit den genannten Scopes erstellen und **freigeben**, dann wie oben bestätigen.',
     ],
     problems: [
+      {
+        q: 'Statt der Bestätigung kommt nur die App-Liste oder „Verbindung verweigert“',
+        a: 'Zweiter Weg: **App in Shopify öffnen** tippen. Shopify fragt beim Öffnen der App nach den neuen Rechten. Erscheint danach „Verbindung verweigert“, ist das egal (die Team-App lässt sich nicht im Shopify-Admin anzeigen). In der Team-App **Erneut prüfen**.',
+      },
+      {
+        q: 'Shopify fragt gar nicht nach',
+        a: 'Im **Dev Dashboard** (dev.shopify.com) → **Apps → Perfume Cloud Team** prüfen, dass die neueste Version **aktiv** ist und die Scopes dort als **Zugriffsbereiche** stehen, nicht als **optionale** Zugriffsbereiche. Dann bei der App auf **Installieren** bzw. den Installationslink gehen und den Shop **Perfume Cloud** wählen.',
+      },
+      {
+        q: 'Es klappt trotzdem nicht',
+        a: 'Letzter Weg: Shopify-Admin → **Einstellungen → Apps** → **Perfume Cloud Team** → **Deinstallieren**, danach im Dev Dashboard wieder **installieren**. Die Team-App speichert nichts in Shopify, es geht nichts verloren; Client-ID und Secret bleiben gleich. Danach in der Team-App **Speichern & testen**.',
+      },
       {
         q: 'Nach dem Bestätigen fehlt immer noch etwas',
         a: 'Shopify braucht manchmal eine Minute. **Erneut prüfen** tippen. Hilft das nicht: **Speichern & testen** mit Client-ID und Secret wiederholen.',
@@ -448,7 +460,7 @@ export const HELP: HelpArticle[] = [
   {
     id: 'club-update',
     category: 'club',
-    title: 'Members Club aktualisieren (auf Version 1.3)',
+    title: 'Members Club aktualisieren (auf Version 1.3.1)',
     intro:
       'Meldet die Team-App „Der Members Club läuft noch auf Version …“ oder zeigt die Testbestellung „Nicht gefunden“, ist der Club älter als die Team-App.',
     admin: true,
@@ -458,7 +470,7 @@ export const HELP: HelpArticle[] = [
       'netcup **Plesk** → **Dateien** → Ordner `app.perfumecloud.de/httpdocs` öffnen.',
       '**Hochladen** → ZIP wählen → beim Menü **⋯** **Dateien extrahieren**, „Vorhandene Dateien ersetzen“ anhaken.',
       '`app.perfumecloud.de` einmal öffnen. Der Club ergänzt die Datenbank selbst.',
-      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.3.0“.',
+      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.3.1“.',
       'Danach klappen **Testbestellung**, die Fußzeile mit Logo in den Club-Mails und die neue Anmeldeseite der Club-App.',
     ],
     problems: [
@@ -468,6 +480,32 @@ export const HELP: HelpArticle[] = [
       },
     ],
     open: { to: '/einstellungen/integrationen', label: 'Club prüfen' },
+  },
+  {
+    id: 'club-admin-email',
+    category: 'club',
+    title: 'Club-App: „Admin“ für die eigene (private) E-Mail freischalten',
+    intro:
+      'Die Club-App erkennt Admins an der E-Mail. Meldest du dich dort mit einer anderen Adresse an als in der Team-App (z. B. der privaten aus dem Shop-Kundenkonto), trägst du sie als Admin-E-Mail ein.',
+    admin: true,
+    keywords: 'club admin email e-mail erkennt nicht admin knopf fehlt privat icloud freischalten zugänge',
+    steps: [
+      'Den Club-Admin öffnen: **Members Club → Club-Admin öffnen** (öffnet einen neuen Tab).',
+      'Dort **Einstellungen → Zugänge** → Abschnitt **Admin-E-Mails** → **E-Mail eintragen**.',
+      'Die Adresse eingeben, mit der du dich in der Club-App anmeldest. Bei **Gehört zu** dich selbst wählen (dann gelten deine Rechte) → **Eintragen**.',
+      'Die Club-App neu laden: oben steht **Admin**. Wer schon angemeldet ist, bekommt den Admin-Bereich beim nächsten Öffnen.',
+    ],
+    problems: [
+      {
+        q: 'Den Abschnitt „Admin-E-Mails“ gibt es nicht',
+        a: 'Der Club ist älter als 1.3.1: **Members Club aktualisieren**.',
+      },
+      {
+        q: '„Darf keine Zugänge verwalten“',
+        a: 'Eintragen dürfen Admins der Team-App und eigene Club-Zugänge. Den Club-Admin dafür aus der Team-App öffnen.',
+      },
+    ],
+    open: { to: '/club', label: 'Members Club' },
   },
   {
     id: 'testbestellung',

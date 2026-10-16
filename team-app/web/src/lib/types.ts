@@ -315,6 +315,7 @@ export interface ShopifyCheck {
   /** In der App-Version angefragt, im Shop aber noch nicht bestätigt */
   unapproved?: string[];
   approve_url?: string;
+  open_url?: string;
 }
 
 // ---------------- Members Club ----------------

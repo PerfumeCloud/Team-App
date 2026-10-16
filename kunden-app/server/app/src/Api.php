@@ -147,6 +147,10 @@ final class Api
             // ----- Kundinnen und Kunden -----
             ['GET', '/me', static function () {
                 $m = Auth::requireMember();
+                // Admin-Recht auch für schon angemeldete Mitglieder (z. B. Adresse gerade erst als Admin-E-Mail eingetragen)
+                if (!Auth::preview() && !Auth::admin()) {
+                    Auth::adminFromMember($m);
+                }
                 Jobs::pokeIfDue();
                 return Club::me($m);
             }],
@@ -428,6 +432,9 @@ final class Api
             }],
             ['POST', '/admin/access', static fn () => Admins::createClub(Auth::requireAdmin(), Http::body())],
             ['DELETE', "/admin/access/$uuid", static fn (string $id) => Admins::deleteClub(Auth::requireAdmin(), $id)],
+            // Admin-E-Mails: Anmeldung in der Club-App mit dieser Adresse → Admin-Bereich
+            ['POST', '/admin/access/emails', static fn () => Admins::addEmail(Auth::requireAdmin(), Http::body())],
+            ['POST', '/admin/access/emails/remove', static fn () => Admins::removeEmail(Auth::requireAdmin(), (string) (Http::body()['email'] ?? ''))],
             ['PUT', '/admin/access/team/([0-9a-zA-Z-]{1,36})', static function (string $id) {
                 Admins::setTeamAccess(Auth::requireAdmin(), $id, !empty(Http::body()['access']));
                 return Admins::overview();

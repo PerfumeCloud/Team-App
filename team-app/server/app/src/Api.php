@@ -408,6 +408,12 @@ final class Api
             // ---- Admin ----
             ['GET', '/admin/integrations', static function () {
                 Auth::requireAdmin();
+                // Fehlen Berechtigungen, beim Öffnen neu prüfen (höchstens alle 2 Minuten): so erscheint die Bestätigung
+                // aus Shopify ohne Knopfdruck, und der Link „In Shopify bestätigen“ ist frisch.
+                $check = Settings::get('shopify_check');
+                if (Shopify::configured() && is_array($check) && !empty($check['missing']) && ($check['at'] ?? 0) < Util::now() - 120_000) {
+                    Settings::set('shopify_check', Shopify::test() + ['at' => Util::now()]);
+                }
                 return self::integrations();
             }],
             ['PUT', '/admin/shopify', static function () {

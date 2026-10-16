@@ -152,7 +152,7 @@ const igServer = http.createServer((req, res) => {
 });
 
 // Nachbau von Shopify (nur Anmeldung und Berechtigungen): gewährt = im Shop bestätigt, angefragt = in der App-Version
-const shopMock = { tokenScope: '', granted: [], requested: [] };
+const shopMock = { tokenScope: '', granted: [], requested: [], approveLinks: true };
 const shopServer = http.createServer((req, res) => {
   let raw = '';
   req.on('data', (c) => (raw += c));
@@ -160,8 +160,20 @@ const shopServer = http.createServer((req, res) => {
     const send = (status, data) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
     if (req.url === '/admin/oauth/access_token') return send(200, { access_token: 'shpat_test', expires_in: 86399, scope: shopMock.tokenScope });
     const q = raw ? JSON.parse(raw).query : '';
+    // Wie im echten Shop: Apps aus dem Dev Dashboard haben oft keinen Kurznamen (handle: null)
+    if (q.includes('TeamApprove')) {
+      if (!shopMock.approveLinks) return send(200, { errors: [{ message: 'Field installUrl not found' }] });
+      return send(200, {
+        data: {
+          currentAppInstallation: {
+            launchUrl: 'https://ks8yin-mg.myshopify.com/admin/api_permissions/1047579230534/redirect',
+            app: { installUrl: 'https://admin.shopify.com/store/ks8yin-mg/api/verify_and_install?api_key=cid&state=abc' },
+          },
+        },
+      });
+    }
     if (q.includes('currentAppInstallation')) {
-      return send(200, { data: { currentAppInstallation: { accessScopes: shopMock.granted.map((handle) => ({ handle })), app: { handle: 'perfume-cloud-team', requestedAccessScopes: shopMock.requested.map((handle) => ({ handle })) } } } });
+      return send(200, { data: { currentAppInstallation: { accessScopes: shopMock.granted.map((handle) => ({ handle })), app: { handle: null, requestedAccessScopes: shopMock.requested.map((handle) => ({ handle })) } } } });
     }
     if (q.includes('shop {')) return send(200, { data: { shop: { name: 'Perfume Cloud', myshopifyDomain: 'ks8yin-mg.myshopify.com', currencyCode: 'EUR' } } });
     send(200, { data: {} });
@@ -1876,7 +1888,13 @@ test('Shopify: neue Berechtigungen aus der App-Version, die im Shop noch nicht b
   assert.deepEqual(r.data.test.missing, ['read_inventory', 'write_merchant_managed_fulfillment_orders'], 'read_orders steckt in write_orders');
   assert.deepEqual(r.data.test.unapproved, ['read_inventory', 'write_merchant_managed_fulfillment_orders']);
   assert.match(r.data.test.message, /Im Shop noch nicht bestätigt: read_inventory, write_merchant_managed_fulfillment_orders/);
-  assert.equal(r.data.test.approve_url, 'https://admin.shopify.com/store/ks8yin-mg/apps/perfume-cloud-team');
+  assert.equal(r.data.test.approve_url, 'https://admin.shopify.com/store/ks8yin-mg/api/verify_and_install?api_key=cid&state=abc', 'Bestätigungsseite von Shopify, nicht die App-Liste');
+  assert.equal(r.data.test.open_url, 'https://ks8yin-mg.myshopify.com/admin/api_permissions/1047579230534/redirect');
+  // Liefert Shopify keine Links, die App über die Client-ID öffnen (fragt dort nach den neuen Rechten)
+  shopMock.approveLinks = false;
+  r = await admin.req('POST', '/admin/shopify/check');
+  assert.equal(r.data.test.approve_url, 'https://ks8yin-mg.myshopify.com/admin/apps/cid');
+  shopMock.approveLinks = true;
   assert.equal(r.data.shopify.check.ok, false, 'Ergebnis bleibt nach dem Neuladen sichtbar');
   assert.equal((await kim.req('POST', '/admin/shopify/check')).status, 403);
 

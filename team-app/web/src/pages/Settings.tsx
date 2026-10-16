@@ -1611,6 +1611,11 @@ function IntegrationsPanel() {
                     In Shopify bestätigen
                   </LinkButton>
                 )}
+                {check.open_url && (
+                  <LinkButton href={check.open_url} size="sm" variant="secondary" icon={<ExternalLink className="h-3.5 w-3.5" />}>
+                    App in Shopify öffnen
+                  </LinkButton>
+                )}
                 <Button
                   type="button"
                   size="sm"

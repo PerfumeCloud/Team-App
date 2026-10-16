@@ -80,6 +80,14 @@ Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungsl
 4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort die **Testbestellung**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
 
+## Update 1.3 → 1.3.1 (Admin-E-Mails)
+
+1. Neue **`perfumecloud-club-upload.zip`** nach `app.perfumecloud.de/httpdocs` hochladen, „Vorhandene Dateien ersetzen“, App einmal öffnen.
+2. Club-Admin → **Einstellungen → Zugänge → Admin-E-Mails** → **E-Mail eintragen**: die Adresse, mit der du dich in der Club-App anmeldest (z. B. deine private Adresse aus dem Shop-Kundenkonto), und bei **Gehört zu** dich selbst wählen → **Eintragen**.
+3. Club-App neu laden: oben steht **Admin**.
+
+**Admin-E-Mails:** Wer sich in der Club-App mit einer eingetragenen Adresse anmeldet (E-Mail-Code oder Shopify-Kundenkonto), bekommt den Admin-Bereich dazu. Gehört die Adresse zu einer Person (Team-Mitglied oder Club-Zugang), gelten deren Rechte. **Keine Person** gibt einen eigenen Admin-Zugang, der alles darf außer Zugänge verwalten. Eintragen und entfernen dürfen Admins der Team-App und eigene Club-Zugänge. Eingetragene Adressen gelten auch, wenn **Anmeldung für das Team** aus ist. Wer schon angemeldet ist, bekommt den Admin-Bereich beim nächsten Öffnen der App.
+
 ## Update 1.2 → 1.3 (eigene Anmeldeseite, Vorname, Testbestellung)
 
 Nötig für die **Testbestellung** in der Team-App 1.8 (bei älteren Versionen meldet die Team-App „Nicht gefunden“ bzw. „Der Members Club läuft noch auf Version …“). Alle Punkte, Mitglieder und Codes bleiben erhalten.
@@ -245,7 +253,7 @@ Danach teilen sich Club und Team-App **eine Datenbank** (alle Club-Tabellen begi
 - Personen ohne Team-App (z. B. eine Agentur) bekommen unter **Zugänge → Eigene Club-Zugänge** ein eigenes Konto.
 
 ### H3 · Anmeldung mit der E-Mail erkennen
-Club-Admin → **Einstellungen → Zugänge → Anmeldung für das Team** → **Einschalten**. Meldet sich jemand aus dem Team in der Club-App an (E-Mail-Code oder Shopify-Kundenkonto mit **derselben E-Mail** wie in der Team-App), bekommt die Person den Admin-Bereich dazu: oben in der Club-App steht dann **Admin**. Über `app.perfumecloud.de/admin` → **Mit Kundenkonto anmelden** geht es direkt in den Admin-Bereich. Dort zeigt **Kundenansicht** die App wie ein Mitglied.
+Club-Admin → **Einstellungen → Zugänge → Anmeldung für das Team** → **Einschalten**. Meldet sich jemand aus dem Team in der Club-App an (E-Mail-Code oder Shopify-Kundenkonto mit **derselben E-Mail** wie in der Team-App), bekommt die Person den Admin-Bereich dazu: oben in der Club-App steht dann **Admin**. Meldet sich jemand mit einer **anderen** Adresse an (z. B. der privaten aus dem Shop), diese unter **Zugänge → Admin-E-Mails** eintragen (ab 1.3.1). Über `app.perfumecloud.de/admin` → **Mit Kundenkonto anmelden** geht es direkt in den Admin-Bereich. Dort zeigt **Kundenansicht** die App wie ein Mitglied.
 
 ### H4 · Team-App einstellen
 1. Team-App → **Einstellungen → Integrationen → Members Club**. Mit gemeinsamer Datenbank ist alles schon ausgefüllt (grüner Haken). Sonst Adresse und Schlüssel aus Club-Admin → **Einstellungen → System → Verbindung zur Team-App** kopieren und **Speichern & testen**.
@@ -391,7 +399,7 @@ Die bisherige **Club-Einladung** (Bonus „Freunde einladen“ in den Regeln) bl
 | Punkte stehen auf „unterwegs“ | Normal bis 14 Tage nach dem Versand. Der Cronjob (Teil D) schreibt sie danach gut. |
 | „Code erstellen“ meldet einen Fehler | Shopify-Test im Admin prüfen (`write_discounts`). Die Punkte wurden nicht abgebucht. |
 | Keine Push-Mitteilungen | App vom **Home-Bildschirm** öffnen (iPhone ab iOS 16.4), unter **Konto** Mitteilungen einschalten. Im Admin unter **Push** stehen Zustellungen und Fehler. Läuft die Ruhezeit, kommen sie morgens. Ohne Cronjob (Teil D) wird nichts verschickt. |
-| Team-Mitglied sieht oben kein „Admin“ | **Zugänge → Anmeldung für das Team** muss an sein und die E-Mail exakt der in der Team-App entsprechen. Nicht-Admins brauchen **Club-Zugang** (H2). |
+| Team-Mitglied sieht oben kein „Admin“ | Meist ist die Adresse in der Club-App eine andere als in der Team-App (z. B. privat statt @perfumecloud.de): unter **Zugänge → Admin-E-Mails** eintragen (ab 1.3.1). Sonst: **Zugänge → Anmeldung für das Team** muss an sein; Nicht-Admins brauchen **Club-Zugang** (H2). |
 | Kein Anmeldecode per Mail | Spam-Ordner prüfen. Club-Admin → **Verbindungen → E-Mail-Versand** → **Testmail an mich**. Klappt das nicht, darunter **Mit Shopify-Konto fortfahren** nutzen. |
 | Begrüßung zeigt keinen Namen | Unter **Konto → Vornamen eintragen**. Mitglieder, die vor 1.3 ohne Namen beigetreten sind, sehen „schön dich zu sehen“, bis sie ihn eintragen. |
 | Team-App: Testbestellung „Nicht gefunden“ | Der Club ist älter als 1.3: Update 1.2 → 1.3. |

@@ -461,6 +461,8 @@ export interface AccessOverview {
   team_mode: boolean;
   team: { id: string; name: string; email: string; source: 'team'; role: string; access: boolean }[];
   club: { id: string; name: string; email: string; source: 'club'; access: boolean; role: string; last_login_at: number | null }[];
+  /** Admin-E-Mails: Anmeldung in der Club-App mit dieser Adresse → Admin-Bereich (mit den Rechten der Person, falls verknüpft) */
+  emails: { email: string; admin_id: string | null; person: string | null; valid: boolean; by: string; at: number }[];
   team_url: string | null;
 }
 

@@ -207,6 +207,34 @@ final class Shopify
         return array_keys($out);
     }
 
+    /**
+     * Wo der Shop neue Berechtigungen bestätigt. Shopify liefert dafür selbst die Seite (app.installUrl:
+     * „Webpage where you can install the app, if app requires explicit user permission“) und den Link zum Öffnen
+     * der App. Den Kurznamen der App gibt es bei Apps aus dem Dev Dashboard oft nicht – „apps/<handle>“ führte
+     * dann nur in die allgemeine App-Liste ohne Bestätigen-Knopf.
+     * @return array{approve_url:string, open_url?:string}
+     */
+    private static function approveUrls(): array
+    {
+        $out = [];
+        try {
+            $d = self::graphql('query TeamApprove { currentAppInstallation { launchUrl app { installUrl } } }');
+            $install = trim((string) ($d['currentAppInstallation']['app']['installUrl'] ?? ''));
+            $launch = trim((string) ($d['currentAppInstallation']['launchUrl'] ?? ''));
+            if (str_starts_with($install, 'https://')) {
+                $out['approve_url'] = $install;
+            }
+            if (str_starts_with($launch, 'https://')) {
+                $out[isset($out['approve_url']) ? 'open_url' : 'approve_url'] = $launch;
+            }
+        } catch (\Throwable $e) {
+            Util::log('Shopify-Bestätigungslink nicht abgefragt: ' . $e->getMessage());
+        }
+        // Rückfall: App über die Client-ID öffnen – Shopify fragt dabei nach den neuen Berechtigungen
+        $out['approve_url'] ??= 'https://' . self::config()['shop'] . '/admin/apps/' . rawurlencode(self::config()['client_id']);
+        return $out;
+    }
+
     /** Fehlende Berechtigungen. @return string[] */
     public static function missing(array $needed): array
     {
@@ -253,8 +281,8 @@ final class Shopify
             $out = ['missing' => $missing, 'unapproved' => $unapproved];
             if ($unapproved) {
                 $parts[] = 'Im Shop noch nicht bestätigt: ' . implode(', ', $unapproved)
-                    . '. Die neue App-Version ist freigegeben, Shopify wartet aber noch auf eure Zustimmung: einmal „In Shopify bestätigen“ antippen (Shopify-Admin → Apps → die Team-App öffnen) und „Aktualisieren“ wählen. Danach hier „Speichern & testen“.';
-                $out['approve_url'] = self::adminUrl($g && $g['handle'] !== '' ? 'apps/' . $g['handle'] : 'settings/apps');
+                    . '. Die neue App-Version ist freigegeben, Shopify wartet aber noch auf eure Zustimmung: „In Shopify bestätigen“ antippen, im Shop die Berechtigungen ansehen und „Aktualisieren“ bzw. „Installieren“ wählen. Danach hier „Erneut prüfen“.';
+                $out += self::approveUrls();
             }
             if ($notRequested) {
                 $parts[] = 'In der App-Version fehlen: ' . implode(', ', $notRequested) . '. Im Dev Dashboard eine neue Version mit diesen Zugriffsbereichen freigeben.';

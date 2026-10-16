@@ -172,10 +172,8 @@ final class Auth
      */
     public static function adminFromMember(array $member): bool
     {
-        if (!(bool) Settings::get('admin_by_email', true)) {
-            return false;
-        }
-        $admin = Admins::byEmail((string) $member['email']);
+        // Eingetragene Admin-E-Mails gelten immer, die automatische Erkennung des Teams nur mit Schalter
+        $admin = (bool) Settings::get('admin_by_email', true) ? Admins::byEmail((string) $member['email']) : Admins::byExtraEmail((string) $member['email']);
         if (!$admin) {
             return false;
         }

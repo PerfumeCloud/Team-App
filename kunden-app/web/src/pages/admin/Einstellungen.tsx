@@ -570,6 +570,8 @@ function Zugaenge({ data, speichern }: { data: Settings; speichern: Speichern })
   const [loeschen, setLoeschen] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
+  const [mail, setMail] = useState<{ email: string; admin_id: string } | null>(null);
+  const [mailFehler, setMailFehler] = useState<string | null>(null);
   const darf = !!me.admin.manage;
 
   if (!zugang.data) return zugang.error ? <Hinweis fehler>{zugang.error}</Hinweis> : <Laden />;
@@ -597,6 +599,34 @@ function Zugaenge({ data, speichern }: { data: Settings; speichern: Speichern })
       setFehler(fehlertext(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Personen mit Club-Admin-Zugriff, zu denen eine Admin-E-Mail gehören kann
+  const personen = [...z.team.filter((u) => u.access), ...z.club];
+
+  async function mailEintragen(e: FormEvent) {
+    e.preventDefault();
+    if (!mail) return;
+    setBusy(true);
+    setMailFehler(null);
+    try {
+      zugang.setData(await api<AccessOverview>('POST', '/admin/access/emails', { email: mail.email.trim(), admin_id: mail.admin_id || null }));
+      setMail(null);
+      toast('Admin-E-Mail eingetragen');
+    } catch (err) {
+      setMailFehler(fehlertext(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function mailEntfernen(email: string) {
+    try {
+      zugang.setData(await api<AccessOverview>('POST', '/admin/access/emails/remove', { email }));
+      toast('Admin-E-Mail entfernt');
+    } catch (err) {
+      toast(fehlertext(err));
     }
   }
 
@@ -655,6 +685,75 @@ function Zugaenge({ data, speichern }: { data: Settings; speichern: Speichern })
             Der Club nutzt noch eine eigene Datenbank. Unter <NavLinkText to="/admin/einstellungen/system">System</NavLinkText> kannst du ihn in die Datenbank der Team-App umziehen; dann gelten die Benutzer der
             Team-App automatisch.
           </p>
+        )}
+      </section>
+
+      <section className="karte">
+        <div className="karte-kopf">
+          <h2 className="karte-titel">Admin-E-Mails</h2>
+          {darf && !mail && (
+            <button
+              className="knopf knopf-klein"
+              onClick={() => setMail({ email: '', admin_id: personen.some((p) => p.id === me.admin.id) ? me.admin.id : '' })}
+            >
+              <Plus /> E-Mail eintragen
+            </button>
+          )}
+        </div>
+        <p className="klein leise">
+          Wer sich in der Club-App mit einer dieser Adressen anmeldet (E-Mail-Code oder Shopify-Kundenkonto), bekommt den Admin-Bereich dazu und sieht oben den Knopf „Admin“. Gut für die private Adresse, mit der
+          du im Shop einkaufst. Gehört die Adresse zu einer Person, gelten deren Rechte.
+        </p>
+        {z.emails.length > 0 ? (
+          <ul className="tabelle">
+            {z.emails.map((e) => (
+              <li key={e.email}>
+                <span className="umbruch">
+                  {e.email}
+                  <small className="leise winzig" style={{ display: 'block' }}>
+                    {e.admin_id ? (e.valid ? `gehört zu ${e.person}` : 'Die Person hat keinen Zugang mehr – Adresse wirkt nicht') : 'eigener Admin-Zugang (ohne Zugänge verwalten)'} · eingetragen von {e.by || '–'}
+                  </small>
+                </span>
+                <span className="rechts">
+                  {darf && (
+                    <button className="knopf knopf-rund knopf-klein knopf-gefahr" aria-label={`${e.email} entfernen`} onClick={() => void mailEntfernen(e.email)}>
+                      <Trash2 />
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          !mail && <p className="klein">Noch keine eingetragen.</p>
+        )}
+        {mail && (
+          <form className="formular" onSubmit={mailEintragen}>
+            <div className="formular-reihe">
+              <Feld titel="E-Mail-Adresse">
+                <input type="email" value={mail.email} onChange={(e) => setMail({ ...mail, email: e.target.value })} required autoFocus placeholder="name@beispiel.de" />
+              </Feld>
+              <Feld titel="Gehört zu">
+                <select value={mail.admin_id} onChange={(e) => setMail({ ...mail, admin_id: e.target.value })}>
+                  {personen.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                  <option value="">Keine Person (eigener Admin-Zugang)</option>
+                </select>
+              </Feld>
+            </div>
+            {mailFehler && <Hinweis fehler>{mailFehler}</Hinweis>}
+            <div className="code-reihe">
+              <Hb klein dunkel type="submit" busy={busy}>
+                Eintragen
+              </Hb>
+              <button type="button" className="knopf" onClick={() => setMail(null)}>
+                Abbrechen
+              </button>
+            </div>
+          </form>
         )}
       </section>
 
@@ -720,7 +819,8 @@ function Zugaenge({ data, speichern }: { data: Settings; speichern: Speichern })
           {data.admin_by_email ? <CircleCheck /> : <CircleX />} Admins anhand der E-Mail erkennen: {data.admin_by_email ? 'an' : 'aus'}
         </p>
         <p className="klein leise">
-          Ist das an, landen Team-Mitglieder nach der Anmeldung in der Club-App (Shopify-Kundenkonto oder E-Mail-Code) direkt im Admin-Bereich. Über „Kundenansicht“ oben sehen sie die App wie ein Mitglied.
+          Ist das an, bekommen Team-Mitglieder nach der Anmeldung in der Club-App (Shopify-Kundenkonto oder E-Mail-Code) mit derselben E-Mail wie in der Team-App den Admin-Bereich dazu. Andere Adressen
+          oben unter „Admin-E-Mails“ eintragen – die gelten auch, wenn das hier aus ist.
         </p>
       </Abschnitt>
 

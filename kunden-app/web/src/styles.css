@@ -151,7 +151,8 @@ input[type="checkbox"]:checked::after{content:"";width:.7rem;height:.4rem;border
 .dock a:hover{background:rgba(35,33,32,.08)}
 .dock a[aria-current="page"]{background:var(--amber);color:var(--styx)}
 .admin-dock{width:min(32rem,calc(100vw - 1.2rem))}
-.admin-dock .dock{grid-template-columns:repeat(5,1fr)}
+/* „Einstellungen“ ist das längste Wort: etwas mehr Platz, „Push“ etwas weniger – sonst ragt es am Handy über den Rand */
+.admin-dock .dock{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,1.3fr)}
 .admin-dock .dock a{font-size:.6875rem}
 .zaehler{position:absolute;top:.15rem;right:22%;min-width:1.1rem;height:1.1rem;padding:0 .3rem;border-radius:999px;background:var(--gruen-tief);color:#fff;font-size:.6875rem;line-height:1.1rem;text-align:center}
 .kopf-text{width:2.9rem;padding:0}

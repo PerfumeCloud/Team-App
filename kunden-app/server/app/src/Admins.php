@@ -9,6 +9,10 @@ namespace Club;
  * Mit der Datenbank der Team-App (empfohlen) sind das alle Team-Mitglieder mit der Rolle „Admin“ oder mit
  * „Club-Admin“-Recht (users.club_access). Angelegt, eingeladen und verwaltet werden sie in der Team-App –
  * mit demselben Passwort. Eigene Club-Zugänge (club_admins) gibt es weiterhin für den Betrieb ohne Team-App.
+ *
+ * Dazu kommen „Admin-E-Mails“ (Einstellung admin_emails): Wer sich in der Club-App mit einer dieser Adressen
+ * anmeldet (E-Mail-Code oder Shopify-Kundenkonto), bekommt den Admin-Bereich – z. B. die private Adresse, mit der
+ * jemand im Shop einkauft. Eine Adresse kann zu einer Person gehören (dann gelten deren Rechte) oder allein stehen.
  */
 final class Admins
 {
@@ -59,6 +63,14 @@ final class Admins
 
     public static function find(string $id): ?array
     {
+        if (str_starts_with($id, self::MAIL_PREFIX)) {
+            foreach (self::extraEmails() as $e) {
+                if ($e['admin_id'] === null && self::mailId($e['email']) === $id) {
+                    return self::fromMail($e);
+                }
+            }
+            return null;
+        }
         $a = Db::one('SELECT * FROM club_admins WHERE id = ?', [$id]);
         if ($a) {
             return self::fromClub($a);
@@ -83,7 +95,95 @@ final class Admins
             }
         }
         $a = Db::one('SELECT * FROM club_admins WHERE email = ?', [$email]);
-        return $a ? self::fromClub($a) : null;
+        return $a ? self::fromClub($a) : self::byExtraEmail($email);
+    }
+
+    // ---------- Admin-E-Mails ----------
+
+    private const MAIL_PREFIX = 'mail-';
+
+    /** @return list<array{email:string, admin_id:?string, by:string, at:int}> */
+    public static function extraEmails(): array
+    {
+        $list = Settings::get('admin_emails', []);
+        $out = [];
+        foreach (is_array($list) ? $list : [] as $e) {
+            if (is_array($e) && is_string($e['email'] ?? null) && $e['email'] !== '') {
+                $out[] = ['email' => mb_strtolower($e['email']), 'admin_id' => is_string($e['admin_id'] ?? null) && $e['admin_id'] !== '' ? $e['admin_id'] : null, 'by' => (string) ($e['by'] ?? ''), 'at' => (int) ($e['at'] ?? 0)];
+            }
+        }
+        return $out;
+    }
+
+    /** Sitzungs-ID für eine Adresse ohne Person (passt in club_sessions.subject_id, 36 Zeichen). */
+    private static function mailId(string $email): string
+    {
+        return self::MAIL_PREFIX . substr(hash('sha256', mb_strtolower($email)), 0, 31);
+    }
+
+    private static function fromMail(array $e): array
+    {
+        return [
+            'id' => self::mailId($e['email']),
+            'name' => $e['email'],
+            'email' => $e['email'],
+            'password_hash' => '',
+            'source' => 'email',
+            'team_role' => null,
+            'club_access' => true,
+        ];
+    }
+
+    /** Admin über eine eingetragene Admin-E-Mail (gehört sie zu einer Person, gilt deren Zugang). */
+    public static function byExtraEmail(string $email): ?array
+    {
+        $email = mb_strtolower(trim($email));
+        foreach (self::extraEmails() as $e) {
+            if ($e['email'] !== $email) {
+                continue;
+            }
+            return $e['admin_id'] !== null ? self::find($e['admin_id']) : self::fromMail($e);
+        }
+        return null;
+    }
+
+    /** Admin-E-Mail eintragen. $in: email, admin_id (optional: Person, deren Rechte gelten). */
+    public static function addEmail(array $by, array $in): array
+    {
+        self::requireManage($by);
+        $email = Util::email($in['email'] ?? '');
+        $adminId = is_string($in['admin_id'] ?? null) && $in['admin_id'] !== '' ? $in['admin_id'] : null;
+        foreach (self::extraEmails() as $e) {
+            if ($e['email'] === $email) {
+                throw new HttpError(409, 'Diese Adresse steht schon in der Liste.');
+            }
+        }
+        $existing = self::byEmail($email);
+        if ($existing) {
+            throw new HttpError(409, 'Mit dieser Adresse hat ' . $existing['name'] . ' schon Zugriff. Eintragen ist nicht nötig.');
+        }
+        if ($adminId !== null && (str_starts_with($adminId, self::MAIL_PREFIX) || !self::find($adminId))) {
+            throw new HttpError(422, 'Diese Person hat keinen Zugang zum Club-Admin. Bitte zuerst freischalten oder „Keine Person“ wählen.');
+        }
+        $list = self::extraEmails();
+        $list[] = ['email' => $email, 'admin_id' => $adminId, 'by' => (string) $by['name'], 'at' => Util::now()];
+        Settings::set('admin_emails', $list);
+        return self::overview();
+    }
+
+    public static function removeEmail(array $by, string $email): array
+    {
+        self::requireManage($by);
+        $email = mb_strtolower(trim($email));
+        $list = self::extraEmails();
+        $left = array_values(array_filter($list, static fn ($e) => $e['email'] !== $email));
+        if (count($left) === count($list)) {
+            throw new HttpError(404, 'Diese Adresse steht nicht in der Liste.');
+        }
+        Settings::set('admin_emails', $left);
+        // Sitzungen einer Adresse ohne Person enden sofort
+        Db::exec("DELETE FROM club_sessions WHERE kind = 'admin' AND subject_id = ?", [self::mailId($email)]);
+        return self::overview();
     }
 
     public static function count(): int
@@ -114,7 +214,7 @@ final class Admins
             'name' => $a['name'],
             'email' => $a['email'],
             'source' => $a['source'],
-            // Rechte verwalten dürfen Team-Admins und eigene Club-Zugänge
+            // Rechte verwalten dürfen Team-Admins und eigene Club-Zugänge (Admin-E-Mails ohne Person nicht)
             'manage' => $a['source'] === 'club' || $a['team_role'] === 'admin',
         ];
     }
@@ -151,7 +251,11 @@ final class Admins
             // Die Team-App merkt sich ihre Adresse hier, sobald sie die Club-Daten liest
             $teamUrl ??= is_string(Settings::get('team_url')) ? Settings::get('team_url') : null;
         }
-        return ['team_mode' => Db::team(), 'team' => $team, 'club' => $club, 'team_url' => $teamUrl];
+        $emails = array_map(static function ($e) {
+            $person = $e['admin_id'] !== null ? self::find($e['admin_id']) : null;
+            return ['email' => $e['email'], 'admin_id' => $e['admin_id'], 'person' => $person['name'] ?? null, 'valid' => $e['admin_id'] === null || $person !== null, 'by' => $e['by'], 'at' => $e['at']];
+        }, self::extraEmails());
+        return ['team_mode' => Db::team(), 'team' => $team, 'club' => $club, 'emails' => $emails, 'team_url' => $teamUrl];
     }
 
     /** Team-Mitglied als Club-Admin freischalten oder sperren (Team-Admins haben immer Zugriff). */

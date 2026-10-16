@@ -836,6 +836,63 @@ test('Admin wird an der E-Mail erkannt und sieht die App wie ein Mitglied', asyn
   assert.equal((await c.req('GET', '/admin/me')).status, 401);
 });
 
+test('Admin-E-Mails: private Adresse als Admin eintragen (mit Rechten der Person oder allein)', async () => {
+  const ich = (await admin.req('GET', '/admin/me')).data.admin;
+  // Anna meldet sich mit ihrem Kundenkonto an – noch kein Admin
+  await setMock({ login: { customer: ANNA, deny: false } });
+  const anna = new Client();
+  assert.equal(await anna.shopifyLogin('/'), '/');
+  assert.equal((await anna.req('GET', '/me')).data.admin, false);
+  assert.equal((await anna.req('POST', '/admin/access/emails', { email: 'x@example.de' })).status, 401, 'nur für Admins');
+
+  let r = await admin.req('POST', '/admin/access/emails', { email: ' Anna@Example.de ', admin_id: ich.id });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.emails.map((e) => [e.email, e.person, e.valid]), [['anna@example.de', ich.name, true]]);
+  assert.equal((await admin.req('POST', '/admin/access/emails', { email: 'anna@example.de' })).status, 409, 'schon eingetragen');
+  assert.equal((await admin.req('POST', '/admin/access/emails', { email: ich.email })).status, 409, 'hat schon Zugriff');
+  assert.equal((await admin.req('POST', '/admin/access/emails', { email: 'y@example.de', admin_id: 'gibt-es-nicht' })).status, 422);
+  assert.equal((await admin.req('POST', '/admin/access/emails', { email: 'keine-mail' })).status, 422);
+
+  // Schon angemeldet: beim nächsten Öffnen der App ist der Admin-Bereich da – mit den Rechten der verknüpften Person
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.admin, true);
+  r = await anna.req('GET', '/admin/me');
+  assert.equal(r.data.admin.id, ich.id);
+  assert.equal(r.data.admin.manage, true);
+
+  // Ohne Person: eigener Admin-Zugang ohne „Zugänge verwalten“, gilt auch mit ausgeschalteter Team-Erkennung
+  await admin.req('PUT', '/admin/settings', { admin_by_email: false });
+  r = await admin.req('POST', '/admin/access/emails', { email: 'gast-admin@example.de', admin_id: null });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const gast = new Client();
+  assert.equal((await gast.req('POST', '/auth/code', { email: 'gast-admin@example.de' })).status, 200);
+  const code = /(\d{6})/.exec(mails().filter((m) => m.to === 'gast-admin@example.de').pop().subject)[1];
+  r = await gast.req('POST', '/auth/code/verify', { email: 'gast-admin@example.de', code });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.admin, true, 'Admin-E-Mail gilt sofort nach der Anmeldung');
+  r = await gast.req('GET', '/admin/me');
+  assert.equal(r.data.admin.source, 'email');
+  assert.equal(r.data.admin.manage, false);
+  assert.equal((await gast.req('GET', '/admin/dashboard')).status, 200, 'Admin-Bereich offen');
+  assert.equal((await gast.req('POST', '/admin/access/emails', { email: 'z@example.de' })).status, 403, 'darf keine Zugänge verwalten');
+  const andere = new Client();
+  assert.equal(await andere.shopifyLogin('/'), '/');
+  assert.equal((await andere.req('GET', '/admin/me')).data.admin.id, ich.id, 'auch mit ausgeschalteter Team-Erkennung');
+  await admin.req('PUT', '/admin/settings', { admin_by_email: true });
+
+  // Entfernen: Sitzung der Adresse ohne Person endet sofort
+  r = await admin.req('POST', '/admin/access/emails/remove', { email: 'gast-admin@example.de' });
+  assert.equal(r.status, 200);
+  assert.equal((await gast.req('GET', '/admin/me')).status, 401);
+  assert.equal((await admin.req('POST', '/admin/access/emails/remove', { email: 'gast-admin@example.de' })).status, 404);
+  r = await admin.req('POST', '/admin/access/emails/remove', { email: 'anna@example.de' });
+  assert.deepEqual(r.data.emails, []);
+  const wieder = new Client();
+  await wieder.shopifyLogin('/');
+  assert.equal((await wieder.req('GET', '/me')).data.admin, false, 'Anna ist wieder nur Mitglied');
+  assert.equal((await wieder.req('GET', '/admin/me')).status, 401);
+});
+
 test('Team-App: Statistik, Nachricht an Mitglieder mit Prüfung und Freigabe, Feedback, Einmal-Anmeldung', async () => {
   const key = setting('internal_key');
   const internal = (method, path, body) => fetch(`${app}/api/internal${path}`, {

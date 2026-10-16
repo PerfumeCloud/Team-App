@@ -140,7 +140,9 @@ Ohne diese Rechte läuft die App weiter, nur die jeweilige Funktion fehlt.
    - **Protected customer data** → **Zugriff anfragen**, Grund z. B. „Kundenservice: Bestellungen und Versandstatus zur Absenderadresse einer Mail anzeigen“ → **Speichern**.
    - Darunter bei den **Feldern** **Name**, **E-Mail** und **Adresse** anhaken (Telefon braucht die App nicht), jeweils denselben Grund → **Speichern**.
    - Bei einer App nur für den eigenen Shop prüft Shopify das nicht, die Freigabe gilt sofort.
-3. **Im Shop bestätigen** – sonst gelten die neuen Rechte nicht, auch wenn sie in der Version angehakt sind: Team-App → **Einstellungen → Integrationen → Shopify** → **In Shopify bestätigen** (öffnet einen neuen Tab), oder Shopify-Admin → **Apps** → **Perfume Cloud Team**. Shopify fragt nach den neuen Rechten → **Aktualisieren** bzw. **Installieren** bestätigen.
+3. **Im Shop bestätigen** – sonst gelten die neuen Rechte nicht, auch wenn sie in der Version angehakt sind: Team-App → **Einstellungen → Integrationen → Shopify** → **In Shopify bestätigen**. Das öffnet in einem neuen Tab die Seite, auf der Shopify die neuen Rechte der Team-App zeigt (vorher im Shopify-Admin angemeldet sein) → **Aktualisieren** bzw. **Installieren**. Klappt das nicht, **App in Shopify öffnen** – auch dabei fragt Shopify nach den neuen Rechten. Ein „Verbindung verweigert“ danach ist egal.
+   - Hinweis: Die Team-App hat bei Shopify keinen Kurznamen. Bis Version 1.8.0 führte der Knopf deshalb nur in die allgemeine App-Liste ohne Bestätigen-Knopf; ab 1.8.1 holt die App den richtigen Link direkt von Shopify.
+   - Kommt gar keine Abfrage: im Dev Dashboard prüfen, dass die neueste Version **aktiv** ist und die Scopes als **Zugriffsbereiche** (nicht als „optionale“) eingetragen sind. Letzter Weg: Shopify-Admin → **Einstellungen → Apps** → **Perfume Cloud Team** → **Deinstallieren** und im Dev Dashboard wieder **installieren**. Die Team-App speichert nichts in Shopify, Client-ID und Secret bleiben gleich; danach **Speichern & testen**.
 4. Zurück in der Team-App **Erneut prüfen**. Die App unterscheidet „Im Shop noch nicht bestätigt“ (Schritt 3 fehlt) und „In der App-Version fehlen“ (Schritt 1 fehlt); bei allen Rechten steht „alle Berechtigungen da“. Darunter mit **Kundeninfo testen** eine echte Kunden-Adresse oder Bestellnummer (z. B. `#1042`) eingeben: Es erscheinen Bestellungen, Ort und Club-Stufe.
 
 Steht bei „Kundeninfo testen“ „Shopify verweigert den Zugriff auf Kundendaten“, fehlt Schritt 2.
@@ -499,6 +501,14 @@ Unter **Hilfe** (am Computer links im Menü, am Handy oben das **Rettungsring-Sy
 
 **Links bleiben in der App:** Links zu Shop, Shopify, Instagram oder zur Sendungsverfolgung öffnen in einem **neuen Tab**. Die installierte App bleibt dabei offen, auf dem Handy wie am Computer.
 
+## Update auf Version 1.8.1 (wenn 1.8 schon läuft)
+
+Behebt: **Wochenrückblick** zeigte nach „Statistik öffnen“ „Verbindung verweigert“ (Links aus dem Rückblick öffnen jetzt in der App bzw. in einem neuen Tab), und **In Shopify bestätigen** führte nur in die App-Liste (jetzt direkt auf Shopifys Bestätigungsseite, dazu **App in Shopify öffnen** als zweiter Weg).
+
+1. Neue **`perfumecloud-team-app-upload.zip`** hochladen und mit „Vorhandene Dateien ersetzen“ entpacken. Unter **Einstellungen** steht ganz unten „Version 1.8.1“.
+2. **Einstellungen → Integrationen → Shopify** öffnen. Die App prüft die Rechte beim Öffnen selbst. Steht dort „Im Shop noch nicht bestätigt“: **In Shopify bestätigen** → **Aktualisieren** → zurück → **Erneut prüfen** (A9a, Schritt 3–4).
+3. Members Club auf **1.3.1** bringen (Admin-E-Mails): [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.3 → 1.3.1**.
+
 ## Update auf Version 1.8 (wenn die App schon läuft)
 
 Neu: **Testbestellung** (vorher Probelauf), Shopify-Berechtigungen richtig erkennen und **In Shopify bestätigen**, **Signatur mit Bild**, **Ordner/Gesendet/Erledigt** im Postfach, **Hilfe**, Links in neuem Tab, bessere Darstellung am Handy. Alle Daten bleiben erhalten.
@@ -539,7 +549,9 @@ Neu: **Testbestellung** (vorher Probelauf), Shopify-Berechtigungen richtig erken
 | Testbestellung fehlt unter Members Club | Nur Admins sehen sie. |
 | Testbestellung: „Nicht gefunden“ oder „Der Members Club läuft noch auf Version …“ | Der Club ist älter als 1.3: Club-Paket hochladen (KUNDEN-APP.md, Update 1.2 → 1.3). In der App: **Hilfe → Members Club aktualisieren**. |
 | Testbestellung: „Push nur im Protokoll“ | In der Club-App mit derselben E-Mail wie in der Team-App anmelden und Mitteilungen erlauben (Teil M). |
-| Shopify: „es fehlen Berechtigungen: read_inventory“ (o. ä.), obwohl in der App-Version angehakt | Die neue Version ist im Shop noch nicht bestätigt: **Integrationen → Shopify → In Shopify bestätigen**, Update annehmen, **Erneut prüfen** (A9a). |
+| Shopify: „es fehlen Berechtigungen: read_inventory“ (o. ä.), obwohl in der App-Version angehakt | Die neue Version ist im Shop noch nicht bestätigt: **Integrationen → Shopify → In Shopify bestätigen**, Update annehmen, **Erneut prüfen** (A9a). Führt der Knopf nur in die App-Liste: Team-App auf 1.8.1 aktualisieren. |
+| Wochenrückblick: „team.perfumecloud.de hat die Verbindung verweigert“ | Kam nach einem Klick auf „Statistik öffnen“ im Rückblick. Ab 1.8.1 behoben; vorher Fenster schließen und neu öffnen. |
+| Statistik zeigt 0 € | In dem Zeitraum gab es keine Bestellungen (der Shop hatte zuletzt im Juli 2025 Bestellungen). Mit **90 Tage** oder nach der ersten neuen Bestellung prüfen. |
 | Am iPhone ist die App verzogen oder vergrößert | App ganz schließen und neu öffnen (lädt die neue Version). Ab 1.8 zoomt das iPhone beim Antippen von Eingabefeldern nicht mehr in die Seite. |
 | Instagram fehlt im Menü | Nur Admins und Personen mit **Instagram-Zugang** sehen es (N3). Andere sehen es erst, wenn das Konto verbunden ist. |
 | Instagram: „Invalid redirect_uri“ beim Verbinden | Die Weiterleitungs-URI in der Meta-App (N1, Schritt 6) muss genau so lauten wie in der Team-App angezeigt, mit `https://`. |
