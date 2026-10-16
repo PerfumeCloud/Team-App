@@ -62,7 +62,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
   const fehler = params.get('fehler');
   const shopify = !!status.login?.shopify;
   const email = !!status.login?.email;
-  const [mitCode, setMitCode] = useState(!shopify && email);
+  const shopifyStart = `/api/auth/shopify/start?next=${encodeURIComponent(next)}`;
   const [gast, setGast] = useState<{ name: string; points: number } | null>(null);
   useEffect(() => {
     const code = einladung();
@@ -80,7 +80,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
       <header className="kopf">
         <Logo to="/anmelden" />
         <div className="kopf-rechts">
-          <a className="knopf" href={status.shop_url ?? '/'}>
+          <a className="knopf" href={status.shop_url ?? '/'} target="_blank" rel="noopener">
             <ShoppingBag /> Shop
           </a>
         </div>
@@ -105,31 +105,39 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
                 )}
                 <AktionBanner p={program} />
                 {fehler && <Hinweis fehler>{fehler}</Hinweis>}
-                {shopify && !mitCode && (
+                {email ? (
+                  // Eigene Anmeldung direkt hier (E-Mail-Code) – verknüpft mit dem Kundenkonto im Shop
+                  <div className="karte login-karte">
+                    <CodeAnmeldung
+                      onLogin={(me) => {
+                        navigate(next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true });
+                        onLogin(me);
+                      }}
+                    />
+                    {shopify && (
+                      <>
+                        <div className="oder" role="separator">
+                          <span>oder</span>
+                        </div>
+                        <a className="knopf knopf-voll" href={shopifyStart}>
+                          <ShoppingBag /> Mit Shopify-Konto fortfahren
+                        </a>
+                        <p className="kleingedruckt">Über die Anmeldeseite des Shops, z. B. wenn du dort schon angemeldet bist.</p>
+                      </>
+                    )}
+                  </div>
+                ) : shopify ? (
                   <>
-                    <Hb dunkel live href={`/api/auth/shopify/start?next=${encodeURIComponent(next)}`}>
+                    <Hb dunkel live href={shopifyStart}>
                       Anmelden oder Konto erstellen
                     </Hb>
                     <p className="kleingedruckt">
                       Mit deinem Perfume-Cloud-Kundenkonto. Du bekommst einen Code per E-Mail, ein Passwort brauchst du nicht. Neu hier? Dann wird dein Konto dabei erstellt.
                     </p>
-                    {email && (
-                      <button className="textlink klein" onClick={() => setMitCode(true)}>
-                        Lieber direkt hier mit E-Mail-Code anmelden
-                      </button>
-                    )}
                   </>
+                ) : (
+                  <Hinweis>Die Anmeldung wird gerade eingerichtet. Schau bald wieder vorbei.</Hinweis>
                 )}
-                {mitCode && (
-                  <CodeAnmeldung
-                    onLogin={(me) => {
-                      navigate(next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true });
-                      onLogin(me);
-                    }}
-                    zurueck={shopify ? () => setMitCode(false) : undefined}
-                  />
-                )}
-                {!shopify && !email && <Hinweis>Die Anmeldung wird gerade eingerichtet. Schau bald wieder vorbei.</Hinweis>}
               </div>
             </div>
             <div className="vorschau" aria-hidden="true">
@@ -200,7 +208,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
   );
 }
 
-function CodeAnmeldung({ onLogin, zurueck }: { onLogin: (me: Me) => void; zurueck?: () => void }) {
+function CodeAnmeldung({ onLogin }: { onLogin: (me: Me) => void }) {
   const [schritt, setSchritt] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -236,30 +244,38 @@ function CodeAnmeldung({ onLogin, zurueck }: { onLogin: (me: Me) => void; zuruec
 
   if (schritt === 'email') {
     return (
-      <form className="formular" style={{ width: 'min(100%, 26rem)' }} onSubmit={senden}>
+      <form className="formular" onSubmit={senden}>
         <p className="form-titel">
-          <Mail className="icon" /> Anmelden mit E-Mail-Code
+          <Mail className="icon" /> Anmelden oder registrieren
         </p>
         <label className="feld">
           <span>Deine E-Mail-Adresse</span>
-          <input type="email" required autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@beispiel.de" />
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            enterKeyHint="send"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@beispiel.de"
+          />
         </label>
         {fehler && <Hinweis fehler>{fehler}</Hinweis>}
-        <Hb dunkel type="submit" busy={busy}>
-          Code senden
+        <Hb dunkel live voll type="submit" busy={busy}>
+          Code per E-Mail senden
         </Hb>
-        {zurueck && (
-          <button type="button" className="textlink klein" onClick={zurueck} style={{ justifySelf: 'start' }}>
-            Zurück zur Anmeldung mit Kundenkonto
-          </button>
-        )}
+        <p className="kleingedruckt">
+          Ohne Passwort: Du bekommst einen sechsstelligen Code. Neu hier? Dann legen wir dein Perfume-Cloud-Kundenkonto gleich mit an, Bestellungen aus dem Shop gehören automatisch dazu.
+        </p>
       </form>
     );
   }
 
   return (
-    <form className="formular" style={{ width: 'min(100%, 26rem)' }} onSubmit={pruefen}>
-      <p className="klein">
+    <form className="formular" onSubmit={pruefen}>
+      <p className="klein umbruch">
         Wir haben dir einen sechsstelligen Code an <strong>{email}</strong> geschickt. Er gilt 10 Minuten.
       </p>
       <label className="feld">
@@ -277,7 +293,7 @@ function CodeAnmeldung({ onLogin, zurueck }: { onLogin: (me: Me) => void; zuruec
         />
       </label>
       {fehler && <Hinweis fehler>{fehler}</Hinweis>}
-      <Hb dunkel type="submit" busy={busy} disabled={code.length !== 6}>
+      <Hb dunkel voll type="submit" busy={busy} disabled={code.length !== 6}>
         Anmelden
       </Hb>
       <p className="klein leise">

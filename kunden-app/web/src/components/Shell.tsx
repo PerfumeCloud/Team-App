@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router';
-import { Gift, House, Package, ShoppingBag, User } from 'lucide-react';
+import { Gift, House, LayoutDashboard, Package, ShoppingBag, User } from 'lucide-react';
 import { Duenen, Toaster, zeichen } from './ui';
 
 export function Logo({ to = '/', zusatz }: { to?: string; zusatz?: ReactNode }) {
@@ -15,15 +15,21 @@ export function Logo({ to = '/', zusatz }: { to?: string; zusatz?: ReactNode }) 
 }
 
 /** Rahmen für eingeloggte Kundinnen und Kunden: Kopf, Dock, Dünen */
-export function KundenShell({ shopUrl, children, ohneDock }: { shopUrl: string; children: ReactNode; ohneDock?: boolean }) {
+export function KundenShell({ shopUrl, children, ohneDock, admin }: { shopUrl: string; children: ReactNode; ohneDock?: boolean; admin?: boolean }) {
   return (
     <>
       <Duenen />
       <header className="kopf">
         <Logo />
         <div className="kopf-rechts">
-          <a className="knopf" href={shopUrl}>
-            <ShoppingBag /> Shop
+          {admin && (
+            <Link className="knopf kopf-text" to="/admin" title="Zum Admin-Bereich" aria-label="Zum Admin-Bereich">
+              <LayoutDashboard /> <span>Admin</span>
+            </Link>
+          )}
+          {/* Mit Admin-Knopf auf dem Handy nur Symbole, damit der Kopf in eine Zeile passt */}
+          <a className={admin ? 'knopf kopf-text' : 'knopf'} href={shopUrl} target="_blank" rel="noopener" aria-label="Shop" title="Shop">
+            <ShoppingBag /> {admin ? <span>Shop</span> : 'Shop'}
           </a>
         </div>
       </header>

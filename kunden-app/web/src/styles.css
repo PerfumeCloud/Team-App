@@ -16,8 +16,8 @@
   color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;scrollbar-color:var(--tea) var(--styx);overflow-x:clip}
-body{margin:0;min-height:100vh;min-height:100dvh;background:var(--styx);color:var(--text);font-family:"Castoro",Georgia,serif;font-size:1.0625rem;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:clip}
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;scrollbar-color:var(--tea) var(--styx);overflow-x:hidden;overflow-x:clip}
+body{margin:0;min-height:100vh;min-height:100dvh;background:var(--styx);color:var(--text);font-family:"Castoro",Georgia,serif;font-size:1.0625rem;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden;overflow-x:clip}
 ::selection{background:var(--amber);color:var(--styx)}
 img{display:block;max-width:100%;height:auto}
 a{color:inherit;text-underline-offset:.22em;text-decoration-thickness:1px;transition:text-decoration-color .2s,opacity .2s}
@@ -558,3 +558,11 @@ details.mehr[open] summary{margin-bottom:.8rem}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
   .erfolg-name span,.erfolg-banner,.erfolg-balken{opacity:1;transform:none}
 }
+
+/* ===== Anmeldung auf der eigenen Seite (E-Mail-Code), Shopify als zweiter Weg ===== */
+.login-karte{width:min(100%,27rem);gap:1rem}
+.login-karte .hb{white-space:normal;text-align:center}
+.oder{display:flex;align-items:center;gap:.8rem;color:var(--leise);font-size:.8125rem;letter-spacing:.08em;text-transform:uppercase}
+.oder::before,.oder::after{content:"";flex:1;height:1px;background:var(--tea)}
+.knopf-voll{width:100%}
+.umbruch{overflow-wrap:anywhere}

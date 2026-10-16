@@ -180,7 +180,7 @@ GQL;
             'location' => $location,
             'items' => $items,
             'can_ship' => $canShip && $items !== [],
-            'test' => !empty($o['test']) || in_array('Probelauf', $tags, true) || in_array($id, Reports::testOrderIds(), true),
+            'test' => !empty($o['test']) || in_array('Probelauf', $tags, true) || in_array('Testbestellung', $tags, true) || in_array($id, Reports::testOrderIds(), true),
             'admin_url' => Shopify::adminUrl('orders/' . $id),
         ];
     }

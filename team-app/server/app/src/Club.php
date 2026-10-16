@@ -15,6 +15,9 @@ final class Club
 {
     private const TIMEOUT = 10;
 
+    /** Club-Version, die zu dieser Team-App gehört (liegt im selben Paket). Ältere Clubs kennen nicht alle Funktionen. */
+    public const EXPECTED = '1.3.0';
+
     // ---------- Konfiguration ----------
 
     /** @return array{url:string, key:?string, url_source:string, key_source:string} source: manual | auto | '' */
@@ -203,11 +206,35 @@ final class Club
         if ($status === 403 && ($data['error'] ?? '') === 'Ungültiger Schlüssel.') {
             throw new HttpError(502, 'Club-Schlüssel stimmt nicht. Bitte den Schlüssel aus den Club-Einstellungen neu eintragen.');
         }
+        if ($status === 404 && ($data['error'] ?? '') === 'Nicht gefunden.' && $path !== '/internal/ping') {
+            // Der Club kennt die Adresse nicht – er läuft auf einer älteren Version als diese Team-App
+            throw new HttpError(426, self::outdated());
+        }
         if ($status >= 400) {
             $message = is_string($data['error'] ?? null) && $data['error'] !== '' ? $data['error'] : "Fehler im Club (HTTP $status).";
             throw new HttpError($status >= 500 ? 502 : $status, $message);
         }
         return $data;
+    }
+
+    /** Hinweis, wenn der Club eine Funktion noch nicht kennt – mit der Version, die gerade läuft. */
+    public static function outdated(): string
+    {
+        $version = null;
+        try {
+            $v = self::request('GET', '/internal/ping')['version'] ?? null;
+            $version = is_string($v) ? $v : null;
+        } catch (\Throwable) {
+            $version = null;
+        }
+        return 'Der Members Club läuft noch auf ' . ($version !== null ? "Version $version" : 'einer älteren Version')
+            . ' und kennt diese Funktion noch nicht. Bitte das Club-Paket ' . self::EXPECTED . ' hochladen (Hilfe → „Members Club aktualisieren“).';
+    }
+
+    /** true, wenn der Club älter ist als die Version, die zu dieser Team-App gehört. */
+    public static function behind(?string $version): bool
+    {
+        return is_string($version) && $version !== '' && version_compare($version, self::EXPECTED, '<');
     }
 
     /** „Verbindung testen“: /internal/ping. Ergebnis wird für die Einstellungen gemerkt. @return array{ok:bool, message:string} */
@@ -216,13 +243,17 @@ final class Club
         try {
             $r = self::request('GET', '/internal/ping');
             $parts = ['Verbunden mit ' . (is_string($r['program'] ?? null) && $r['program'] !== '' ? $r['program'] : 'dem Club')];
-            if (is_string($r['version'] ?? null)) {
-                $parts[] = 'Version ' . $r['version'];
+            $version = is_string($r['version'] ?? null) ? $r['version'] : null;
+            if ($version !== null) {
+                $parts[] = 'Version ' . $version;
             }
             if (!empty($r['team_mode'])) {
                 $parts[] = 'gemeinsame Datenbank';
             }
-            $result = ['ok' => true, 'message' => implode(' · ', $parts)];
+            if (self::behind($version)) {
+                $parts[] = 'bitte auf ' . self::EXPECTED . ' aktualisieren (Hilfe → „Members Club aktualisieren“)';
+            }
+            $result = ['ok' => !self::behind($version), 'message' => implode(' · ', $parts), 'version' => $version];
         } catch (HttpError $e) {
             $result = ['ok' => false, 'message' => $e->getMessage()];
         }
@@ -241,6 +272,31 @@ final class Club
             return 'Club-Datenbank auf Version ' . (is_string($r['version'] ?? null) ? $r['version'] : '?') . ' gebracht.';
         } catch (\Throwable $e) {
             return 'Achtung: Club-Datenbank nicht aktualisiert – ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Fußzeile der Team-Postfächer (Text + Logo) an den Club geben – er setzt sie unter seine Mails
+     * (Willkommen, Befragung, Nachrichten). Ältere Clubs kennen das noch nicht; dann bleibt es still.
+     * @return string|null Hinweis für die App (null = kein Club verbunden)
+     */
+    public static function pushSignature(): ?string
+    {
+        if (!self::configured()) {
+            return null;
+        }
+        $m = Signature::meta('team');
+        $url = Signature::dataUrl('team');
+        try {
+            self::request('POST', '/internal/signature', [
+                'text' => Replies::footer(),
+                'image' => $url,
+                'width' => $m ? (int) $m['width'] : null,
+            ]);
+            return 'Auch unter den Mails des Clubs.';
+        } catch (\Throwable $e) {
+            Util::log('Club-Signatur: ' . $e->getMessage());
+            return $e instanceof HttpError && $e->status === 426 ? 'Der Club übernimmt die Fußzeile ab Version ' . self::EXPECTED . '.' : 'Club nicht erreicht: ' . $e->getMessage();
         }
     }
 
@@ -289,7 +345,7 @@ final class Club
         $order = $str($p['order_name'] ?? '');
         $stars = max(1, min(5, (int) ($p['stars'] ?? 1)));
         $who = $first !== '' ? $first : ($email !== '' ? $email : 'Kundin/Kunde');
-        $title = ($test ? 'Probelauf: ' : '') . "$stars ★ für " . ($order !== '' ? $order : 'eine Bestellung') . " – $who melden";
+        $title = ($test ? 'Testbestellung: ' : '') . "$stars ★ für " . ($order !== '' ? $order : 'eine Bestellung') . " – $who melden";
 
         $lines = [];
         $avg = is_numeric($p['avg'] ?? null) ? number_format((float) $p['avg'], 1, ',', '') : null;
@@ -349,7 +405,7 @@ final class Club
         ]);
         $comment = $str($p['comment'] ?? '');
         Notify::users($trialUser !== '' ? [$trialUser] : null, 'feedback', [
-            'title' => ($test ? 'Probelauf · ' : '') . "$stars ★ von $who",
+            'title' => ($test ? 'Testbestellung · ' : '') . "$stars ★ von $who",
             'body' => trim(($order !== '' ? $order . ' · ' : '') . ($comment !== '' ? '„' . mb_substr($comment, 0, 120) . '“' : 'Bitte kurz melden – Aufgabe ist angelegt.')),
             'url' => '/planung/' . $id,
             'tag' => 'feedback-' . $str($p['survey_id'] ?? $id),

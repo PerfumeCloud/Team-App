@@ -5,6 +5,7 @@ Neue Mail zustellen: Zeile „ADD {"from": …, "subject": …, "body": …}“ 
 bekommt sofort „* n EXISTS“. „NOIDLE“ / „IDLE“ auf stdin schaltet die IDLE-Fähigkeit aus bzw. an."""
 import base64
 import json
+import shlex
 import socket
 import sys
 import threading
@@ -91,6 +92,20 @@ SENT = [
 ]
 
 
+# Ordner wie bei netcup/Dovecot (Trennzeichen „.“); Unterordner z. B. „INBOX.Lieferanten“
+FOLDERS = {'INBOX': INBOX, 'Sent': SENT, 'Trash': [], 'Kunden': [], 'Kunden.Stammkunden': [msg(301, ['\\Seen'], 200, {
+    'From': 'Eva <eva@example.de>',
+    'To': 'info@perfumecloud.de',
+    'Subject': 'Danke für den tollen Duft',
+    'Message-ID': '<e1@example.de>',
+}, 'Liebe Grüße von Eva')]}
+SPECIAL = {'Sent': '\\Sent', 'Trash': '\\Trash'}
+
+
+def next_uid(folder):
+    return max([m['uid'] for m in folder] or [0]) + 1
+
+
 # Verbindungen im IDLE-Zustand: Liste von send-Funktionen
 IDLERS = []
 LOCK = threading.Lock()
@@ -157,12 +172,32 @@ def handle(conn):
             else:
                 send(f'{tag} NO [AUTHENTICATIONFAILED] Authentication failed\r\n')
         elif cmd == 'LIST':
-            send('* LIST (\\HasNoChildren) "." "INBOX"\r\n')
-            send('* LIST (\\HasNoChildren \\Sent) "." "Sent"\r\n')
-            send('* LIST (\\HasNoChildren \\Trash) "." "Trash"\r\n')
+            for name in list(FOLDERS):
+                kids = any(n.startswith(name + '.') for n in FOLDERS)
+                flags = ['\\HasChildren' if kids else '\\HasNoChildren'] + ([SPECIAL[name]] if name in SPECIAL else [])
+                send(f'* LIST ({" ".join(flags)}) "." "{name}"\r\n')
             send(f'{tag} OK LIST completed\r\n')
+        elif cmd == 'NAMESPACE':
+            send(f'* NAMESPACE (("" ".")) NIL NIL\r\n{tag} OK NAMESPACE completed\r\n')
+        elif cmd in ('CREATE', 'DELETE', 'RENAME', 'SUBSCRIBE', 'UNSUBSCRIBE'):
+            names = shlex.split(arg)
+            with LOCK:
+                if cmd == 'CREATE':
+                    if names[0] in FOLDERS:
+                        send(f'{tag} NO [ALREADYEXISTS] Mailbox exists\r\n')
+                        continue
+                    FOLDERS[names[0]] = []
+                elif cmd == 'DELETE':
+                    if names[0] not in FOLDERS or names[0] == 'INBOX':
+                        send(f'{tag} NO [NONEXISTENT] Mailbox does not exist\r\n')
+                        continue
+                    del FOLDERS[names[0]]
+                elif cmd == 'RENAME':
+                    FOLDERS[names[1]] = FOLDERS.pop(names[0])
+            print('FOLDER ' + json.dumps({'cmd': cmd, 'names': names}), flush=True)
+            send(f'{tag} OK {cmd} completed\r\n')
         elif cmd == 'CAPABILITY':
-            send('* CAPABILITY IMAP4rev1' + (' IDLE' if STATE['idle'] else '') + f'\r\n{tag} OK CAPABILITY completed\r\n')
+            send('* CAPABILITY IMAP4rev1 MOVE UIDPLUS' + (' IDLE' if STATE['idle'] else '') + f'\r\n{tag} OK CAPABILITY completed\r\n')
         elif cmd == 'NOOP':
             send(f'* {len(folder or INBOX)} EXISTS\r\n{tag} OK NOOP completed\r\n')
         elif cmd == 'IDLE':
@@ -180,8 +215,12 @@ def handle(conn):
             else:
                 send(f'{tag} BAD expected DONE\r\n')
         elif cmd in ('EXAMINE', 'SELECT'):
-            folder = SENT if 'Sent' in arg else INBOX
-            uidnext = max(m['uid'] for m in folder) + 1
+            name = shlex.split(arg)[0]
+            if name not in FOLDERS:
+                send(f'{tag} NO [NONEXISTENT] Mailbox does not exist\r\n')
+                continue
+            folder = FOLDERS[name]
+            uidnext = next_uid(folder)
             mode = 'READ-ONLY' if cmd == 'EXAMINE' else 'READ-WRITE'
             send(f'* {len(folder)} EXISTS\r\n* OK [UIDVALIDITY 777] UIDs valid\r\n* OK [UIDNEXT {uidnext}] Predicted next UID\r\n{tag} OK [{mode}] {cmd} completed\r\n')
         elif cmd == 'APPEND':
@@ -191,7 +230,7 @@ def handle(conn):
             data = f.read(n)
             f.readline()
             with LOCK:
-                uid = max(m['uid'] for m in SENT) + 1
+                uid = next_uid(SENT)
                 head, _, body = data.decode('utf-8', 'replace').partition('\r\n\r\n')
                 SENT.append({'uid': uid, 'flags': ['\\Seen'], 'internal': imap_date(datetime.now(timezone.utc)), 'headers': head + '\r\n\r\n', 'body': body})
             print('APPENDED ' + json.dumps({'folder': arg.split(' ')[0].strip('"'), 'size': n}), flush=True)
@@ -209,6 +248,18 @@ def handle(conn):
                                 m['flags'].append(fl)
                 print('STORED ' + json.dumps({'uids': sorted(wanted), 'flags': flags}), flush=True)
                 send(f'{tag} OK STORE completed\r\n')
+            elif sub[0].upper() == 'MOVE':
+                uidset, dest = sub[1].split(' ', 1)
+                dest = shlex.split(dest)[0]
+                wanted = {int(u) for u in uidset.split(',')}
+                with LOCK:
+                    target = FOLDERS[dest]
+                    moving = [m for m in folder if m['uid'] in wanted]
+                    for m in moving:
+                        folder.remove(m)
+                        target.append({**m, 'uid': next_uid(target)})
+                print('MOVED ' + json.dumps({'uids': sorted(wanted), 'to': dest}), flush=True)
+                send(f'{tag} OK MOVE completed\r\n')
             elif sub[0].upper() == 'SEARCH':
                 uids = [m['uid'] for m in folder]
                 crit = sub[1] if len(sub) > 1 else ''

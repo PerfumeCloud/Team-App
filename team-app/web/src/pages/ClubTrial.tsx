@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BellRing, Check, CircleAlert, Copy, ExternalLink, FlaskConical, Play, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
+import { Link } from 'react-router';
+import { BellRing, Check, CircleAlert, Copy, ExternalLink, FlaskConical, LifeBuoy, Play, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
 import { Button, Chip, cx, Segmented, Spinner } from '../components/ui';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -82,7 +83,7 @@ export default function ClubTrial() {
     void load();
   }, [load]);
 
-  // Während des Probelaufs regelmäßig nachsehen (Push-Status, Abgleich)
+  // Während der Testbestellung regelmäßig nachsehen (Push-Status, Abgleich)
   useEffect(() => {
     if (!v?.active) return;
     const t = window.setInterval(load, 15000);
@@ -102,7 +103,24 @@ export default function ClubTrial() {
     }
   };
 
-  if (!v) return <div className="flex justify-center py-20">{error ? <p className="max-w-md text-center text-bad">{error}</p> : <Spinner />}</div>;
+  if (!v)
+    return (
+      <div className="flex justify-center py-16">
+        {error ? (
+          <div className="card flex max-w-lg items-start gap-3 p-5 text-[14px]">
+            <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-warn" />
+            <div className="space-y-3">
+              <p className="text-ink">{error}</p>
+              <Link to="/hilfe/club-update" className="inline-flex items-center gap-1 font-medium text-accent underline-offset-2 hover:underline">
+                <LifeBuoy className="h-4 w-4" /> Schritt für Schritt: Members Club aktualisieren
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <Spinner />
+        )}
+      </div>
+    );
 
   const start = () => {
     const cents = Math.round(Number(amount.replace(',', '.')) * 100);
@@ -123,7 +141,7 @@ export default function ClubTrial() {
       const r = await api<CleanupResult>('POST', '/club/trial/cleanup');
       setResult(r.order);
       setV(r);
-      toast('Probelauf aufgeräumt');
+      toast('Testbestellung aufgeräumt');
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
@@ -139,7 +157,7 @@ export default function ClubTrial() {
         <FlaskConical className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
         <div className="space-y-1">
           <p className="text-ink">
-            <b>Probelauf</b>: einmal den ganzen Weg einer Bestellung durch den Club gehen – von „Bestellung eingegangen“ bis zum Stufenaufstieg.
+            <b>Testbestellung</b>: einmal den ganzen Weg einer Bestellung durch den Club gehen – von „Bestellung eingegangen“ bis zum Stufenaufstieg.
           </p>
           <p>
             Dafür gibt es ein eigenes Testkonto. Es zählt nirgends mit (Statistik, Wochenrückblick, Mitgliederliste, Newsletter). Nur Admins sehen diesen
@@ -170,8 +188,8 @@ export default function ClubTrial() {
               value={mode}
               onChange={setMode}
               options={[
-                { value: 'sim', label: 'Schnelltest (simuliert)' },
-                { value: 'real', label: 'Echte 0-€-Bestellung' },
+                { value: 'sim', label: 'Simuliert (ohne Shop)' },
+                { value: 'real', label: 'Echt im Shop (0 €)' },
               ]}
             />
             <p className="mt-2 text-[13px] text-ink-3">
@@ -206,14 +224,14 @@ export default function ClubTrial() {
             </p>
           )}
           <Button icon={<Play className="h-4 w-4" />} loading={busy === 'start'} onClick={start}>
-            Probelauf starten
+            Testbestellung starten
           </Button>
         </div>
       ) : (
         <>
           <div className="card space-y-4 p-5">
             <div className="flex flex-wrap items-center gap-2">
-              <Chip tone="accent">{v.mode === 'real' ? 'Echte Bestellung' : 'Schnelltest'}</Chip>
+              <Chip tone="accent">{v.mode === 'real' ? 'Echt im Shop' : 'Simuliert'}</Chip>
               <span className="text-[13px] text-ink-2">
                 gestartet {v.started_at ? dateTime(v.started_at) : ''} {v.by?.name ? `von ${v.by.name}` : ''} · zählt wie {euro(v.amount_cents)}
               </span>

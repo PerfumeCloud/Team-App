@@ -273,7 +273,7 @@ final class Imap
         $this->idleTag = null;
     }
 
-    /** @return array<int, array{name:string, flags:string[]}> */
+    /** @return array<int, array{name:string, flags:string[], delim:string}> */
     public function listFolders(): array
     {
         $folders = [];
@@ -283,10 +283,89 @@ final class Imap
             }
             $t = self::parse(substr($line, strlen($m[0])));
             if (count($t) >= 3 && is_array($t[0]) && is_string($t[2])) {
-                $folders[] = ['name' => $t[2], 'flags' => array_map('strval', $t[0])];
+                $folders[] = ['name' => $t[2], 'flags' => array_map('strval', $t[0]), 'delim' => is_string($t[1]) ? $t[1] : ''];
             }
         }
         return $folders;
+    }
+
+    /** Persönlicher Bereich des Postfachs, z. B. ["INBOX.", "."] bei netcup/Dovecot – oder null. @return array{0:string,1:string}|null */
+    public function personalNamespace(): ?array
+    {
+        try {
+            foreach ($this->command('NAMESPACE') as $line) {
+                if (preg_match('/^\* NAMESPACE \(\("([^"]*)" (?:"([^"]*)"|NIL)\)/i', $line, $m)) {
+                    return [$m[1], $m[2] ?? ''];
+                }
+            }
+        } catch (\RuntimeException) {
+            return null;
+        }
+        return null;
+    }
+
+    public function createFolder(string $folder): void
+    {
+        $this->command('CREATE ' . self::quote($folder));
+        try {
+            $this->command('SUBSCRIBE ' . self::quote($folder)); // damit Outlook und iPhone ihn auch zeigen
+        } catch (\RuntimeException) {
+        }
+    }
+
+    public function renameFolder(string $from, string $to): void
+    {
+        $this->command('RENAME ' . self::quote($from) . ' ' . self::quote($to));
+        try {
+            $this->command('UNSUBSCRIBE ' . self::quote($from));
+            $this->command('SUBSCRIBE ' . self::quote($to));
+        } catch (\RuntimeException) {
+        }
+    }
+
+    public function deleteFolder(string $folder): void
+    {
+        try {
+            $this->command('UNSUBSCRIBE ' . self::quote($folder));
+        } catch (\RuntimeException) {
+        }
+        $this->command('DELETE ' . self::quote($folder));
+    }
+
+    /**
+     * Mails im (mit select geöffneten) Ordner in einen anderen verschieben.
+     * Mit MOVE (RFC 6851), sonst kopieren, als gelöscht markieren und entfernen.
+     */
+    public function moveUids(array $uids, string $to): void
+    {
+        $set = implode(',', array_map('intval', $uids));
+        if ($set === '') {
+            return;
+        }
+        $caps = $this->capabilities();
+        if (in_array('MOVE', $caps, true)) {
+            $this->command("UID MOVE $set " . self::quote($to));
+            return;
+        }
+        $this->command("UID COPY $set " . self::quote($to));
+        $this->command("UID STORE $set +FLAGS.SILENT (\\Deleted)");
+        $this->command(in_array('UIDPLUS', $caps, true) ? "UID EXPUNGE $set" : 'EXPUNGE');
+    }
+
+    /** Ordnernamen in IMAP stehen in „modifiziertem UTF-7“ (RFC 3501) – z. B. „Entw&APw-rfe“ für „Entwürfe“. */
+    public static function decodeFolder(string $name): string
+    {
+        if (!str_contains($name, '&')) {
+            return $name;
+        }
+        $s = @mb_convert_encoding($name, 'UTF-8', 'UTF7-IMAP');
+        return is_string($s) && $s !== '' ? $s : $name;
+    }
+
+    public static function encodeFolder(string $name): string
+    {
+        $s = @mb_convert_encoding($name, 'UTF7-IMAP', 'UTF-8');
+        return is_string($s) && $s !== '' ? $s : $name;
     }
 
     public function logout(): void

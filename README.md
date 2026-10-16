@@ -12,7 +12,7 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **Notizen:** gemeinsame Pläne und Ideen mit Autosave
 - **Ideen-Assistent:** Idee einfach hinschreiben oder diktieren – daraus werden Notiz, Aufgaben (mit Zuständigkeit, Datum, Priorität, Kategorie, Checkliste) und Termine (Uhrzeit, Zeitraum, Ort, Teilnehmer). Läuft ohne KI direkt in der App, kostenlos und offline
 - **Kalender:** Termine, Meetings, Events und Fristen mit Erinnerung und Einladung per Push, Abo für die iPhone-/Outlook-Kalender-App, Feiertage je Bundesland und Shop-Aktionstage (Black Friday, Muttertag …) automatisch für jedes Jahr
-- **Postfach:** beliebige Postfächer (info@, support@, persönliche) mit „Sichtbar für“ je Postfach, IMAP, nur lesend
+- **Postfach:** beliebige Postfächer (info@, support@, persönliche) mit „Sichtbar für“ je Postfach, IMAP. Eigene Ordner wie in Outlook (Mails hineinziehen oder „Verschieben“), Ansicht „Gesendet“ und „Erledigt“ (abgehakte Mails 6 Monate, wieder öffnen), Antworten mit Signatur – auch als Bild
 - **Push bei Mails:** wenige Sekunden nach dem Eingang (Sofort-Abruf per IMAP IDLE, vom Cronjob jede Minute am Laufen gehalten), wählbar „Jede neue“, „Wirklich alle“ oder „Nur wichtige“ – immer nur an die Personen, die das Postfach sehen
 - **Team:** Einladung per Mail mit Link zum Passwort-Festlegen, gelöschte Personen wiederherstellen, Wartung mit „Datenbank aktualisieren“ und Geräte-Status
 - **Statistik:** Umsatz, Bestellungen, Ø Warenkorb, Artikel pro Bestellung, bester Tag, Stornos, Erstattungen, Top-Düfte, knapper Bestand – jeweils mit Veränderung in % (grün = besser, rot = schlechter) (Shopify Admin API)
@@ -20,6 +20,7 @@ Web-App (PWA) für iPhone, Mac und Windows. Sie ist auf dem Home-Bildschirm inst
 - **iPhone-Widget:** über die kostenlose App Scriptable (Home- und Sperrbildschirm), auch als Kalender-Widget
 - **Members Club:** Statistik zum Club (Mitglieder, Bronze/Silber/Gold, Punkte, Prämien, Feedback), „Nachricht an Mitglieder senden“ mit Vorlagen, Prüfung und Freigabe, Club-Admin mit einem Klick, Club-Zugang je Person
 - **Diagnose:** Testmail über „Mails verschicken“ (Port 465/587), Push-Test je Gerät
+- **Hilfe** (`/hilfe`): Schritt-für-Schritt-Anleitungen zu jeder Funktion, Installation und Verbindung mit Suche und „Wenn es nicht klappt“. Links nach draußen öffnen immer in einem neuen Tab, die App bleibt offen
 
 **Kosten:** keine. Die App läuft auf dem vorhandenen netcup-Webhosting (PHP + MySQL + Cronjob) und nutzt den Shopify-Zugang aus dem bestehenden Abo.
 
@@ -65,7 +66,7 @@ cd team-app/web && npx tsc -b                         # Typprüfung
 
 Web-App (PWA) für Kundinnen und Kunden im Design des Shops (Elfenbein, Dünen, Castoro, Glas-Dock).
 
-- **Anmeldung mit dem Shopify-Kundenkonto** (Customer Account API, Code per Mail, kein Passwort). Ausweichweg: E-Mail-Code über info@. Team-Mitglieder werden an der E-Mail erkannt und landen direkt im Admin-Bereich
+- **Eigene Anmeldeseite:** Code per E-Mail direkt auf `app.perfumecloud.de` (kein Passwort, legt bei Bedarf das Shopify-Kundenkonto an), daneben „Mit Shopify-Konto fortfahren“ (Customer Account API). Beim Beitritt wird der Vorname abgefragt („Guten Morgen, Anna“) und ins Kundenkonto übernommen. Abmelden führt zurück zur Startseite der App. Team-Mitglieder sehen oben den Knopf „Admin“
 - **Treuepunkte:** 1 Punkt je Euro Warenwert, Willkommensbonus, Gutschrift nach der Rückgabefrist, Storno/Erstattung werden verrechnet
 - **Stufen Bronze, Silber, Gold:** mehr Punkte je Euro und eigene Vorteile je Stufe, nach Einkaufswert der letzten 12 Monate
 - **Bonuspunkte:** Geburtstag, Newsletter, Bewertung, Empfehlung (beide bekommen Punkte), Startbonus für die Warteliste, Aktionen mit doppelten Punkten (z. B. Black Friday) samt Push
@@ -81,7 +82,7 @@ Web-App (PWA) für Kundinnen und Kunden im Design des Shops (Elfenbein, Dünen, 
 - **Mails über Shopify Messaging:** Willkommen im Club, „Du hast 5 € Rabatt bereit“ (`kunden-app/shopify-mails/`)
 
 - **Befragung nach der Lieferung** (ein Tipp auf die Sterne, bis zu 3 Fragen, Punkte fürs Mitmachen, Mail nur mit Einwilligung, schlechte Bewertungen als Aufgabe in der Team-App) und **Empfehlungslinks** (Rabatt für Freunde, Punkte je Bestellung auch ohne Beitritt) – beide im Admin einstellbar und anfangs aus
-- **Probelauf** für Admins in der Team-App: Schnelltest oder echte 0-€-Bestellung, jeder Schritt per Knopf, Aufräumen storniert und löscht alles
+- **Testbestellung** für Admins in der Team-App: simuliert (ohne Shop) oder echt im Shop mit 0 €, Codes beginnen mit `TEST-`, jeder Schritt per Knopf, Aufräumen storniert und löscht alles (ab Club 1.3)
 
 ➡️ **Anleitung (online stellen, Shopify verbinden):** [docs/KUNDEN-APP.md](docs/KUNDEN-APP.md)
 ➡️ **Teilnahmebedingungen:** [docs/TEILNAHMEBEDINGUNGEN.md](docs/TEILNAHMEBEDINGUNGEN.md) · **Rechtliches fürs neue Shop-Theme:** [docs/DATENSCHUTZ-MERKLISTE.md](docs/DATENSCHUTZ-MERKLISTE.md)

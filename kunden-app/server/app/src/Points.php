@@ -447,7 +447,7 @@ final class Points
                     $newest = (string) $o['updatedAt'];
                 }
                 $m = $members[$o['customer']['id'] ?? ''] ?? null;
-                // Probelauf (0-€-Testbestellung eines Admins): läuft nur über das Testkonto
+                // Testbestellung (0 € von einem Admin): läuft nur über das Testkonto
                 if (Trial::isTrialOrder($o)) {
                     Trial::onOrder($o);
                     continue;

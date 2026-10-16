@@ -19,7 +19,8 @@ export default function Willkommen() {
   const status = useStatus();
   const navigate = useNavigate();
   const p = me.program;
-  const [vorname, setVorname] = useState('');
+  const name = me.member.first_name;
+  const [vorname, setVorname] = useState(name ?? '');
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export default function Willkommen() {
     setBusy(true);
     setFehler(null);
     try {
-      setBeigetreten(await api<Me>('POST', '/me/join', { terms: ok, first_name: vorname.trim() || undefined, einladung: gast ? code : undefined }));
+      setBeigetreten(await api<Me>('POST', '/me/join', { terms: ok, first_name: vorname.trim(), einladung: gast ? code : undefined }));
       einladungVergessen();
     } catch (err) {
       setFehler(fehlertext(err));
@@ -47,12 +48,10 @@ export default function Willkommen() {
     }
   }
 
-  const name = me.member.first_name;
-
   return (
-    <KundenShell shopUrl={me.shop_url} ohneDock>
+    <KundenShell shopUrl={me.shop_url} ohneDock admin={me.admin}>
       <Seitenkopf label="Willkommen" titel={<>Schön, dass du <em>da bist{name ? `, ${name}` : ''}</em></>}>
-        <p>Du bist angemeldet als {me.member.email}. Ein Schritt noch, dann sammelst du mit jeder Bestellung Punkte.</p>
+        <p>Ein Schritt noch, dann sammelst du mit jeder Bestellung Punkte.</p>
       </Seitenkopf>
 
       {gast && (
@@ -62,6 +61,44 @@ export default function Willkommen() {
         </Hinweis>
       )}
       <AktionBanner p={p} />
+
+      <form className="karte formular" onSubmit={beitreten} style={{ maxWidth: '36rem' }}>
+        <h2 className="karte-titel">Dem Club beitreten</h2>
+        <label className="feld">
+          <span>Dein Vorname</span>
+          <input
+            required
+            autoComplete="given-name"
+            autoCapitalize="words"
+            enterKeyHint="next"
+            value={vorname}
+            onChange={(e) => setVorname(e.target.value)}
+            placeholder="z. B. Anna"
+            maxLength={60}
+          />
+          <small>So begrüßen wir dich in der App: „Guten Morgen, {vorname.trim() || 'Anna'}“.</small>
+        </label>
+        <label className="haken-zeile">
+          <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
+          <span>
+            Ich möchte mitmachen und akzeptiere die{' '}
+            {status.terms_url ? (
+              <a href={status.terms_url} target="_blank" rel="noopener">
+                Teilnahmebedingungen
+              </a>
+            ) : (
+              'Teilnahmebedingungen'
+            )}
+            . Punkte werden {p.wait_days > 0 ? `${p.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben. {codeText(p)} {verfallText(p)} Austreten kann ich jederzeit.
+          </span>
+        </label>
+        {fehler && <Hinweis fehler>{fehler}</Hinweis>}
+        <div>
+          <Hb dunkel type="submit" busy={busy} disabled={!ok || !vorname.trim()}>
+            Jetzt beitreten
+          </Hb>
+        </div>
+      </form>
 
       <ul className="vorteile">
         <li>
@@ -90,38 +127,8 @@ export default function Willkommen() {
         </li>
       </ul>
 
-      <form className="karte formular" onSubmit={beitreten} style={{ maxWidth: '36rem' }}>
-        <h2 className="karte-titel">Dem Club beitreten</h2>
-        {!name && (
-          <label className="feld">
-            <span>Wie dürfen wir dich nennen? (freiwillig)</span>
-            <input autoComplete="given-name" value={vorname} onChange={(e) => setVorname(e.target.value)} placeholder="Vorname" maxLength={100} />
-          </label>
-        )}
-        <label className="haken-zeile">
-          <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
-          <span>
-            Ich möchte mitmachen und akzeptiere die{' '}
-            {status.terms_url ? (
-              <a href={status.terms_url} target="_blank" rel="noopener">
-                Teilnahmebedingungen
-              </a>
-            ) : (
-              'Teilnahmebedingungen'
-            )}
-            . Punkte werden {p.wait_days > 0 ? `${p.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben. {codeText(p)} {verfallText(p)} Austreten kann ich jederzeit.
-          </span>
-        </label>
-        {fehler && <Hinweis fehler>{fehler}</Hinweis>}
-        <div>
-          <Hb dunkel type="submit" busy={busy} disabled={!ok}>
-            Jetzt beitreten
-          </Hb>
-        </div>
-      </form>
-
-      <p className="klein leise">
-        Nicht du?{' '}
+      <p className="klein leise umbruch">
+        Angemeldet mit {me.member.email} · Nicht du?{' '}
         <button className="textlink" onClick={() => void abmelden()}>
           Abmelden
         </button>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import {
   BellRing,
   CalendarDays,
@@ -34,7 +34,7 @@ import { Section } from '../components/section';
 import { InstagramIcon } from '../components/instagram-icon';
 import { InstagramSection } from '../components/instagram-settings';
 import { CustomerTest, ReportsPanel, SignatureSection, TemplatesPanel } from './SettingsMore';
-import { Avatar, Button, Chip, cx, IconButton, Segmented, Spinner, Toggle } from '../components/ui';
+import { Avatar, Button, Chip, cx, IconButton, LinkButton, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { ClubSettings, Integrations, LiveStatus, MailboxConfig, MailCheck, MyMailbox, Prefs, PushDevice, PushKind, PushTestResult, User, UserColor } from '../lib/types';
@@ -1562,9 +1562,12 @@ function IntegrationsPanel() {
           <>
             Lesezugriff auf Bestellungen, Produkte und Lager über eine eigene App im <b>Shopify Dev Dashboard</b> (kostenlos). Benötigte Berechtigungen: <code className="rounded bg-surface-2 px-1">read_orders</code>,{' '}
             <code className="rounded bg-surface-2 px-1">read_products</code>, <code className="rounded bg-surface-2 px-1">read_inventory</code>. Für Kundeninfos und „Versenden“ zusätzlich{' '}
-            <code className="rounded bg-surface-2 px-1">read_customers</code> und <code className="rounded bg-surface-2 px-1">write_merchant_managed_fulfillment_orders</code>, für den Probelauf im Members Club{' '}
-            <code className="rounded bg-surface-2 px-1">write_orders</code>. Schritt-für-Schritt-Anleitung: siehe{' '}
-            <b>docs/ANLEITUNG.md</b>.
+            <code className="rounded bg-surface-2 px-1">read_customers</code> und <code className="rounded bg-surface-2 px-1">write_merchant_managed_fulfillment_orders</code>, für die Testbestellung im Members Club{' '}
+            <code className="rounded bg-surface-2 px-1">write_orders</code>. Schritt für Schritt:{' '}
+            <Link to="/hilfe/shopify" className="font-medium text-accent hover:underline">
+              Hilfe → Shopify verbinden
+            </Link>
+            .
           </>
         }
       >
@@ -1597,7 +1600,39 @@ function IntegrationsPanel() {
             </Button>
             {data.shopify.configured && <span className="text-[13px] text-ink-3">Letzter Abgleich: {data.shopify.lastSync ? relative(data.shopify.lastSync, now) : 'noch nie'}</span>}
           </div>
-          <StatusLine status={data.test ?? data.shopify.status} />
+          <StatusLine status={data.test ?? data.shopify.check ?? data.shopify.status} />
+          {(() => {
+            const check = data.test ?? data.shopify.check;
+            if (!data.shopify.configured || !check?.missing?.length) return null;
+            return (
+              <div className="flex flex-wrap gap-2">
+                {check.approve_url && (
+                  <LinkButton href={check.approve_url} size="sm" icon={<ExternalLink className="h-3.5 w-3.5" />}>
+                    In Shopify bestätigen
+                  </LinkButton>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  icon={<RefreshCw className="h-3.5 w-3.5" />}
+                  loading={busy === 'scopes'}
+                  onClick={() =>
+                    void run('scopes', async () => {
+                      const d = await api<Integrations>('POST', '/admin/shopify/check');
+                      setData(d);
+                      toast(d.test?.missing?.length ? 'Es fehlen noch Berechtigungen' : 'Alle Berechtigungen da', d.test?.missing?.length ? 'error' : 'success');
+                    })
+                  }
+                >
+                  Erneut prüfen
+                </Button>
+                <Link to="/hilfe/shopify-rechte" className="inline-flex h-8 items-center px-1 text-[13px] font-medium text-accent hover:underline">
+                  Anleitung
+                </Link>
+              </div>
+            );
+          })()}
         </form>
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
           <label className="text-[14px] text-ink-2" htmlFor="th">

@@ -25,6 +25,12 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'light');
         }
+        // iPhone/iPad: nicht in die Seite zoomen, wenn man ein Eingabefeld antippt (sonst bleibt die App verschoben).
+        // Mit zwei Fingern zoomen geht auf iOS trotzdem weiter.
+        if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+          var vp = document.querySelector('meta[name=viewport]');
+          if (vp) vp.setAttribute('content', vp.getAttribute('content') + ', maximum-scale=1');
+        }
       })();
     </script>
   </head>

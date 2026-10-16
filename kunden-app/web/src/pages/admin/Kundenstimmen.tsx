@@ -790,7 +790,7 @@ export function EmpfehlungenAdmin() {
             {o.recent.map((r) => (
               <li key={r.order_name + r.at}>
                 <span>
-                  {r.order_name} · {r.member} {r.test && <Chip tone="muted">Probelauf</Chip>}
+                  {r.order_name} · {r.member} {r.test && <Chip tone="muted">Testbestellung</Chip>}
                   <small className="leise winzig" style={{ display: 'block' }}>
                     {datum(r.at)} · {euro(r.amount_cents)} · {r.code}
                     {r.reason ? ` · ${REF_GRUND[r.reason] ?? r.reason}` : ''}

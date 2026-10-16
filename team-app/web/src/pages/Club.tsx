@@ -37,7 +37,8 @@ export async function openClubAdmin() {
   try {
     const { url } = await api<{ url: string }>('POST', '/club/sso');
     if (w) w.location.href = url;
-    else window.location.href = url;
+    // Pop-up blockiert: trotzdem nicht aus der App heraus navigieren
+    else if (!window.open(url, '_blank', 'noopener')) toast('Bitte Pop-ups für die Team-App erlauben, dann öffnet sich der Club-Admin in einem neuen Tab.', 'error');
   } catch (e) {
     w?.close();
     toast((e as Error).message, 'error');
@@ -51,7 +52,9 @@ export default function Club() {
   const me = useStore((s) => s.me);
   const [opening, setOpening] = useState(false);
   const isAdmin = me?.role === 'admin';
-  const current: 'statistik' | 'nachrichten' | 'probelauf' = tab === 'nachrichten' ? 'nachrichten' : tab === 'probelauf' && isAdmin ? 'probelauf' : 'statistik';
+  // „probelauf“ war der alte Name – alte Lesezeichen landen trotzdem richtig
+  const current: 'statistik' | 'nachrichten' | 'testbestellung' =
+    tab === 'nachrichten' ? 'nachrichten' : (tab === 'testbestellung' || tab === 'probelauf') && isAdmin ? 'testbestellung' : 'statistik';
 
   if (meta && !meta.clubConfigured) {
     return (
@@ -106,11 +109,11 @@ export default function Club() {
           options={[
             { value: 'statistik', label: 'Statistik' },
             { value: 'nachrichten', label: 'Nachricht an Mitglieder' },
-            ...(isAdmin ? [{ value: 'probelauf' as const, label: 'Probelauf' }] : []),
+            ...(isAdmin ? [{ value: 'testbestellung' as const, label: 'Testbestellung' }] : []),
           ]}
         />
       </div>
-      {current === 'nachrichten' ? <Messages /> : current === 'probelauf' ? <ClubTrial /> : <ClubStatistics />}
+      {current === 'nachrichten' ? <Messages /> : current === 'testbestellung' ? <ClubTrial /> : <ClubStatistics />}
     </>
   );
 }

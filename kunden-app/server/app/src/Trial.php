@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Club;
 
 /**
- * Probelauf (nur Admins, gesteuert aus der Team-App): den ganzen Weg einer Bestellung durchspielen –
+ * Testbestellung (nur Admins, gesteuert aus der Team-App; früher „Probelauf“): den ganzen Weg einer Bestellung durchspielen –
  * eingegangen → Punkte vorgemerkt → versendet → zugestellt → Befragung → Punkte gutgeschrieben →
  * Empfehlung belohnt → Stufenaufstieg.
  *
@@ -85,7 +85,7 @@ final class Trial
     public static function start(array $user, array $in): array
     {
         if (self::state()) {
-            throw new HttpError(409, 'Es läuft schon ein Probelauf. Bitte erst aufräumen.');
+            throw new HttpError(409, 'Es läuft schon eine Testbestellung. Bitte erst aufräumen.');
         }
         $mode = ($in['mode'] ?? 'sim') === 'real' ? 'real' : 'sim';
         $amount = (int) ($in['amount_cents'] ?? 5900);
@@ -97,17 +97,17 @@ final class Trial
         }
         $email = mb_strtolower((string) ($user['email'] ?? ''));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new HttpError(422, 'Für den Probelauf fehlt deine E-Mail-Adresse.');
+            throw new HttpError(422, 'Für die Testbestellung fehlt deine E-Mail-Adresse.');
         }
         $now = Util::now();
         $id = Util::uuid();
-        $first = explode(' ', trim((string) ($user['name'] ?? '')))[0] ?: 'Probelauf';
+        $first = explode(' ', trim((string) ($user['name'] ?? '')))[0] ?: 'Test';
         Db::insert('club_members', [
             'id' => $id,
             'shopify_id' => 'probelauf:' . $id,
             'email' => 'probelauf+' . substr($id, 0, 8) . '@club.invalid',
             'first_name' => $first,
-            'last_name' => '(Probelauf)',
+            'last_name' => '(Testbestellung)',
             'joined_at' => $now,
             'last_seen_at' => null,
             'orders_synced_at' => $now,
@@ -134,8 +134,8 @@ final class Trial
         ];
         if ($mode === 'real') {
             $suffix = strtoupper(substr(bin2hex(random_bytes(3)), 0, 5));
-            $code = 'PROBE-' . $suffix;
-            $ship = 'PROBE-' . $suffix . '-VERSAND';
+            $code = 'TEST-' . $suffix;
+            $ship = 'TEST-' . $suffix . '-VERSAND';
             $base = [
                 'startsAt' => Util::iso($now - 60000),
                 'endsAt' => Util::iso($now + 3 * Points::DAY_MS),
@@ -146,28 +146,28 @@ final class Trial
             $d = Shopify::graphql(
                 'mutation ClubTrialCode($input: DiscountCodeBasicInput!) { discountCodeBasicCreate(basicCodeDiscount: $input) { codeDiscountNode { id } userErrors { field message code } } }',
                 ['input' => $base + [
-                    'title' => 'Club-Probelauf (Ware) · ' . $state['by'],
+                    'title' => 'Club-Testbestellung (Ware) · ' . $state['by'],
                     'code' => $code,
                     'customerGets' => ['value' => ['percentage' => 1.0], 'items' => ['all' => true]],
                     'combinesWith' => ['shippingDiscounts' => true, 'orderDiscounts' => false, 'productDiscounts' => false],
                 ]]
             );
-            Shopify::check($d['discountCodeBasicCreate'] ?? [], 'Probelauf-Code');
+            Shopify::check($d['discountCodeBasicCreate'] ?? [], 'Testbestellungs-Code');
             $state['codes'][] = ['code' => $code, 'id' => $d['discountCodeBasicCreate']['codeDiscountNode']['id'] ?? null];
             $d = Shopify::graphql(
                 'mutation ClubTrialShip($input: DiscountCodeFreeShippingInput!) { discountCodeFreeShippingCreate(freeShippingCodeDiscount: $input) { codeDiscountNode { id } userErrors { field message code } } }',
                 ['input' => $base + [
-                    'title' => 'Club-Probelauf (Versand) · ' . $state['by'],
+                    'title' => 'Club-Testbestellung (Versand) · ' . $state['by'],
                     'code' => $ship,
                     'destination' => ['all' => true],
                     'combinesWith' => ['shippingDiscounts' => false, 'orderDiscounts' => true, 'productDiscounts' => true],
                 ]]
             );
-            Shopify::check($d['discountCodeFreeShippingCreate'] ?? [], 'Probelauf-Versandcode');
+            Shopify::check($d['discountCodeFreeShippingCreate'] ?? [], 'Versandcode der Testbestellung');
             $state['codes'][] = ['code' => $ship, 'id' => $d['discountCodeFreeShippingCreate']['codeDiscountNode']['id'] ?? null];
         }
         self::put($state);
-        Util::log('Probelauf gestartet (' . $mode . ') von ' . $email);
+        Util::log('Testbestellung gestartet (' . $mode . ') von ' . $email);
         return self::view();
     }
 
@@ -186,7 +186,7 @@ final class Trial
         return (bool) array_intersect($codes, array_column($s['codes'], 'code'));
     }
 
-    /** Echte Testbestellung: dem Testkonto zuordnen (mit dem Probelauf-Betrag statt 0 €). */
+    /** Echte Testbestellung: dem Testkonto zuordnen (mit dem Betrag der Testbestellung statt 0 €). */
     public static function onOrder(array $o): void
     {
         $s = self::state();
@@ -208,7 +208,7 @@ final class Trial
     }
 
     /**
-     * Bestellung des Testkontos anpassen: Betrag des Probelaufs, übersprungene Wartezeit.
+     * Bestellung des Testkontos anpassen: Betrag der Testbestellung, übersprungene Wartezeit.
      * Wird von Points::upsertOrder für Testkonten aufgerufen.
      */
     public static function adjust(array $o, array $member): array
@@ -238,7 +238,7 @@ final class Trial
         $s = self::state();
         $m = $s ? Db::one('SELECT * FROM club_members WHERE id = ?', [$s['member_id']]) : null;
         if (!$m) {
-            throw new HttpError(404, 'Es läuft kein Probelauf.');
+            throw new HttpError(404, 'Es läuft keine Testbestellung.');
         }
         return $m;
     }
@@ -303,7 +303,7 @@ final class Trial
     {
         $s = self::state();
         if (!$s) {
-            throw new HttpError(404, 'Es läuft kein Probelauf.');
+            throw new HttpError(404, 'Es läuft keine Testbestellung.');
         }
         if (!isset(self::STEPS[$key])) {
             throw new HttpError(422, 'Unbekannter Schritt.');
@@ -326,7 +326,7 @@ final class Trial
                 }
                 if (!$s['order_id']) {
                     $s['order_id'] = 'probelauf:' . $s['id'];
-                    $s['order_name'] = '#PROBE-' . strtoupper(substr($s['id'], 0, 4));
+                    $s['order_name'] = '#TEST-' . strtoupper(substr($s['id'], 0, 4));
                     self::put($s);
                 }
                 $o = self::fakeOrder($s, $key === 'pending', null, null);
@@ -385,8 +385,8 @@ final class Trial
                     Db::insert('club_referral_orders', [
                         'order_id' => $oid,
                         'member_id' => $m['id'],
-                        'code' => 'PROBELAUF',
-                        'order_name' => '#PROBE-FREUND',
+                        'code' => 'TESTBESTELLUNG',
+                        'order_name' => '#TEST-FREUNDIN',
                         'friend_customer_id' => null,
                         'ordered_at' => $now,
                         'amount_cents' => $amount,
@@ -418,7 +418,7 @@ final class Trial
                     Db::insert('club_orders', [
                         'order_id' => $oid,
                         'member_id' => $m['id'],
-                        'name' => '#PROBE-' . strtoupper($next['key']),
+                        'name' => '#TEST-' . strtoupper($next['key']),
                         'ordered_at' => $now,
                         'amount_cents' => $gap,
                         'points' => 0,
@@ -523,7 +523,7 @@ final class Trial
     {
         $s = self::state();
         if (!$s) {
-            return ['ok' => true, 'order' => null, 'message' => 'Es lief kein Probelauf.'];
+            return ['ok' => true, 'order' => null, 'message' => 'Es lief keine Testbestellung.'];
         }
         $id = (string) $s['member_id'];
         if (Shopify::configured()) {
@@ -546,7 +546,7 @@ final class Trial
         });
         $order = $s['order_id'] && str_starts_with((string) $s['order_id'], 'gid://') ? ['id' => $s['order_id'], 'name' => $s['order_name']] : null;
         self::put(null);
-        Util::log('Probelauf aufgeräumt');
+        Util::log('Testbestellung aufgeräumt');
         return ['ok' => true, 'order' => $order, 'message' => 'Testkonto, Punkte, Befragung und Codes sind gelöscht.'];
     }
 }

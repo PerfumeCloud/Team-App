@@ -140,7 +140,8 @@ final class Jobs
         Db::exec('DELETE FROM sessions WHERE expires_at < ?', [$now]);
         Db::exec('DELETE FROM login_attempts WHERE created_at < ?', [$now - $day]);
         Db::exec('DELETE FROM activity WHERE created_at < ?', [$now - 90 * $day]);
-        Db::exec('DELETE FROM emails WHERE received_at < ?', [$now - 30 * $day]);
+        // Mails (nur Betreff, Absender, Vorschau) – erledigte bleiben ein halbes Jahr unter „Erledigt“ zu finden
+        Db::exec('DELETE FROM emails WHERE received_at < ?', [$now - 180 * $day]);
         Db::exec('DELETE FROM email_bodies WHERE fetched_at < ?', [$now - 30 * $day]);
         Db::exec('DELETE FROM customer_notes WHERE deleted = 1 AND updated_at < ?', [$now - 60 * $day]);
         foreach (['tasks', 'notes', 'comments'] as $t) {

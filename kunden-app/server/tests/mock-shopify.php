@@ -169,6 +169,10 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
             $state['customers'][$id] = ['id' => $id, 'email' => $v['input']['email'], 'firstName' => null, 'lastName' => null, 'tags' => []];
             $data = ['customerCreate' => ['customer' => ['id' => $id, 'firstName' => null, 'lastName' => null], 'userErrors' => []]];
             break;
+        case 'ClubName':
+            $state['customers'][$v['input']['id']]['firstName'] = $v['input']['firstName'];
+            $data = ['customerUpdate' => ['userErrors' => []]];
+            break;
         case 'ClubTag':
         case 'ClubUntag':
             $tags = $state['customers'][$v['id']]['tags'] ?? [];

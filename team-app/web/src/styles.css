@@ -79,6 +79,10 @@
     -webkit-tap-highlight-color: transparent;
     background: rgb(var(--bg));
   }
+  /* Lange Werte wie write_merchant_managed_fulfillment_orders oder Adressen umbrechen, statt die Seite am Handy zu verbreitern */
+  code {
+    overflow-wrap: anywhere;
+  }
   body {
     @apply bg-bg text-ink font-sans antialiased;
     font-feature-settings: 'cv11', 'ss01';

@@ -89,10 +89,12 @@ final class Api
                 }
                 $m = Club::fromShopify($r['customer']);
                 Auth::start('member', $m['id'], $r['id_token']);
-                // Team-Mitglieder (gleiche E-Mail wie in der Team-App) landen direkt im Admin-Bereich
+                // Team-Mitglieder (gleiche E-Mail wie in der Team-App) bekommen den Admin-Bereich dazu. Dorthin geht es
+                // aber nur, wenn sie von dort kamen – von der Startseite aus landen sie wie alle in der Club-App
+                // (mit Vornamen und Beitritt); der Admin-Bereich ist dann oben über „Admin“ erreichbar.
                 $next = (string) $r['next'];
-                if (Auth::adminFromMember($m) && (in_array($next, ['/', ''], true) || str_starts_with($next, '/admin'))) {
-                    return self::redirect(str_starts_with($next, '/admin') ? $next : '/admin');
+                if (Auth::adminFromMember($m) && str_starts_with($next, '/admin')) {
+                    return self::redirect($next);
                 }
                 return self::redirect($m['joined_at'] ? $r['next'] : '/willkommen');
             }],
@@ -152,6 +154,7 @@ final class Api
                 $m = Club::join(Auth::requireMember(), Http::body());
                 return Club::me($m);
             }],
+            ['PUT', '/me/name', static fn () => Club::me(Club::rename(Auth::requireMember(), Http::body()))],
             ['DELETE', '/me', static function () {
                 $m = Auth::requireMember();
                 $idToken = Auth::end('member');
@@ -511,6 +514,8 @@ final class Api
                 return Trial::view(['message' => is_string($r['orders'] ?? null) ? 'Abgleich: ' . $r['orders'] : ($r['skipped'] ?? 'Abgleich gelaufen')]);
             }],
             ['POST', '/internal/trial/cleanup', static fn () => Trial::cleanup()],
+            // Fußzeile der Team-Postfächer (Text + Logo) für die Mails des Clubs
+            ['POST', '/internal/signature', static fn () => Mailer::saveSignature(Http::body())],
 
             // ----- Cronjob (netcup: „URL abrufen“ alle 15 Minuten) -----
             ['GET', '/cron', static function () {

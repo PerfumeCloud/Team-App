@@ -1,11 +1,14 @@
 import { api } from './api';
 
-/** Abmelden – bei Shopify-Anmeldung auch dort, damit niemand anderes auf dem Gerät weiter angemeldet bleibt. */
+/**
+ * Abmelden in der App. Danach geht es immer zurück auf die Startseite der App (app.perfumecloud.de),
+ * nicht auf eine Seite von Shopify.
+ */
 export async function abmelden(): Promise<void> {
   try {
-    const r = await api<{ logout_url: string | null }>('POST', '/auth/logout');
-    window.location.href = r.logout_url || '/anmelden';
+    await api('POST', '/auth/logout');
   } catch {
-    window.location.href = '/anmelden';
+    /* Sitzung ist trotzdem beendet oder war es schon */
   }
+  window.location.replace('/');
 }

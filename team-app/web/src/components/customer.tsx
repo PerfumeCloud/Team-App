@@ -244,7 +244,7 @@ export function CustomerPanel({ email, order, onInsert }: { email: string; order
       {data.shopify.missing.length > 0 && (
         <Hint>
           In Shopify fehlt noch die Berechtigung <b>{data.shopify.missing.join(', ')}</b>
-          {data.shopify.missing.includes('read_customers') ? ' – ohne sie fehlen Name, Kundenkonto und Newsletter-Status.' : '.'} Anleitung: docs/ANLEITUNG.md → „Shopify-Rechte erweitern“.
+          {data.shopify.missing.includes('read_customers') ? ' – ohne sie fehlen Name, Kundenkonto und Newsletter-Status.' : '.'} Ein Admin findet unter Einstellungen → Integrationen → Shopify „In Shopify bestätigen“ (Hilfe → „Shopify-Berechtigungen“).
         </Hint>
       )}
       {data.shopify.error && <Hint tone="bad">{data.shopify.error}</Hint>}

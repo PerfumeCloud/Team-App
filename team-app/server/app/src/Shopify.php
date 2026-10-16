@@ -20,6 +20,16 @@ final class Shopify
         ];
     }
 
+    /** https://<shop> – im Test zeigt PC_SHOPIFY_TEST auf einen Nachbau. */
+    private static function base(): string
+    {
+        $test = getenv('PC_SHOPIFY_TEST');
+        if (is_string($test) && $test !== '') {
+            return rtrim($test, '/');
+        }
+        return 'https://' . self::config()['shop'];
+    }
+
     public static function configured(): bool
     {
         $c = self::config();
@@ -52,6 +62,7 @@ final class Shopify
             Settings::setSecret('shopify_secret', (string) $in['client_secret']);
         }
         Settings::delete('shopify_token');
+        Settings::delete('shopify_scopes');
     }
 
     public static function token(bool $force = false): string
@@ -68,7 +79,7 @@ final class Shopify
         if ($c['shop'] === '' || $c['client_id'] === '' || !$secret) {
             throw new \RuntimeException('Shopify ist noch nicht verbunden.');
         }
-        [$status, $body] = self::http('https://' . $c['shop'] . '/admin/oauth/access_token', [
+        [$status, $body] = self::http(self::base() . '/admin/oauth/access_token', [
             'Content-Type: application/x-www-form-urlencoded',
             'Accept: application/json',
         ], http_build_query([
@@ -92,7 +103,7 @@ final class Shopify
     public static function graphql(string $query, array $variables = []): array
     {
         $c = self::config();
-        $url = 'https://' . $c['shop'] . '/admin/api/' . self::API_VERSION . '/graphql.json';
+        $url = self::base() . '/admin/api/' . self::API_VERSION . '/graphql.json';
         $payload = Util::json(['query' => $query, 'variables' => (object) $variables]);
         $forceToken = false;
         for ($attempt = 0; $attempt < 4; $attempt++) {
@@ -121,8 +132,51 @@ final class Shopify
         throw new \RuntimeException('Shopify-API ist gerade überlastet.');
     }
 
-    /** Berechtigungen der Shopify-App (aus der letzten Anmeldung). @return string[] */
+    /**
+     * Berechtigungen, die der Shop der App wirklich gegeben hat. Quelle ist Shopify selbst
+     * (currentAppInstallation.accessScopes), nicht nur die Liste beim Token – write_x schließt read_x ein.
+     * @return string[]
+     */
     public static function scopes(): array
+    {
+        $g = self::grants();
+        return $g ? $g['granted'] : self::tokenScopes();
+    }
+
+    /**
+     * Gewährte und von der App-Version angefragte Berechtigungen (eine Stunde gemerkt, „Speichern & testen“ fragt neu).
+     * Angefragt, aber nicht gewährt = im Dev Dashboard freigegeben, im Shop aber noch nicht bestätigt.
+     * @return array{granted:string[], requested:string[], handle:string, at:int}|null
+     */
+    public static function grants(bool $refresh = false): ?array
+    {
+        $cached = Settings::get('shopify_scopes');
+        if (!$refresh && is_array($cached) && ($cached['at'] ?? 0) > Util::now() - 3600 * 1000) {
+            return $cached;
+        }
+        try {
+            $d = self::graphql('query TeamScopes { currentAppInstallation { accessScopes { handle } app { handle requestedAccessScopes { handle } } } }');
+        } catch (\Throwable $e) {
+            Util::log('Shopify-Berechtigungen nicht abgefragt: ' . $e->getMessage());
+            return is_array($cached) ? $cached : null;
+        }
+        $inst = $d['currentAppInstallation'] ?? null;
+        if (!is_array($inst)) {
+            return null;
+        }
+        $handles = static fn ($list) => array_values(array_unique(array_filter(array_map(static fn ($x) => trim((string) ($x['handle'] ?? '')), is_array($list) ? $list : []))));
+        $out = [
+            'granted' => self::expand(array_merge($handles($inst['accessScopes'] ?? []), self::tokenScopes())),
+            'requested' => self::expand($handles($inst['app']['requestedAccessScopes'] ?? [])),
+            'handle' => (string) ($inst['app']['handle'] ?? ''),
+            'at' => Util::now(),
+        ];
+        Settings::set('shopify_scopes', $out);
+        return $out;
+    }
+
+    /** Berechtigungen aus der letzten Anmeldung (Token-Antwort). @return string[] */
+    private static function tokenScopes(): array
     {
         $t = Settings::get('shopify_token');
         if (!is_array($t) || ($t['scope'] ?? '') === '') {
@@ -133,15 +187,31 @@ final class Shopify
                 return [];
             }
         }
-        return array_values(array_filter(array_map('trim', explode(',', (string) ($t['scope'] ?? '')))));
+        return self::expand(explode(',', (string) ($t['scope'] ?? '')));
     }
 
-    /** Fehlende Berechtigungen (write_x schließt read_x ein). @return string[] */
+    /** write_x schließt read_x ein (Shopify nennt dann oft nur write_x). @return string[] */
+    private static function expand(array $scopes): array
+    {
+        $out = [];
+        foreach ($scopes as $sc) {
+            $sc = trim((string) $sc);
+            if ($sc === '') {
+                continue;
+            }
+            $out[$sc] = true;
+            if (str_starts_with($sc, 'write_')) {
+                $out['read_' . substr($sc, 6)] = true;
+            }
+        }
+        return array_keys($out);
+    }
+
+    /** Fehlende Berechtigungen. @return string[] */
     public static function missing(array $needed): array
     {
         $have = self::scopes();
-        return array_values(array_filter($needed, static fn (string $s) =>
-            !in_array($s, $have, true) && !(str_starts_with($s, 'read_') && in_array('write_' . substr($s, 5), $have, true))));
+        return array_values(array_filter($needed, static fn (string $s) => !in_array($s, $have, true)));
     }
 
     /** Link in den Shopify-Admin, z. B. adminUrl('orders/123'). */
@@ -157,23 +227,42 @@ final class Shopify
         return (string) preg_replace('/\D/', '', substr($gid, (int) strrpos($gid, '/')));
     }
 
+    /** Pflicht für Bestellungen und Statistik. */
+    public const REQUIRED = ['read_orders', 'read_products', 'read_inventory'];
+    /** Für Kundeninfos, Versand und die Testbestellung im Club – ohne sie läuft der Rest trotzdem. */
+    public const OPTIONAL = ['read_customers', 'write_merchant_managed_fulfillment_orders', 'write_orders'];
+
+    /** @return array{ok:bool, message:string, missing?:string[], unapproved?:string[], approve_url?:string} */
     public static function test(): array
     {
         try {
             self::token(true);
             $d = self::graphql('query { shop { name myshopifyDomain currencyCode } }');
-            $scope = (string) (Settings::get('shopify_token')['scope'] ?? '');
-            $missing = array_values(array_diff(['read_orders', 'read_products', 'read_inventory'], explode(',', $scope)));
             $msg = 'Verbunden mit ' . ($d['shop']['name'] ?? '?');
-            if ($missing) {
-                return ['ok' => false, 'message' => $msg . ' – es fehlen Berechtigungen: ' . implode(', ', $missing)];
+            $g = self::grants(true);
+            $have = $g ? $g['granted'] : self::tokenScopes();
+            $missing = array_values(array_filter([...self::REQUIRED, ...self::OPTIONAL], static fn (string $s) => !in_array($s, $have, true)));
+            if (!$missing) {
+                return ['ok' => true, 'message' => $msg . ' · alle Berechtigungen da'];
             }
-            // Für Kundeninfos und Versand (seit 1.5) und den Club-Probelauf (1.6) – ohne sie läuft der Rest trotzdem
-            $optional = self::missing(['read_customers', 'write_merchant_managed_fulfillment_orders', 'write_orders']);
-            if ($optional) {
-                return ['ok' => true, 'message' => $msg . ' · Für Kundeninfos, Versand und Probelauf noch freigeben: ' . implode(', ', $optional)];
+            // In der App-Version angefragt, aber im Shop noch nicht bestätigt (häufigster Fall nach einer neuen Version)
+            $unapproved = $g ? array_values(array_intersect($missing, $g['requested'])) : [];
+            $notRequested = array_values(array_diff($missing, $unapproved));
+            $required = array_values(array_intersect($missing, self::REQUIRED));
+            $parts = [];
+            $out = ['missing' => $missing, 'unapproved' => $unapproved];
+            if ($unapproved) {
+                $parts[] = 'Im Shop noch nicht bestätigt: ' . implode(', ', $unapproved)
+                    . '. Die neue App-Version ist freigegeben, Shopify wartet aber noch auf eure Zustimmung: einmal „In Shopify bestätigen“ antippen (Shopify-Admin → Apps → die Team-App öffnen) und „Aktualisieren“ wählen. Danach hier „Speichern & testen“.';
+                $out['approve_url'] = self::adminUrl($g && $g['handle'] !== '' ? 'apps/' . $g['handle'] : 'settings/apps');
             }
-            return ['ok' => true, 'message' => $msg];
+            if ($notRequested) {
+                $parts[] = 'In der App-Version fehlen: ' . implode(', ', $notRequested) . '. Im Dev Dashboard eine neue Version mit diesen Zugriffsbereichen freigeben.';
+            }
+            if (!$required) {
+                $parts[] = 'Bestellungen und Statistik laufen schon; nur Kundeninfos, Versand oder die Testbestellung warten darauf.';
+            }
+            return ['ok' => !$required, 'message' => $msg . ' – ' . implode(' ', $parts)] + $out;
         } catch (\Throwable $e) {
             return ['ok' => false, 'message' => $e->getMessage()];
         }

@@ -704,6 +704,12 @@ final class Db
         if (!is_string(Settings::get('internal_key')) || Settings::get('internal_key') === '') {
             Settings::set('internal_key', Crypto::randomKey(24));
         }
+        // 1.3: Anmeldung auf der eigenen Seite (E-Mail-Code) ist jetzt der Standard – einmalig einschalten,
+        // auch wenn sie früher als „Ausweichweg“ aus war. Danach gilt wieder, was im Admin-Bereich steht.
+        if (Settings::get('login_own_page') === null) {
+            Settings::set('login_email', true);
+            Settings::set('login_own_page', true);
+        }
         Settings::set('schema_version', APP_VERSION);
     }
 }

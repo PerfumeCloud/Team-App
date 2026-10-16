@@ -17,7 +17,9 @@ const tmp = mkdtempSync(join(tmpdir(), 'pc-test-'));
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 // PC_INSTAGRAM_TEST: alle Instagram-Adressen zeigen auf den Nachbau weiter unten
 const IG_PORT = PORT + 4000;
-const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1', PC_INSTAGRAM_TEST: `http://127.0.0.1:${IG_PORT}` };
+// PC_SHOPIFY_TEST: Shopify-Aufrufe gehen an den Nachbau weiter unten
+const SHOP_PORT = PORT + 5000;
+const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1', PC_INSTAGRAM_TEST: `http://127.0.0.1:${IG_PORT}`, PC_SHOPIFY_TEST: `http://127.0.0.1:${SHOP_PORT}` };
 const IMAP_PORT = PORT + 1000;
 const SMTP_PORT = PORT + 2000;
 const CLOSED_PORT = PORT + 3000;
@@ -149,10 +151,27 @@ const igServer = http.createServer((req, res) => {
   });
 });
 
+// Nachbau von Shopify (nur Anmeldung und Berechtigungen): gewährt = im Shop bestätigt, angefragt = in der App-Version
+const shopMock = { tokenScope: '', granted: [], requested: [] };
+const shopServer = http.createServer((req, res) => {
+  let raw = '';
+  req.on('data', (c) => (raw += c));
+  req.on('end', () => {
+    const send = (status, data) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
+    if (req.url === '/admin/oauth/access_token') return send(200, { access_token: 'shpat_test', expires_in: 86399, scope: shopMock.tokenScope });
+    const q = raw ? JSON.parse(raw).query : '';
+    if (q.includes('currentAppInstallation')) {
+      return send(200, { data: { currentAppInstallation: { accessScopes: shopMock.granted.map((handle) => ({ handle })), app: { handle: 'perfume-cloud-team', requestedAccessScopes: shopMock.requested.map((handle) => ({ handle })) } } } });
+    }
+    if (q.includes('shop {')) return send(200, { data: { shop: { name: 'Perfume Cloud', myshopifyDomain: 'ks8yin-mg.myshopify.com', currencyCode: 'EUR' } } });
+    send(200, { data: {} });
+  });
+});
+
 // Nachbau des Clubs (Kunden-App): /api/internal/… mit X-Club-Key
 const CLUB_KEY = 'club-test-schluessel-123';
 const clubCalls = [];
-const club = { broadcasts: [], denySso: new Set(), fourEyes: true, alerts: [], trial: null };
+const club = { broadcasts: [], denySso: new Set(), fourEyes: true, alerts: [], trial: null, old: false };
 const TRIAL_STEPS = ['ordered', 'pending', 'shipped', 'delivered', 'survey', 'credited', 'referral', 'tier'];
 const CLUB_LABELS = { draft: 'Entwurf', review: 'Zur Prüfung', approved: 'Freigegeben', sending: 'Wird verschickt', sent: 'Verschickt' };
 let clubUrl = '';
@@ -167,7 +186,9 @@ const clubServer = http.createServer((req, res) => {
     if (req.headers['x-club-key'] !== CLUB_KEY) return send(403, { error: 'Ungültiger Schlüssel.' });
     const row = (b) => ({ ...b, status_label: CLUB_LABELS[b.status] });
     const route = `${req.method} ${path}`;
-    if (route === 'GET /api/internal/ping') return send(200, { ok: true, version: '1.4.0', team_mode: false, app_url: clubUrl, program: 'Perfume Cloud Club' });
+    if (route === 'GET /api/internal/ping') return send(200, { ok: true, version: club.old ? '1.1.0' : '1.4.0', team_mode: false, app_url: clubUrl, program: 'Perfume Cloud Club' });
+    // Alter Club (vor 1.2): kennt die Testbestellung nicht – der Router antwortet wie der echte Club
+    if (club.old && path.startsWith('/api/internal/trial')) return send(404, { error: 'Nicht gefunden.' });
     if (route === 'GET /api/internal/stats') {
       return send(200, {
         members: 42, new_7: 3, new_30: 9, active_30: 20,
@@ -327,11 +348,12 @@ before(async () => {
     smtpBuf = lines.pop();
     for (const l of lines) {
       if (l.startsWith('MAIL ')) smtpMails.push(JSON.parse(l.slice(5)));
-      else if (l.startsWith('APPENDED ') || l.startsWith('STORED ')) imapEvents.push({ kind: l.split(' ')[0], ...JSON.parse(l.slice(l.indexOf(' ') + 1)) });
+      else if (/^(APPENDED|STORED|MOVED|FOLDER) /.test(l)) imapEvents.push({ kind: l.split(' ')[0], ...JSON.parse(l.slice(l.indexOf(' ') + 1)) });
     }
   });
   await waitFor(imap, 'ready');
   await new Promise((resolve) => igServer.listen(IG_PORT, '127.0.0.1', resolve));
+  await new Promise((resolve) => shopServer.listen(SHOP_PORT, '127.0.0.1', resolve));
   pushPort = await listen(pushServer);
   clubUrl = `http://127.0.0.1:${await listen(clubServer)}`;
 });
@@ -341,6 +363,7 @@ after(() => {
   imap?.kill();
   pushServer.close();
   clubServer.close();
+  shopServer.close();
   igServer.close();
   rmSync(tmp, { recursive: true, force: true });
 });
@@ -1172,8 +1195,20 @@ test('Club: schlechte Bewertung wird zur Aufgabe mit Push, Probelauf nur für Ad
   await runCron();
   assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM tasks WHERE title LIKE '%#1042%'")[0].n, 1);
 
-  // Probelauf: nur Admins
+  // Testbestellung: nur Admins
   assert.equal((await kim.req('GET', '/club/trial')).status, 403);
+  // Club noch auf einer alten Version: verständlicher Hinweis statt „Nicht gefunden.“
+  club.old = true;
+  let old = await admin.req('GET', '/club/trial');
+  assert.equal(old.status, 426);
+  assert.match(old.data.error, /Members Club läuft noch auf Version 1\.1\.0/);
+  assert.match(old.data.error, /Club-Paket 1\.3\.0 hochladen/);
+  old = await admin.req('POST', '/admin/club/ping');
+  assert.equal(old.data.test.ok, false, 'Verbindungstest meldet die alte Version');
+  assert.match(old.data.test.message, /Version 1\.1\.0 · bitte auf 1\.3\.0 aktualisieren/);
+  await admin.req('POST', '/admin/club/ping');
+  club.old = false;
+  assert.equal((await admin.req('POST', '/admin/club/ping')).data.test.ok, true);
   assert.equal((await kim.req('POST', '/club/trial/start', { mode: 'sim' })).status, 403);
   let r = await admin.req('GET', '/club/trial');
   assert.equal(r.status, 200, JSON.stringify(r.data));
@@ -1197,7 +1232,7 @@ test('Club: schlechte Bewertung wird zur Aufgabe mit Push, Probelauf nur für Ad
   r = await admin.req('POST', '/club/trial/sync');
   assert.equal(r.data.order.name, '#9001');
   assert.deepEqual(helper('sql', "SELECT v FROM settings WHERE k = 'test_orders'").map((x) => JSON.parse(x.v))[0], ['9001']);
-  const [tt] = helper('sql', "SELECT * FROM tasks WHERE title = 'Probelauf: 1 ★ für #9001 – Probelauf melden'");
+  const [tt] = helper('sql', "SELECT * FROM tasks WHERE title = 'Testbestellung: 1 ★ für #9001 – Probelauf melden'");
   assert.ok(tt, 'Aufgabe aus dem Probelauf');
   const adminId = helper('sql', "SELECT id FROM users WHERE email = 'marius@example.de'")[0].id;
   assert.equal(tt.assignee_id, adminId);
@@ -1342,6 +1377,24 @@ test('Antworten aus der App: voller Text, Bausteine, Test an mich, Versand mit K
   assert.match(pre.data.text, /^Hallo Jürgen, schauen wir nach!\n\nLiebe Grüße\nMarius\n\nPerfume Cloud/);
   assert.match(pre.data.text, /schrieb Jürgen Müller <juergen@example.de>:\n> Hallo liebes Team,/);
 
+  // Bild unter der Signatur (z. B. Logo): wird als eingebettetes Bild mitgeschickt
+  const png = execFileSync('php', ['-r', '$i = imagecreatetruecolor(300, 80); imagefill($i, 0, 0, imagecolorallocate($i, 128, 86, 47)); ob_start(); imagepng($i); echo base64_encode(ob_get_clean());']).toString();
+  assert.equal((await admin.req('PUT', '/me/signature', { image: 'data:image/png;base64,AAAA' })).status, 422);
+  let sigImg = await admin.req('PUT', '/me/signature', { image: `data:image/png;base64,${png}`, width: 999 });
+  assert.equal(sigImg.status, 200, JSON.stringify(sigImg.data));
+  assert.equal(sigImg.data.width, 300, 'nicht breiter als das Bild');
+  sigImg = await admin.req('PUT', '/me/signature', { width: 180 });
+  assert.equal(sigImg.data.width, 180);
+  assert.match(sigImg.data.image, /^data:image\/png;base64,/);
+  assert.equal((await kim.req('GET', '/me/signature')).data.image, null, 'jede Person hat ihre eigene');
+  assert.equal((await kim.req('PUT', '/admin/mail-signature', { image: `data:image/png;base64,${png}` })).status, 403);
+  const teamSig = await admin.req('PUT', '/admin/mail-signature', { image: `data:image/png;base64,${png}`, width: 120 });
+  assert.equal(teamSig.data.width, 120);
+  const sigMsg = await admin.req('GET', `/emails/${id}/message`);
+  assert.match(sigMsg.data.signature_image, /^data:image\/png/);
+  assert.match(sigMsg.data.footer_image, /^data:image\/png/);
+  assert.equal((await admin.req('POST', `/emails/${id}/reply`, { text: 'Hallo', mode: 'preview' })).data.images, 2);
+
   // Test an mich: geht an die eigene Adresse, nichts wird markiert
   const before = smtpMails.length;
   const test = await admin.req('POST', `/emails/${id}/reply`, { text: 'Hallo {vorname}', mode: 'test' });
@@ -1366,6 +1419,13 @@ test('Antworten aus der App: voller Text, Bausteine, Test an mich, Versand mit K
   assert.match(out.data, /References: <a1@example.de>/);
   assert.doesNotMatch(out.data, /Auto-Submitted/);
   assert.match(mailText(out.data), /Hallo Jürgen, dein Paket ist unterwegs\.\n\nLiebe Grüße\nMarius/);
+  // HTML-Fassung mit Signatur-Bild und Logo als eingebettete Bilder
+  assert.match(out.data, /Content-Type: multipart\/related; boundary="pc[0-9a-f]+"; type="multipart\/alternative"/);
+  assert.equal((out.data.match(/Content-ID: <sig\d-[0-9a-f]{10}@perfumecloud>/g) ?? []).length, 2);
+  const outHtml = mailText(out.data);
+  assert.match(outHtml, /<img src="cid:sig1-[0-9a-f]{10}@perfumecloud" width="180" height="48"/);
+  assert.match(outHtml, /<img src="cid:sig2-[0-9a-f]{10}@perfumecloud" width="120" height="32"/);
+  assert.match(outHtml, /Liebe Grüße<br>\nMarius/);
   assert.ok(await eventually(() => imapEvents.slice(ev).some((e) => e.kind === 'APPENDED' && e.folder === 'Sent')), 'Kopie in Gesendet');
   assert.ok(await eventually(() => imapEvents.slice(ev).some((e) => e.kind === 'STORED' && e.uids.includes(101) && e.flags.includes('\\Answered'))), 'als beantwortet markiert');
   const row = helper('sql', `SELECT answered_at, replied_by, status FROM emails WHERE id = '${id}'`)[0];
@@ -1375,6 +1435,82 @@ test('Antworten aus der App: voller Text, Bausteine, Test an mich, Versand mit K
   helper('mail', String(IMAP_PORT));
   assert.equal(helper('sql', `SELECT answered FROM emails WHERE id = '${id}'`)[0].answered, 1);
   await admin.req('PUT', '/me', { prefs: { signature: null } });
+  assert.equal((await admin.req('PUT', '/me/signature', { image: null })).data.image, null);
+  assert.equal((await admin.req('PUT', '/admin/mail-signature', { image: null })).data.image, null);
+});
+
+test('Postfach-Ordner wie in Outlook: Gesendet, eigene Ordner, einsortieren, zurück, umbenennen, löschen', async () => {
+  helper('mail', String(IMAP_PORT));
+  const box = 'support@perfumecloud.de';
+  const q = (path, extra = '') => `box=${encodeURIComponent(box)}&path=${encodeURIComponent(path)}${extra}`;
+  let r = await kim.req('GET', `/mail/folders?box=${encodeURIComponent(box)}&fresh=1`);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.folders.map((f) => `${'  '.repeat(f.depth)}${f.name}`), ['Posteingang', 'Gesendet', 'Papierkorb', 'Kunden', '  Stammkunden']);
+  assert.equal(r.data.sent, 'Sent');
+  assert.equal(r.data.delimiter, '.');
+  assert.equal((await kim.req('GET', '/mail/folders?box=fremd%40example.de')).status, 404);
+
+  // Gesendet: die Antwort aus dem vorigen Test liegt dort, neueste zuerst, mit Empfänger und Text
+  r = await kim.req('GET', `/mail/folder?${q('Sent')}`);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.folder.special, 'sent');
+  assert.ok(r.data.total >= 2);
+  assert.equal(r.data.messages[0].subject, 'Re: Wo bleibt meine Bestellung #1042?');
+  assert.equal(r.data.messages[0].to[0].email, 'juergen@example.de');
+  const full = await kim.req('GET', `/mail/folder/message?${q('Sent', `&uid=${r.data.messages[0].uid}`)}`);
+  assert.equal(full.status, 200, JSON.stringify(full.data));
+  assert.match(full.data.text, /dein Paket ist unterwegs/);
+  assert.equal((await kim.req('GET', `/mail/folder?${q('Sent', '&q=juergen')}`)).data.total, 1, 'Suche nach Empfänger');
+  assert.equal((await kim.req('GET', `/mail/folder?${q('Gibts.Nicht')}`)).status, 404);
+
+  // Ordner anlegen: oberste Ebene, Unterordner, Umlaute (UTF-7 auf dem Server), keine Doppelten
+  assert.equal((await kim.req('POST', '/mail/folders', { box, name: 'Lief.eranten' })).status, 422);
+  r = await kim.req('POST', '/mail/folders', { box, name: 'Lieferanten' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.created, 'Lieferanten');
+  r = await kim.req('POST', '/mail/folders', { box, parent: 'Kunden', name: 'Reklamationen' });
+  assert.equal(r.data.created, 'Kunden.Reklamationen');
+  assert.ok(r.data.folders.some((f) => f.path === 'Kunden.Reklamationen' && f.depth === 1 && f.parent === 'Kunden'));
+  assert.equal((await kim.req('POST', '/mail/folders', { box, name: 'lieferanten' })).status, 409);
+  r = await kim.req('POST', '/mail/folders', { box, name: 'Rückfragen' });
+  assert.equal(r.data.created, 'R&APw-ckfragen');
+  assert.ok(r.data.folders.some((f) => f.name === 'Rückfragen'));
+
+  // Mail aus dem Posteingang einsortieren: auf dem Server verschoben, in der App sofort weg
+  const mid = helper('sql', "SELECT id FROM emails WHERE from_email = 'carla@studio.de' AND mailbox = 'support@perfumecloud.de' AND deleted = 0")[0].id;
+  r = await kim.req('POST', `/emails/${mid}/move`, { to: 'Kunden.Reklamationen' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.email.deleted, 1);
+  assert.equal(r.data.to.name, 'Reklamationen');
+  assert.ok(imapEvents.some((e) => e.kind === 'MOVED' && e.uids.includes(105) && e.to === 'Kunden.Reklamationen'));
+  helper('mail', String(IMAP_PORT));
+  assert.equal(helper('sql', `SELECT deleted FROM emails WHERE id = '${mid}'`)[0].deleted, 1, 'bleibt nach dem Abruf weg');
+  r = await kim.req('GET', `/mail/folder?${q('Kunden.Reklamationen')}`);
+  assert.equal(r.data.total, 1);
+  assert.equal(r.data.messages[0].subject, 'Fotoshooting nächste Woche');
+  const uid = r.data.messages[0].uid;
+
+  // Löschen nur leer und ohne Unterordner, besondere Ordner nie
+  assert.match((await kim.req('POST', '/mail/folders/delete', { box, path: 'Kunden.Reklamationen' })).data.error, /noch 1 Mails/);
+  assert.equal((await kim.req('POST', '/mail/folders/delete', { box, path: 'Kunden' })).status, 409);
+  assert.equal((await kim.req('POST', '/mail/folders/delete', { box, path: 'Sent' })).status, 422);
+  assert.equal((await kim.req('PATCH', '/mail/folders', { box, path: 'INBOX', name: 'X' })).status, 422);
+
+  // Zurück in den Posteingang: erscheint wieder in der App
+  r = await kim.req('POST', '/mail/folder/move', { box, from: 'Kunden.Reklamationen', uids: [uid], to: 'INBOX' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.moved, 1);
+  helper('mail', String(IMAP_PORT));
+  assert.equal(helper('sql', "SELECT COUNT(*) AS n FROM emails WHERE from_email = 'carla@studio.de' AND mailbox = 'support@perfumecloud.de' AND deleted = 0")[0].n, 1);
+
+  // Umbenennen und den leeren Ordner löschen
+  r = await kim.req('PATCH', '/mail/folders', { box, path: 'Kunden.Reklamationen', name: 'Retouren' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.renamed, 'Kunden.Retouren');
+  r = await kim.req('POST', '/mail/folders/delete', { box, path: 'Kunden.Retouren' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(!r.data.folders.some((f) => f.path.startsWith('Kunden.Re')));
+  assert.ok(helper('sql', "SELECT COUNT(*) AS n FROM activity WHERE type = 'mail_folder'")[0].n >= 2, 'im Verlauf des Teams');
 });
 
 test('Kundeninfos: ohne Shopify verständlich, Notizen des Teams', async () => {
@@ -1726,6 +1862,40 @@ test('Instagram: verbinden, Abgleich, Auswertung, Kommentare, Planer mit Freigab
   assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.instagram, null);
   await admin.req('PUT', `/admin/users/${kimId}`, { instagram_access: false });
   assert.equal((await kim.req('GET', '/instagram/posts')).status, 403);
+});
+
+test('Shopify: neue Berechtigungen aus der App-Version, die im Shop noch nicht bestätigt sind', async () => {
+  // Wie bei euch: Version 5 fragt read_inventory und Versand an, der Shop hat nur die alten bestätigt.
+  // Shopify nennt beim Token oft nur write_orders statt read_orders + write_orders.
+  shopMock.tokenScope = 'read_customers,read_products,write_orders';
+  shopMock.granted = ['read_customers', 'read_products', 'write_orders'];
+  shopMock.requested = ['read_customers', 'read_inventory', 'write_merchant_managed_fulfillment_orders', 'read_orders', 'write_orders', 'read_products'];
+  let r = await admin.req('PUT', '/admin/shopify', { shop: 'ks8yin-mg', client_id: 'cid', client_secret: 'geheim' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.test.ok, false);
+  assert.deepEqual(r.data.test.missing, ['read_inventory', 'write_merchant_managed_fulfillment_orders'], 'read_orders steckt in write_orders');
+  assert.deepEqual(r.data.test.unapproved, ['read_inventory', 'write_merchant_managed_fulfillment_orders']);
+  assert.match(r.data.test.message, /Im Shop noch nicht bestätigt: read_inventory, write_merchant_managed_fulfillment_orders/);
+  assert.equal(r.data.test.approve_url, 'https://admin.shopify.com/store/ks8yin-mg/apps/perfume-cloud-team');
+  assert.equal(r.data.shopify.check.ok, false, 'Ergebnis bleibt nach dem Neuladen sichtbar');
+  assert.equal((await kim.req('POST', '/admin/shopify/check')).status, 403);
+
+  // Nicht in der App-Version angefragt → Hinweis aufs Dev Dashboard
+  shopMock.requested = ['read_customers', 'read_orders', 'write_orders', 'read_products'];
+  r = await admin.req('POST', '/admin/shopify/check');
+  assert.match(r.data.test.message, /In der App-Version fehlen: read_inventory, write_merchant_managed_fulfillment_orders/);
+  assert.equal(r.data.test.approve_url, undefined);
+
+  // Im Shop bestätigt → alles da, auch der Versand erkennt es
+  shopMock.granted = ['read_customers', 'read_inventory', 'write_merchant_managed_fulfillment_orders', 'write_orders', 'read_products'];
+  r = await admin.req('POST', '/admin/shopify/check');
+  assert.equal(r.data.test.ok, true, JSON.stringify(r.data.test));
+  assert.match(r.data.test.message, /alle Berechtigungen da/);
+  assert.deepEqual((await admin.req('GET', '/club/trial')).data.cancel, { shopify: true, allowed: true }, 'Testbestellung darf stornieren');
+
+  r = await admin.req('DELETE', '/admin/shopify');
+  assert.equal(r.data.shopify.configured, false);
+  assert.equal(r.data.shopify.check, null);
 });
 
 test('Login-Sperre nach zu vielen Versuchen', async () => {

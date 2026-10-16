@@ -18,6 +18,7 @@ const Club = lazy(() => import('./pages/Club'));
 const Instagram = lazy(() => import('./pages/Instagram'));
 const Install = lazy(() => import('./pages/Install'));
 const Shipping = lazy(() => import('./pages/Shipping'));
+const Help = lazy(() => import('./pages/Help'));
 
 const SYNC_MS = 4000;
 
@@ -127,6 +128,8 @@ export default function App() {
                 <Route path="/instagram/:tab" element={<Instagram />} />
                 <Route path="/einstellungen" element={<Settings />} />
                 <Route path="/einstellungen/:tab" element={<Settings />} />
+                <Route path="/hilfe" element={<Help />} />
+                <Route path="/hilfe/:id" element={<Help />} />
                 <Route path="*" element={<Home />} />
               </Routes>
             </Suspense>

@@ -70,15 +70,31 @@ Nur nötig, wenn die App schon läuft (bei euch: `app.perfumecloud.de` mit Versi
 
 > Ist **Teil G** eingerichtet, kommt das Update automatisch, sobald es auf `main` liegt.
 
-## Update 1.1 → 1.2 (Befragung, Empfehlungslinks, Probelauf)
+## Update 1.1 → 1.2 (Befragung, Empfehlungslinks, Testbestellung)
 
 Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungslinks sind nach dem Update aus**, für Kundinnen und Kunden ändert sich erst etwas, wenn ihr sie einschaltet.
 
 1. Neue **`perfumecloud-club-upload.zip`** wie in A5 hochladen und mit „Vorhandene Dateien ersetzen“ entpacken.
 2. `https://app.perfumecloud.de/admin` öffnen. Die App ergänzt die Datenbank selbst.
 3. **Shopify-Rechte prüfen** (Teil B, Schritt 2): Für Befragung und Empfehlungslinks braucht die App **Name und E-Mail** zu Bestellungen (geschützte Kundendaten). Fehlt die Freigabe, laufen Punkte und alles andere weiter, nur steht auf der **Übersicht** ein roter Hinweis.
-4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort den **Probelauf**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
+4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort die **Testbestellung**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
+
+## Update 1.2 → 1.3 (eigene Anmeldeseite, Vorname, Testbestellung)
+
+Nötig für die **Testbestellung** in der Team-App 1.8 (bei älteren Versionen meldet die Team-App „Nicht gefunden“ bzw. „Der Members Club läuft noch auf Version …“). Alle Punkte, Mitglieder und Codes bleiben erhalten.
+
+1. Neue **`perfumecloud-club-upload.zip`** wie in A5 nach `app.perfumecloud.de/httpdocs` hochladen und mit „Vorhandene Dateien ersetzen“ entpacken.
+2. `https://app.perfumecloud.de` einmal öffnen. Die App ergänzt die Datenbank selbst.
+3. Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: dort steht jetzt „Version 1.3.0“.
+
+**Was sich für Kundinnen und Kunden ändert:**
+- **Eigene Anmeldeseite:** Auf `app.perfumecloud.de` meldet man sich direkt an: E-Mail eingeben → sechsstelliger Code per Mail → angemeldet, ohne Umweg über die Shopify-Seite. Das Konto ist dasselbe Kundenkonto wie im Shop (die App sucht es über die E-Mail oder legt es an), Bestellungen gehören automatisch dazu. **Mit Shopify-Konto fortfahren** bleibt als zweiter Weg darunter. Die Anmeldung per Code ist mit dem Update eingeschaltet (Club-Admin → **Einstellungen → Verbindungen → E-Mail-Versand → Anmeldung per E-Mail-Code**) und braucht den E-Mail-Versand.
+- **Vorname:** Beim Beitritt fragt die App immer nach dem Vornamen (vorausgefüllt, wenn Shopify ihn kennt) und begrüßt danach mit „Guten Morgen, Anna“ statt mit der Mailadresse. Der Name landet auch im Shopify-Kundenkonto. Ändern unter **Konto → Vornamen ändern**.
+- **Abmelden** führt zurück auf die Startseite der App, nicht mehr auf eine Seite von Shopify.
+- **Links** zum Shop, zu Adressen und zur Sendungsverfolgung öffnen in einem neuen Tab, die App bleibt offen.
+- **Team-Mitglieder** landen nach der Anmeldung auf der Startseite der Club-App (mit Vornamen und Beitritt wie alle). Der Admin-Bereich ist oben über **Admin** erreichbar; über `app.perfumecloud.de/admin` geht es wie bisher direkt dorthin.
+- **Mails des Clubs** (Willkommen, Anmeldecode, Bewertung …) tragen unten die Fußzeile der Team-App mit Logo (Team-App → **Einstellungen → Vorlagen → Absender & Fußzeile**).
 
 ---
 
@@ -160,11 +176,11 @@ Damit Kundinnen und Kunden sich mit ihrem Shop-Konto anmelden (Shopify schickt d
 6. Speichern, dann in Shopify **Client-ID** und **Client-Secret** der Customer Account API kopieren.
 7. Im Club-Admin einfügen → **Speichern und testen**. Grüner Haken = Anmeldeseite gefunden.
 
-Ab jetzt zeigt die Startseite der App **„Anmelden oder Konto erstellen“**.
+Ab Version 1.3 meldet man sich auf der Startseite direkt mit E-Mail-Code an; die Shopify-Anmeldung steht darunter als **„Mit Shopify-Konto fortfahren“**. Ist der E-Mail-Versand nicht eingerichtet, zeigt die Startseite nur **„Anmelden oder Konto erstellen“** über Shopify.
 
 **E-Mail-Versand (für Bestätigungen):** Club-Admin → **Einstellungen → Verbindungen → E-Mail-Versand**: SMTP `mxf938.netcup.net`, Port **465**, Benutzer `info@perfumecloud.de`, Passwort von info@, Absender `info@perfumecloud.de` / `Perfume Cloud`. Darüber gehen die Willkommensmail, die Einladung an die Warteliste und die Feedback-Weiterleitung an info@. Punkte, Versand und Aktionen meldet die App per **Push**, nicht per Mail.
 
-**Ausweichweg ohne Headless:** Mit dem Schalter **Anmeldung per E-Mail-Code anbieten** schickt die App den Anmeldecode selbst über diesen Zugang. Das ist nur nötig, wenn Teil C einmal nicht klappt.
+**Anmeldung per E-Mail-Code (Standard ab 1.3):** Der Schalter **Anmeldung per E-Mail-Code anbieten** (an) schickt den Anmeldecode über diesen Zugang. Ausgeschaltet bleibt nur die Shopify-Anmeldung.
 
 ---
 
@@ -229,7 +245,7 @@ Danach teilen sich Club und Team-App **eine Datenbank** (alle Club-Tabellen begi
 - Personen ohne Team-App (z. B. eine Agentur) bekommen unter **Zugänge → Eigene Club-Zugänge** ein eigenes Konto.
 
 ### H3 · Anmeldung mit der E-Mail erkennen
-Club-Admin → **Einstellungen → Zugänge → Anmeldung für das Team** → **Einschalten**. Meldet sich jemand aus dem Team in der Club-App an (Shopify-Kundenkonto oder E-Mail-Code mit **derselben E-Mail** wie in der Team-App), landet die Person direkt im Admin-Bereich. Oben über **Kundenansicht** sieht sie die App wie ein Mitglied.
+Club-Admin → **Einstellungen → Zugänge → Anmeldung für das Team** → **Einschalten**. Meldet sich jemand aus dem Team in der Club-App an (E-Mail-Code oder Shopify-Kundenkonto mit **derselben E-Mail** wie in der Team-App), bekommt die Person den Admin-Bereich dazu: oben in der Club-App steht dann **Admin**. Über `app.perfumecloud.de/admin` → **Mit Kundenkonto anmelden** geht es direkt in den Admin-Bereich. Dort zeigt **Kundenansicht** die App wie ein Mitglied.
 
 ### H4 · Team-App einstellen
 1. Team-App → **Einstellungen → Integrationen → Members Club**. Mit gemeinsamer Datenbank ist alles schon ausgefüllt (grüner Haken). Sonst Adresse und Schlüssel aus Club-Admin → **Einstellungen → System → Verbindung zur Team-App** kopieren und **Speichern & testen**.
@@ -324,7 +340,7 @@ Jedes Mitglied bekommt in der App (Übersicht und **Konto → Freunde einladen**
 1. **Rabatt für Freunde:** Prozent oder fester Betrag, Mindestbestellwert, **nur für die erste Bestellung** (einmal je Kundin/Kunde; Bestellungen von Bestandskunden bringen keine Punkte), optional **nur Kundensegment „Club: Neukunden“** (Shopify prüft dann an der Kasse, ob jemand noch nie bestellt hat; das Segment legt die App bei Bedarf selbst an), Kombinierbarkeit mit Versand-, Bestell- und Produktrabatten.
 2. **Belohnung fürs Mitglied:** feste **Punkte** je Bestellung oder ein **Anteil** am Warenwert als Punkte-Gegenwert (die Beispielrechnung darunter zeigt, was das bei 59 € bedeutet), ab Bestellwert, **höchstens** X belohnte Bestellungen je 12 Monate.
 3. **Empfehlungslinks einschalten** → **Speichern**.
-4. **Testen:** **Code anlegen und Push an mich** legt deinen eigenen Code in Shopify an und schickt dir einen Push. Deinen Link siehst du dort, wenn du mit deiner Admin-Adresse im Club bist (eigene Bestellungen bringen keine Punkte). Wer den Ablauf ganz durchspielen will: Team-App → **Members Club → Probelauf** (Schritt „Empfehlung belohnt“).
+4. **Testen:** **Code anlegen und Push an mich** legt deinen eigenen Code in Shopify an und schickt dir einen Push. Deinen Link siehst du dort, wenn du mit deiner Admin-Adresse im Club bist (eigene Bestellungen bringen keine Punkte). Wer den Ablauf ganz durchspielen will: Team-App → **Members Club → Testbestellung** (Schritt „Empfehlung belohnt“).
 
    Ändert ihr später Rabatt oder Kombinierbarkeit, legt die App alle Codes in Shopify neu an (im Hintergrund, 20 je Cronjob-Lauf).
 
@@ -375,7 +391,10 @@ Die bisherige **Club-Einladung** (Bonus „Freunde einladen“ in den Regeln) bl
 | Punkte stehen auf „unterwegs“ | Normal bis 14 Tage nach dem Versand. Der Cronjob (Teil D) schreibt sie danach gut. |
 | „Code erstellen“ meldet einen Fehler | Shopify-Test im Admin prüfen (`write_discounts`). Die Punkte wurden nicht abgebucht. |
 | Keine Push-Mitteilungen | App vom **Home-Bildschirm** öffnen (iPhone ab iOS 16.4), unter **Konto** Mitteilungen einschalten. Im Admin unter **Push** stehen Zustellungen und Fehler. Läuft die Ruhezeit, kommen sie morgens. Ohne Cronjob (Teil D) wird nichts verschickt. |
-| Team-Mitglied landet nicht im Admin | **Zugänge → Anmeldung für das Team** muss an sein und die E-Mail exakt der in der Team-App entsprechen. Nicht-Admins brauchen **Club-Zugang** (H2). |
+| Team-Mitglied sieht oben kein „Admin“ | **Zugänge → Anmeldung für das Team** muss an sein und die E-Mail exakt der in der Team-App entsprechen. Nicht-Admins brauchen **Club-Zugang** (H2). |
+| Kein Anmeldecode per Mail | Spam-Ordner prüfen. Club-Admin → **Verbindungen → E-Mail-Versand** → **Testmail an mich**. Klappt das nicht, darunter **Mit Shopify-Konto fortfahren** nutzen. |
+| Begrüßung zeigt keinen Namen | Unter **Konto → Vornamen eintragen**. Mitglieder, die vor 1.3 ohne Namen beigetreten sind, sehen „schön dich zu sehen“, bis sie ihn eintragen. |
+| Team-App: Testbestellung „Nicht gefunden“ | Der Club ist älter als 1.3: Update 1.2 → 1.3. |
 | Umzug der Datenbank meldet einen Fehler | Pfad zur `config.php` prüfen, **open_basedir** beider Subdomains auf `{WEBSPACEROOT}`. Es wurde nichts umgestellt, der Club läuft mit der alten Datenbank weiter. |
 | Team-App: „Club noch nicht verbunden“ | Teil H4: Adresse und Schlüssel aus Club-Admin → System eintragen. Die Adresse der App muss gespeichert sein (einmal in den Club-Einstellungen speichern). |
 | Punkteanzeige im Shop fehlt | Die App hat das Metafeld `club.programm` noch nicht geschrieben: im Club-Admin einmal Einstellungen speichern oder auf der Übersicht **Jetzt abgleichen**. Ist der Warenwert 0, bleibt die Zeile ausgeblendet. |

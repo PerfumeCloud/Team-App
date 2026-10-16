@@ -59,6 +59,9 @@ final class Api
                 return ['user' => Auth::publicUser($me), 'prefs' => Auth::prefs($me)];
             }],
             ['PUT', '/me', static fn () => self::updateMe(Auth::require(), Http::body())],
+            // Bild unter der eigenen Signatur
+            ['GET', '/me/signature', static fn () => Signature::view((string) Auth::require()['id'])],
+            ['PUT', '/me/signature', static fn () => Signature::save((string) Auth::require()['id'], Http::body())],
 
             // Persönliches Postfach – nur für die angemeldete Person sichtbar
             ['GET', '/me/mailbox', static fn () => self::myMailbox(Auth::require())],
@@ -147,9 +150,30 @@ final class Api
                 return Replies::fill($me, $mail, (string) ($b['text'] ?? ''), isset($b['order']) && is_string($b['order']) ? $b['order'] : null);
             }],
             ['POST', '/emails/([0-9a-f]{40})/reply', static fn (string $id) => Replies::reply(Auth::require(), $id, Http::body())],
+            // Ordner wie in Outlook (direkt auf dem Mailserver), Gesendet
+            ['POST', '/emails/([0-9a-f]{40})/move', static fn (string $id) => MailFolders::moveEmail(Auth::require(), $id, (string) (Http::body()['to'] ?? ''))],
+            ['GET', '/mail/folders', static fn () => MailFolders::folders(Auth::require(), (string) Http::query('box', ''), Http::query('fresh') === '1')],
+            ['POST', '/mail/folders', static function () {
+                $b = Http::body();
+                return MailFolders::create(Auth::require(), (string) ($b['box'] ?? ''), is_string($b['parent'] ?? null) ? $b['parent'] : null, $b['name'] ?? '');
+            }],
+            ['PATCH', '/mail/folders', static function () {
+                $b = Http::body();
+                return MailFolders::rename(Auth::require(), (string) ($b['box'] ?? ''), (string) ($b['path'] ?? ''), $b['name'] ?? '');
+            }],
+            ['POST', '/mail/folders/delete', static function () {
+                $b = Http::body();
+                return MailFolders::delete(Auth::require(), (string) ($b['box'] ?? ''), (string) ($b['path'] ?? ''));
+            }],
+            ['GET', '/mail/folder', static fn () => MailFolders::messages(Auth::require(), (string) Http::query('box', ''), (string) Http::query('path', ''), (int) Http::query('page', '1'), (string) Http::query('q', ''))],
+            ['GET', '/mail/folder/message', static fn () => MailFolders::message(Auth::require(), (string) Http::query('box', ''), (string) Http::query('path', ''), (int) Http::query('uid', '0'))],
+            ['POST', '/mail/folder/move', static function () {
+                $b = Http::body();
+                return MailFolders::move(Auth::require(), (string) ($b['box'] ?? ''), (string) ($b['from'] ?? ''), is_array($b['uids'] ?? null) ? $b['uids'] : [], (string) ($b['to'] ?? ''));
+            }],
             ['GET', '/templates', static function () {
                 Auth::require();
-                return ['templates' => Replies::templates(), 'placeholders' => Replies::PLACEHOLDERS, 'footer' => Replies::footer(), 'fromName' => Replies::fromName()];
+                return ['templates' => Replies::templates(), 'placeholders' => Replies::PLACEHOLDERS, 'footer' => Replies::footer(), 'fromName' => Replies::fromName(), 'footerImage' => Signature::view('team')];
             }],
             ['PUT', "/templates/$uuid", static fn (string $id) => ['templates' => Replies::saveTemplate(Auth::requireAdmin(), $id, Http::body())]],
             ['DELETE', "/templates/$uuid", static function (string $id) {
@@ -225,7 +249,7 @@ final class Api
                 Auth::requireClub();
                 return Club::request('DELETE', "/internal/broadcasts/$id");
             }],
-            // Probelauf: kompletter Bestellverlauf im Club – nur Admins
+            // Testbestellung: kompletter Bestellverlauf im Club – nur Admins
             ['GET', '/club/trial', static function () {
                 Auth::requireAdmin();
                 return ClubTrial::view();
@@ -390,17 +414,28 @@ final class Api
                 Auth::requireAdmin();
                 Shopify::save(Http::body());
                 $test = Shopify::test();
+                Settings::set('shopify_check', $test + ['at' => Util::now()]);
                 if ($test['ok']) {
                     Settings::delete('orders_cursor');
                     Http::defer(static fn () => Jobs::run('setup'));
                 }
                 return ['test' => $test] + self::integrations();
             }],
+            // Berechtigungen neu prüfen (z. B. nachdem die neue App-Version im Shop bestätigt wurde)
+            ['POST', '/admin/shopify/check', static function () {
+                Auth::requireAdmin();
+                if (!Shopify::configured()) {
+                    throw new HttpError(409, 'Shopify ist noch nicht verbunden.');
+                }
+                $test = Shopify::test();
+                Settings::set('shopify_check', $test + ['at' => Util::now()]);
+                return ['test' => $test] + self::integrations();
+            }],
             ['DELETE', '/admin/shopify', static function () {
                 Auth::requireAdmin();
-                Settings::delete('shopify');
-                Settings::delete('shopify_secret');
-                Settings::delete('shopify_token');
+                foreach (['shopify', 'shopify_secret', 'shopify_token', 'shopify_scopes', 'shopify_check'] as $k) {
+                    Settings::delete($k);
+                }
                 return self::integrations();
             }],
             ['PUT', '/admin/mailboxes', static function () {
@@ -480,7 +515,18 @@ final class Api
                 if (array_key_exists('from_name', $b)) {
                     Settings::set('mail_from_name', Util::str($b['from_name'], 80) ?? '');
                 }
+                Club::pushSignature();
                 return ['footer' => Replies::footer(), 'fromName' => Replies::fromName()];
+            }],
+            // Bild unter der Fußzeile der Team-Postfächer (Logo) – geht auch an den Club für dessen Mails
+            ['GET', '/admin/mail-signature', static function () {
+                Auth::requireAdmin();
+                return Signature::view('team');
+            }],
+            ['PUT', '/admin/mail-signature', static function () {
+                Auth::requireAdmin();
+                $r = Signature::save('team', Http::body());
+                return $r + ['club' => Club::pushSignature()];
             }],
             ['PUT', '/admin/shipping', static function () {
                 Auth::requireAdmin();
@@ -742,6 +788,7 @@ final class Api
                 'hasSecret' => Settings::getSecret('shopify_secret') !== null,
                 'configured' => Shopify::configured(),
                 'status' => Settings::get('shopify_status'),
+                'check' => Settings::get('shopify_check'),
                 'lastSync' => (int) Settings::get('orders_last_sync', 0),
                 'apiVersion' => Shopify::API_VERSION,
             ],

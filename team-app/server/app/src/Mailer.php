@@ -125,6 +125,17 @@ final class Mailer
         $content = $html === null
             ? $part('text/plain', (string) $o['text'])
             : "Content-Type: multipart/alternative; boundary=\"$b1\"\r\n\r\n--$b1\r\n" . $part('text/plain', (string) $o['text']) . "--$b1\r\n" . $part('text/html', (string) $html) . "--$b1--\r\n";
+        // Eingebettete Bilder (Signatur, Logo): multipart/related, im HTML als <img src="cid:…">
+        $inline = $html !== null ? array_values(array_filter((array) ($o['inline'] ?? []), static fn ($i) => str_contains((string) $html, 'cid:' . $i['cid']))) : [];
+        if ($inline) {
+            $b3 = 'pc' . bin2hex(random_bytes(8));
+            $related = "Content-Type: multipart/related; boundary=\"$b3\"; type=\"multipart/alternative\"\r\n\r\n--$b3\r\n" . $content;
+            foreach ($inline as $i) {
+                $fn = (string) preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $i['name']);
+                $related .= "--$b3\r\nContent-Type: {$i['type']}; name=\"$fn\"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <{$i['cid']}>\r\nContent-Disposition: inline; filename=\"$fn\"\r\n\r\n" . chunk_split(base64_encode((string) $i['data']));
+            }
+            $content = $related . "--$b3--\r\n";
+        }
         $attachments = (array) ($o['attachments'] ?? []);
         if (!$attachments) {
             return implode("\r\n", $headers) . "\r\n" . $content;

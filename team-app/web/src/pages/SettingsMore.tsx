@@ -21,6 +21,7 @@ import { Section } from '../components/section';
 import { CustomerPanel } from '../components/customer';
 import { clearTemplatesCache } from '../components/mail';
 import { WeeklyPreview } from '../components/weekly';
+import { SignatureImageField } from '../components/signature-image';
 import { Button, Chip, cx, IconButton, Sheet, Spinner, Toggle } from '../components/ui';
 import { api, ApiError, uuid } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -66,7 +67,10 @@ export function SignatureSection({ prefs, onPrefs }: { prefs: Prefs | null; onPr
   useEffect(() => setSig(prefs?.signature ?? ''), [prefs?.signature]);
   const changed = (prefs?.signature ?? '') !== sig;
   return (
-    <Section title="Signatur" description="Steht unter jeder Antwort, die du aus der App schickst. Leer lassen für den Standard.">
+    <Section
+      title="Signatur"
+      description="Steht unter jeder Mail, die du aus der App schickst – mit Text und auf Wunsch einem Bild (z. B. Logo oder Unterschrift). Leer lassen für den Standard."
+    >
       <textarea className="field min-h-[96px] leading-relaxed" placeholder={fallback} value={sig} onChange={(e) => setSig(e.target.value)} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
@@ -79,6 +83,9 @@ export function SignatureSection({ prefs, onPrefs }: { prefs: Prefs | null; onPr
           Speichern
         </Button>
         <span className="text-[12px] text-ink-3">Bei info@ und support@ folgt darunter die Fußzeile des Teams.</span>
+      </div>
+      <div className="mt-4">
+        <SignatureImageField endpoint="/me/signature" label="Bild unter deiner Signatur" />
       </div>
       {prefs && (
         <label className="mt-5 flex items-center justify-between gap-4 border-t border-line pt-4">
@@ -101,6 +108,7 @@ export function TemplatesPanel() {
   const [editing, setEditing] = useState<ReplyTemplate | null>(null);
   const [mail, setMail] = useState({ footer: '', from_name: '' });
   const [busy, setBusy] = useState(false);
+  const [footerImage, setFooterImage] = useState<string | null>(null);
 
   useEffect(() => {
     void run(async () => {
@@ -161,7 +169,10 @@ export function TemplatesPanel() {
         </Button>
       </Section>
 
-      <Section title="Absender & Fußzeile" description="Gilt für Antworten aus info@ und support@. Aus dem eigenen Postfach steht dein Name als Absender und keine Fußzeile.">
+      <Section
+        title="Absender & Fußzeile"
+        description="Gilt für Mails aus info@ und support@ – und für die Mails des Members Clubs. Aus dem eigenen Postfach steht dein Name als Absender und keine Fußzeile."
+      >
         <div className="space-y-3">
           <div>
             <label className="label" htmlFor="fromname">
@@ -175,6 +186,7 @@ export function TemplatesPanel() {
             </label>
             <textarea id="footer" className="field min-h-[96px] leading-relaxed" value={mail.footer} onChange={(e) => setMail({ ...mail, footer: e.target.value })} />
           </div>
+          <SignatureImageField endpoint="/admin/mail-signature" label="Logo unter der Fußzeile" onChange={(v) => setFooterImage(v.image)} />
           <Button
             variant="secondary"
             loading={busy}
@@ -199,6 +211,7 @@ export function TemplatesPanel() {
             {signature}
             {mail.footer.trim() ? `\n\n${mail.footer.trim()}` : ''}
           </p>
+          {footerImage && <img src={footerImage} alt="" className="mt-2 max-h-16 max-w-[220px] object-contain object-left" />}
         </div>
       </Section>
 

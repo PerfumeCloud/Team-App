@@ -274,7 +274,7 @@ test('Admin: Shopify verbinden und Anmeldung einrichten', async () => {
   assert.equal(r.data.program.redeem_points, 100);
 
   const status = await new Client().req('GET', '/status');
-  assert.deepEqual(status.data.login, { shopify: true, email: false });
+  assert.deepEqual(status.data.login, { shopify: true, email: true });
   assert.equal(status.data.program.name, 'Perfume Cloud Club');
 });
 
@@ -454,10 +454,12 @@ test('Admin: Übersicht, Mitglieder und Korrektur', async () => {
   assert.equal((await anna.req('GET', '/admin/dashboard')).status, 401);
 });
 
-test('Anmeldung per E-Mail-Code (Ausweichweg)', async () => {
+test('Anmeldung per E-Mail-Code auf der eigenen Seite (Standard) und Vorname', async () => {
   const guest = new Client();
+  assert.equal((await guest.req('GET', '/status')).data.login.email, true, 'standardmäßig an, sobald Mails gehen');
+  await admin.req('PUT', '/admin/settings', { login_email: false });
   let r = await guest.req('POST', '/auth/code', { email: 'neu@example.de' });
-  assert.equal(r.status, 503, 'standardmäßig aus');
+  assert.equal(r.status, 503, 'im Admin-Bereich ausschaltbar');
   await admin.req('PUT', '/admin/settings', { login_email: true });
   r = await guest.req('POST', '/auth/code', { email: 'keine-mail' });
   assert.equal(r.status, 422);
@@ -477,6 +479,22 @@ test('Anmeldung per E-Mail-Code (Ausweichweg)', async () => {
   // derselbe Code gilt nur einmal
   r = await new Client().req('POST', '/auth/code/verify', { email: 'neu@example.de', code: codeMatch[1] });
   assert.equal(r.status, 401);
+
+  // Ohne Namen aus Shopify fragt der Beitritt nach dem Vornamen (für „Guten Morgen, …“ statt der Mailadresse)
+  r = await guest.req('POST', '/me/join', { terms: true });
+  assert.equal(r.status, 422);
+  assert.match(r.data.error, /Vornamen/);
+  r = await guest.req('PUT', '/me/name', { first_name: 'neu@example.de' });
+  assert.equal(r.status, 422, 'keine Mailadresse als Name');
+  r = await guest.req('PUT', '/me/name', { first_name: '  Nele  ' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.member.first_name, 'Nele');
+  assert.equal((await guest.req('GET', '/me')).data.member.joined_at, null, 'Name ändern tritt nicht bei');
+  const after = await getMock();
+  assert.equal(Object.values(after.customers).find((c) => c.email === 'neu@example.de').firstName, 'Nele', 'Vorname steht auch im Shopify-Kundenkonto');
+  r = await guest.req('POST', '/auth/logout');
+  assert.equal(r.status, 200);
+  assert.equal((await guest.req('GET', '/me')).status, 401);
 });
 
 test('Öffentlicher Client ohne Secret (PKCE)', async () => {
@@ -798,7 +816,8 @@ test('Admin wird an der E-Mail erkannt und sieht die App wie ein Mitglied', asyn
   const teamAnna = r.data.club.find((x) => x.email === 'anna@example.de');
   await setMock({ login: { customer: ANNA, deny: false } });
   const c = new Client();
-  assert.equal(await c.shopifyLogin('/'), '/admin', 'Admin landet direkt im Admin-Bereich');
+  assert.equal(await c.shopifyLogin('/admin'), '/admin', 'vom Admin-Bereich aus geht es zurück dorthin');
+  assert.equal(await new Client().shopifyLogin('/'), '/', 'von der Startseite aus in die Club-App (Name, Beitritt) – nicht in den Admin-Bereich');
   r = await c.req('GET', '/admin/me');
   assert.equal(r.data.admin.email, 'anna@example.de');
   assert.equal(r.data.own_member_id, annaId);
@@ -937,7 +956,7 @@ test('Admin: Mitglied mit Stufe, Boni und Push-Verlauf', async () => {
   assert.ok(r.data.checklist.some((x) => x.key === 'team_db' && x.ok === false));
 });
 
-// ---------- Club 1.2: Befragung, Empfehlungslinks, Probelauf ----------
+// ---------- Club 1.2: Befragung, Empfehlungslinks, Testbestellung ----------
 
 const GAST = 'gid://shopify/Customer/50';
 const NEU = 'gid://shopify/Customer/60';
@@ -1261,7 +1280,7 @@ test('Empfehlungslink: Rabatt für Freunde, Punkte je Bestellung – auch ohne B
   await admin.req('PUT', '/admin/referrals', { enabled: true });
 });
 
-test('Probelauf: Schnelltest mit allen Schritten, Push auf die Geräte des Admins, Aufräumen', async () => {
+test('Testbestellung: simuliert mit allen Schritten, Push auf die Geräte des Admins, Aufräumen', async () => {
   const user = { id: 'team-marius', name: 'Anna Admin', email: 'anna@example.de' };
   const statsBefore = (await internalReq('GET', '/stats')).data;
   let r = await internalReq('GET', '/trial');
@@ -1282,7 +1301,7 @@ test('Probelauf: Schnelltest mit allen Schritten, Push auf die Geräte des Admin
   const orderPts = sql("SELECT points FROM club_orders WHERE order_id LIKE 'probelauf:%'")[0].points;
   assert.ok(orderPts >= 59);
   assert.equal(r.data.balance, orderPts + 118);
-  for (const title of ['Probelauf · Dein Paket ist unterwegs', 'Probelauf · Dein Duft ist angekommen', 'Probelauf · Wie gefällt dir Sunset Dune?', `Probelauf · +${orderPts} Punkte`, 'Probelauf · Danke fürs Weitersagen', 'Probelauf · Willkommen in Silber']) {
+  for (const title of ['Testbestellung · Dein Paket ist unterwegs', 'Testbestellung · Dein Duft ist angekommen', 'Testbestellung · Wie gefällt dir Sunset Dune?', `Testbestellung · +${orderPts} Punkte`, 'Testbestellung · Danke fürs Weitersagen', 'Testbestellung · Willkommen in Silber']) {
     await waitPush(annaPhone, (x) => x.title === title);
   }
   assert.ok(r.data.steps.find((s) => s.key === 'shipped').push.status === 'sent');
@@ -1292,7 +1311,7 @@ test('Probelauf: Schnelltest mit allen Schritten, Push auf die Geräte des Admin
   const stats = (await internalReq('GET', '/stats')).data;
   assert.equal(stats.members, statsBefore.members);
   assert.equal(stats.points.earned, statsBefore.points.earned);
-  assert.ok(!(await admin.req('GET', '/admin/members')).data.members.some((m) => /Probelauf/.test(m.name)));
+  assert.ok(!(await admin.req('GET', '/admin/members')).data.members.some((m) => /Testbestellung/.test(m.name)));
 
   r = await internalReq('POST', '/trial/cleanup', {});
   assert.equal(r.data.ok, true);
@@ -1302,12 +1321,12 @@ test('Probelauf: Schnelltest mit allen Schritten, Push auf die Geräte des Admin
   assert.equal((await internalReq('GET', '/trial')).data.active, false);
 });
 
-test('Probelauf: echte 0-€-Bestellung mit Einmal-Codes', async () => {
+test('Testbestellung: echt im Shop (0 €) mit Einmal-Codes', async () => {
   const user = { id: 'team-marius', name: 'Anna Admin', email: 'anna@example.de' };
   let r = await internalReq('POST', '/trial/start', { user, mode: 'real', amount_cents: 4000 });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.codes.length, 2);
-  assert.match(r.data.shop_link, /\/discount\/PROBE-[A-F0-9]{5}\?redirect=%2F$/);
+  assert.match(r.data.shop_link, /\/discount\/TEST-[A-F0-9]{5}\?redirect=%2F$/);
   const disc = Object.values((await getMock()).discounts).filter((d) => r.data.codes.includes(d.code));
   assert.equal(disc.length, 2);
   assert.equal(disc.find((d) => d.op === 'ClubTrialCode').input.customerGets.value.percentage, 1);
@@ -1327,8 +1346,27 @@ test('Probelauf: echte 0-€-Bestellung mit Einmal-Codes', async () => {
 
   r = await internalReq('POST', '/trial/cleanup', {});
   assert.deepEqual(r.data.order, { id: 'gid://shopify/Order/6001', name: '#6001' });
-  assert.equal(Object.values((await getMock()).discounts).filter((d) => /^PROBE-/.test(d.code)).length, 0, 'Codes gelöscht');
+  assert.equal(Object.values((await getMock()).discounts).filter((d) => /^TEST-/.test(d.code)).length, 0, 'Codes gelöscht');
   assert.equal(sql("SELECT COUNT(*) AS n FROM club_surveys WHERE order_id = 'gid://shopify/Order/6001'")[0].n, 0);
+});
+
+test('Fußzeile der Team-App (Text + Logo) steht unter den Mails des Clubs', async () => {
+  const png = execFileSync('php', ['-r', '$i = imagecreatetruecolor(200, 50); ob_start(); imagepng($i); echo base64_encode(ob_get_clean());']).toString();
+  assert.equal((await internalReq('POST', '/signature', { text: 'x', image: 'data:image/png;base64,AAAA' })).status, 422);
+  let r = await internalReq('POST', '/signature', { text: 'Perfume Cloud\nwww.perfumecloud.de', image: `data:image/png;base64,${png}`, width: 150 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const before = mails().length;
+  assert.equal((await admin.req('POST', '/admin/test/welcome')).status, 200);
+  const m = mails().slice(before).pop();
+  assert.ok(m, 'Mail protokolliert');
+  assert.match(m.body, /<!--pc-signatur-->/);
+  assert.match(m.body, /<img src="cid:pc-signatur@perfumecloud" width="150" height="38"/);
+  assert.match(m.body, /Perfume Cloud<br>/);
+  assert.match(m.text, /\n\nPerfume Cloud\nwww\.perfumecloud\.de$/);
+  // Entfernen: leer schicken
+  r = await internalReq('POST', '/signature', { text: '', image: null });
+  assert.equal(r.status, 200);
+  assert.equal(setting('mail_signature'), null);
 });
 
 test('Abgleich: ohne Freigabe für Name und E-Mail laufen die Punkte weiter', async () => {

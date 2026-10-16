@@ -154,6 +154,9 @@ final class Replies
             ], Db::all('SELECT * FROM replies WHERE email_id = ? ORDER BY created_at', [$id])),
             'signature' => self::signature($me),
             'footer' => self::isTeamBox($mail) ? self::footer() : '',
+            // Bilder unter der Signatur (Vorschau beim Antworten)
+            'signature_image' => Signature::dataUrl((string) $me['id']),
+            'footer_image' => self::isTeamBox($mail) ? Signature::dataUrl('team') : null,
         ];
     }
 
@@ -203,7 +206,7 @@ final class Replies
     }
 
     /** UID der Mail im Posteingang: gespeichert (gleiche UIDVALIDITY) oder per Message-ID gesucht. */
-    private static function findUid(Imap $imap, array $mail, string $validity): ?int
+    public static function findUid(Imap $imap, array $mail, string $validity): ?int
     {
         if ($mail['imap_uid'] !== null && (string) $mail['imap_validity'] === $validity) {
             return (int) $mail['imap_uid'];
@@ -216,7 +219,7 @@ final class Replies
         return $uids ? max($uids) : null;
     }
 
-    private static function decodeList(string $v): array
+    public static function decodeList(string $v): array
     {
         $out = [];
         foreach (preg_split('/,(?=(?:[^"]*"[^"]*")*[^"]*$)/', MailJob::decodeHeader($v)) ?: [] as $part) {
@@ -343,13 +346,14 @@ final class Replies
         }
         $msg = self::message($me, $id);
         $filled = self::fill($me, $mail, $text, $msg['order_number']);
-        $body = $filled['text'] . "\n\n" . self::signature($me);
-        if ($msg['footer'] !== '') {
-            $body .= "\n\n" . $msg['footer'];
+        // Signatur (Text + Bild) und bei Team-Postfächern die Fußzeile des Teams
+        $sig = Signature::block($me, self::isTeamBox($mail));
+        $body = $filled['text'] . ($sig['text'] !== '' ? "\n\n" . $sig['text'] : '');
+        $quote = !empty($in['quote']) ? self::quote($mail, $msg) : '';
+        if ($quote !== '') {
+            $body .= "\n\n" . $quote;
         }
-        if (!empty($in['quote'])) {
-            $body .= "\n\n" . self::quote($mail, $msg);
-        }
+        $html = Signature::mailHtml($filled['text'], $sig['html'], $quote);
         $subject = (string) $mail['subject'];
         if (!preg_match('/^(re|aw|antw|wg)\s*:/i', $subject)) {
             $subject = 'Re: ' . $subject;
@@ -361,7 +365,7 @@ final class Replies
         }
         $from = Mailer::fromAddress($mb);
         $fromName = $mb['visible_to'] ? $me['name'] : self::fromName();
-        $preview = ['from' => "$fromName <$from>", 'to' => $to, 'subject' => $subject, 'text' => $body, 'missing' => $filled['missing']];
+        $preview = ['from' => "$fromName <$from>", 'to' => $to, 'subject' => $subject, 'text' => $body, 'missing' => $filled['missing'], 'images' => count($sig['inline'])];
         if ($mode === 'preview') {
             return $preview;
         }
@@ -376,6 +380,8 @@ final class Replies
                 'from' => $from, 'fromName' => $fromName, 'to' => $me['email'],
                 'subject' => '[TEST] ' . $subject,
                 'text' => "Testmail – so käme die Antwort bei $to an:\n" . str_repeat('–', 40) . "\n\n" . $body,
+                'html' => str_replace('<body style="margin:0;padding:0">', '<body style="margin:0;padding:0"><p style="font-family:sans-serif;font-size:13px;color:#80562F;margin:0 0 14px">Testmail – so käme die Antwort bei ' . htmlspecialchars($to) . ' an:</p>', $html),
+                'inline' => $sig['inline'],
             ]);
             try {
                 Mailer::deliver($mb, $me['email'], $data);
@@ -389,6 +395,7 @@ final class Replies
         $messageId = '<' . bin2hex(random_bytes(12)) . "@$host>";
         $data = Mailer::compose([
             'from' => $from, 'fromName' => $fromName, 'to' => $to, 'subject' => $subject, 'text' => $body,
+            'html' => $html, 'inline' => $sig['inline'],
             'messageId' => $messageId,
             'headers' => $origId !== '' ? ['In-Reply-To' => $origId, 'References' => mb_substr($refs, -1900)] : [],
         ]);

@@ -200,7 +200,7 @@ export default function Bewertung() {
   return (
     <KundenShell shopUrl={v.shop_url} ohneDock>
       <Seitenkopf
-        label={v.test ? 'Bewertung · Probelauf' : 'Bewertung'}
+        label={v.test ? 'Bewertung · Testbestellung' : 'Bewertung'}
         titel={
           <>
             Wie gefällt dir <em>{v.items.length > 1 ? 'deine Düfte' : 'dein Duft'}</em>

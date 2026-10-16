@@ -132,7 +132,7 @@ GQL;
             try {
                 $out['club'] = Club::request('GET', '/internal/customer?email=' . rawurlencode($email));
             } catch (HttpError $e) {
-                $out['club'] = $e->status === 404 && $e->getMessage() === 'Nicht gefunden.'
+                $out['club'] = $e->status === 426
                     ? ['error' => 'Der Club ist noch auf einer älteren Version – nach dem Update erscheinen hier Stufe und Punkte.']
                     : ['error' => $e->getMessage()];
             }

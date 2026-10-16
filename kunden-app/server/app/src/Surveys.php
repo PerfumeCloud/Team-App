@@ -194,7 +194,7 @@ final class Surveys
 
     /**
      * Felder, die der Abgleich zusätzlich holt – nur, was gerade gebraucht wird (Datensparsamkeit, weniger Rechte):
-     * Befragung (oder Probelauf): Kundendaten, Einwilligung, Düfte; nur Empfehlungslinks: E-Mail und Anzahl Bestellungen.
+     * Befragung (oder Testbestellung): Kundendaten, Einwilligung, Düfte; nur Empfehlungslinks: E-Mail und Anzahl Bestellungen.
      * Produktlinks nur mit read_products, sonst führt die Nachkauf-Erinnerung in den Shop.
      */
     public static function orderExtra(): string
@@ -249,7 +249,7 @@ final class Surveys
 
     /**
      * Bestellung aus dem Abgleich: Zeile anlegen bzw. Versand/Zustellung nachtragen.
-     * $test: Probelauf (auch wenn die Befragung aus ist; zählt nicht in Auswertungen).
+     * $test: Testbestellung (auch wenn die Befragung aus ist; zählt nicht in Auswertungen).
      */
     public static function consider(array $o, ?array $member, bool $test = false): void
     {
@@ -714,7 +714,7 @@ final class Surveys
     {
         $c = self::config();
         $member = self::member($row);
-        // Probelauf: Punkte nur für das Testkonto, nie für ein echtes Konto
+        // Testbestellung: Punkte nur für das Testkonto, nie für ein echtes Konto
         if ($member && (!(int) $row['test'] || (int) ($member['test'] ?? 0) === 1) && (int) $row['points'] === 0 && (int) $c['points'] > 0
             && !Db::value("SELECT 1 FROM club_ledger WHERE kind = 'survey' AND ref = ?", ['survey:' . $row['id']])) {
             $pts = (int) $c['points'];
@@ -793,7 +793,7 @@ final class Surveys
             'Antworten geht direkt an die Person. In der Team-App liegt dazu eine Aufgabe.'
         );
         $to = Feedback::email();
-        $subject = ((int) $row['test'] ? '[Probelauf] ' : '') . 'Bewertung ' . $payload['stars'] . ' ★ zu ' . $row['order_name'];
+        $subject = ((int) $row['test'] ? '[Testbestellung] ' : '') . 'Bewertung ' . $payload['stars'] . ' ★ zu ' . $row['order_name'];
         $reply = $row['email'];
         Http::defer(static fn () => Mailer::send($to, $subject, $text, $html, $reply));
     }

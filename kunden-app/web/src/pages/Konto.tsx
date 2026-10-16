@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Download, ExternalLink, LogOut, Share, ShoppingBag, Trash2 } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Download, ExternalLink, LogOut, Pencil, Share, ShoppingBag, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { api, fehlertext, vorschauBeenden } from '../lib/api';
 import { useKunde, useStatus } from '../lib/kontext';
@@ -9,6 +9,8 @@ import { datum, punkteWort } from '../lib/format';
 import { Dialog, Hb, Hinweis, Seitenkopf } from '../components/ui';
 import { Befragung, ExtraPunkte, FeedbackLink, Mitteilungen } from '../components/KontoExtras';
 import { StufenZeichen } from '../components/Club';
+import { toast } from '../lib/toast';
+import type { Me } from '../lib/types';
 
 interface InstallEvent extends Event {
   prompt: () => Promise<void>;
@@ -73,6 +75,7 @@ export default function Konto() {
   const [austreten, setAustreten] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
+  const [nameAendern, setNameAendern] = useState(false);
   const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
   const { hash } = useLocation();
   useEffect(() => {
@@ -85,8 +88,8 @@ export default function Konto() {
     setBusy(true);
     setFehler(null);
     try {
-      const r = await api<{ logout_url: string | null }>('DELETE', '/me');
-      window.location.href = r.logout_url || '/anmelden';
+      await api('DELETE', '/me');
+      window.location.replace('/');
     } catch (e) {
       setFehler(fehlertext(e));
       setBusy(false);
@@ -99,9 +102,9 @@ export default function Konto() {
 
       <section className="karte">
         <div className="karte-kopf">
-          <div>
-            <h2>{name || m.email}</h2>
-            {name && <p className="leise">{m.email}</p>}
+          <div style={{ minWidth: 0 }}>
+            <h2>{name || 'Dein Name fehlt noch'}</h2>
+            <p className="leise umbruch">{m.email}</p>
           </div>
           {me.tier && (
             <span className="stufe-titel klein">
@@ -121,11 +124,22 @@ export default function Konto() {
             </li>
           )}
         </ul>
+        {nameAendern ? (
+          <NameFormular onDone={() => setNameAendern(false)} />
+        ) : (
+          !me.preview && (
+            <div>
+              <button className="textlink klein" onClick={() => setNameAendern(true)}>
+                <Pencil className="icon" style={{ width: '.9rem', verticalAlign: '-.15em' }} /> {m.first_name ? 'Vornamen ändern' : 'Vornamen eintragen'}
+              </button>
+            </div>
+          )
+        )}
         <div className="code-reihe">
-          <a className="knopf" href={me.account_url}>
+          <a className="knopf" href={me.account_url} target="_blank" rel="noopener">
             <ExternalLink /> Adressen &amp; Daten im Shop
           </a>
-          <a className="knopf" href={me.shop_url}>
+          <a className="knopf" href={me.shop_url} target="_blank" rel="noopener">
             <ShoppingBag /> Zum Shop
           </a>
         </div>
@@ -158,7 +172,7 @@ export default function Konto() {
       ) : (
       <section className="karte">
         <h2 className="karte-titel">Abmelden</h2>
-        <p className="klein">Deine Punkte bleiben erhalten. Du meldest dich auch im Shop ab.</p>
+        <p className="klein">Deine Punkte bleiben erhalten. Danach bist du wieder auf der Startseite der App.</p>
         <div>
           <button className="knopf" onClick={() => void abmelden()}>
             <LogOut /> Abmelden
@@ -218,5 +232,47 @@ export default function Konto() {
         </Dialog>
       )}
     </>
+  );
+}
+
+/** Vorname für die Begrüßung („Guten Morgen, Anna“) – wird auch im Kundenkonto des Shops gespeichert. */
+function NameFormular({ onDone }: { onDone: () => void }) {
+  const { me, setMe } = useKunde();
+  const [vorname, setVorname] = useState(me.member.first_name ?? '');
+  const [busy, setBusy] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  async function speichern(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setFehler(null);
+    try {
+      setMe(await api<Me>('PUT', '/me/name', { first_name: vorname.trim() }));
+      toast('Name gespeichert');
+      onDone();
+    } catch (err) {
+      setFehler(fehlertext(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="formular" onSubmit={speichern} style={{ maxWidth: '26rem' }}>
+      <label className="feld">
+        <span>Dein Vorname</span>
+        <input autoFocus required autoComplete="given-name" autoCapitalize="words" value={vorname} onChange={(e) => setVorname(e.target.value)} maxLength={60} />
+        <small>So begrüßen wir dich in der App. Er wird auch in deinem Kundenkonto im Shop gespeichert.</small>
+      </label>
+      {fehler && <Hinweis fehler>{fehler}</Hinweis>}
+      <div className="code-reihe">
+        <Hb dunkel klein type="submit" busy={busy} disabled={!vorname.trim()}>
+          Speichern
+        </Hb>
+        <button type="button" className="knopf" onClick={onDone} disabled={busy}>
+          Abbrechen
+        </button>
+      </div>
+    </form>
   );
 }

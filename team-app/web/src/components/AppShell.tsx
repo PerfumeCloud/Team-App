@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { CalendarDays, ChartLine, CloudOff, Crown, House, Inbox, Lightbulb, ListChecks, NotebookPen, Settings, Truck } from 'lucide-react';
+import { CalendarDays, ChartLine, CloudOff, Crown, House, Inbox, LifeBuoy, Lightbulb, ListChecks, NotebookPen, Settings, Truck } from 'lucide-react';
 import { openImportantCount, useStore } from '../lib/store';
 import { relative } from '../lib/format';
 import { useStats } from '../lib/stats';
@@ -23,6 +23,8 @@ const NAV = [
   { to: '/club', label: 'Members Club', icon: Crown, mobile: false, club: true },
   // Nur mit Instagram-Zugang; am Handy über Statistik erreichbar
   { to: '/instagram', label: 'Instagram', icon: InstagramIcon, mobile: false, instagram: true },
+  // Anleitungen zu allen Funktionen; am Handy oben über das Rettungsring-Symbol
+  { to: '/hilfe', label: 'Hilfe', icon: LifeBuoy, mobile: false },
 ];
 
 function useBadges() {
@@ -143,6 +145,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               >
                 <Lightbulb className="h-[18px] w-[18px]" />
+              </button>
+              <button
+                onClick={() => navigate('/hilfe')}
+                aria-label="Hilfe und Anleitungen"
+                className={cx(
+                  'flex h-9 w-9 items-center justify-center rounded-full transition-colors active:scale-95',
+                  isActive('/hilfe') ? 'bg-accent text-accent-ink' : 'text-ink-2 hover:bg-surface-2',
+                )}
+              >
+                <LifeBuoy className="h-[19px] w-[19px]" />
               </button>
               <button onClick={() => navigate('/einstellungen')} aria-label="Einstellungen" className="rounded-full active:scale-95">
                 <Avatar user={me} size={32} />

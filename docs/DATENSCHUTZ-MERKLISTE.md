@@ -22,9 +22,9 @@ Diese Punkte gehören in die **Datenschutzerklärung**, die **Einwilligungstexte
 
 ## 1. Perfume Cloud Club (Treueprogramm)
 
-> **Perfume Cloud Club (Treueprogramm).** Wenn du dem Club beitrittst, verarbeiten wir in unserer Club-App (app.perfumecloud.de) deinen Namen, deine E-Mail-Adresse, deine Kundennummer, deine Bestellungen (Nummer, Datum, Betrag, Status, Artikel, Sendungsnummer), deinen Punktestand, deine Stufe und deinen persönlichen Empfehlungscode, um das Treueprogramm durchzuführen (Art. 6 Abs. 1 lit. b DSGVO). Freiwillig kannst du deinen Geburtstag (Tag und Monat, für den Geburtstagsbonus) angeben, Push-Mitteilungen erlauben, an Befragungen teilnehmen und uns Feedback schicken. Die Anmeldung läuft über dein Shopify-Kundenkonto. Die App wird bei der netcup GmbH, Daimlerstraße 25, 76185 Karlsruhe, gehostet. Wenn du austrittst, löschen wir deine Club-Daten. Bestelldaten bleiben im Rahmen der gesetzlichen Aufbewahrungspflichten im Shop gespeichert.
+> **Perfume Cloud Club (Treueprogramm).** Wenn du dem Club beitrittst, verarbeiten wir in unserer Club-App (app.perfumecloud.de) deinen Namen, deine E-Mail-Adresse, deine Kundennummer, deine Bestellungen (Nummer, Datum, Betrag, Status, Artikel, Sendungsnummer), deinen Punktestand, deine Stufe und deinen persönlichen Empfehlungscode, um das Treueprogramm durchzuführen (Art. 6 Abs. 1 lit. b DSGVO). Freiwillig kannst du deinen Geburtstag (Tag und Monat, für den Geburtstagsbonus) angeben, Push-Mitteilungen erlauben, an Befragungen teilnehmen und uns Feedback schicken. Zum Anmelden schicken wir dir einen Code an deine E-Mail-Adresse, oder du meldest dich mit deinem Shopify-Kundenkonto an. Hast du noch kein Kundenkonto in unserem Shop, legen wir dabei eins an. Den Vornamen, den du beim Beitritt angibst, übernehmen wir in dein Kundenkonto, damit wir dich in App und Mails mit Namen ansprechen können. Die App wird bei der netcup GmbH, Daimlerstraße 25, 76185 Karlsruhe, gehostet. Wenn du austrittst, löschen wir deine Club-Daten. Bestelldaten bleiben im Rahmen der gesetzlichen Aufbewahrungspflichten im Shop gespeichert.
 
-(Das ist der Absatz aus KUNDEN-APP.md, Teil E, ergänzt um den Empfehlungscode und die Befragung.)
+(Das ist der Absatz aus KUNDEN-APP.md, Teil E, ergänzt um den Empfehlungscode, die Befragung und ab Club 1.3 die Anmeldung per E-Mail-Code und den Vornamen.)
 
 ## 2. Befragung nach der Lieferung
 
@@ -56,7 +56,7 @@ Soll die Befragung (und die Nachkauf-Erinnerung) auch an Newsletter-Abonnenten g
 
 ## 6. Kundenservice und interne Werkzeuge
 
-> **Kundenservice.** Wenn du uns schreibst, sehen wir in unserem internen Team-Werkzeug zu deiner E-Mail-Adresse deine Bestellungen, ihren Versandstatus, deine Club-Stufe und deinen Punktestand sowie interne Notizen unseres Teams, damit wir dir schnell und passend antworten können (Art. 6 Abs. 1 lit. b und f DSGVO). Fällt deine Bewertung nach einer Lieferung schlecht aus, legen wir dort eine Aufgabe an, damit sich jemand bei dir meldet. Das Werkzeug läuft auf unserem eigenen Server bei der netcup GmbH in Deutschland. Sicherungskopien sind verschlüsselt und werden nach spätestens 8 Wochen gelöscht.
+> **Kundenservice.** Wenn du uns schreibst, sehen wir in unserem internen Team-Werkzeug zu deiner E-Mail-Adresse deine Bestellungen, ihren Versandstatus, deine Club-Stufe und deinen Punktestand sowie interne Notizen unseres Teams, damit wir dir schnell und passend antworten können (Art. 6 Abs. 1 lit. b und f DSGVO). Absender, Betreff und eine kurze Vorschau deiner Mails speichern wir dort 6 Monate, den vollständigen Text höchstens 30 Tage; die Mails selbst bleiben in unserem Postfach. Fällt deine Bewertung nach einer Lieferung schlecht aus, legen wir dort eine Aufgabe an, damit sich jemand bei dir meldet. Das Werkzeug läuft auf unserem eigenen Server bei der netcup GmbH in Deutschland. Sicherungskopien sind verschlüsselt und werden nach spätestens 8 Wochen gelöscht.
 
 ## 7. Hinweis bei Kundenbewertungen (Bewertungsbonus)
 
@@ -77,6 +77,10 @@ Seit Mai 2022 müsst ihr bei Kundenbewertungen im Shop angeben, **ob und wie** i
 | Abmeldungen von der Befragung | dauerhaft, nur als Hash | automatisch |
 | Hinweise ans Team (schlechte Bewertung) | 90 Tage im Club | automatisch |
 | Aufgaben in der Team-App aus schlechten Bewertungen | **von Hand**: erledigte Aufgaben nach spätestens 24 Monaten löschen | Team |
+| Anmeldecodes der Club-App | 10 Minuten, nach dem Anmelden sofort | automatisch |
+| Mails in der Team-App (Absender, Betreff, Vorschau, Ordner) | 6 Monate (bis Team-App 1.7: 30 Tage) | automatisch |
+| Text von Mails in der Team-App | 30 Tage | automatisch |
+| Signatur-Bilder des Teams (`storage/signatures`) | bis die Person das Bild entfernt oder ersetzt | Team |
 | Klicks auf Empfehlungslinks | Zahl je Tag und Mitglied, bis zum Austritt | automatisch |
 | Sicherungen auf dem Server | 14 Tage | automatisch |
 | Instagram-Kommentare in der Team-App (Benutzername, Text) | 90 Tage | automatisch |

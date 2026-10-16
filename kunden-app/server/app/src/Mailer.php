@@ -61,6 +61,10 @@ final class Mailer
      */
     public static function send(string $to, string $subject, string $text, ?string $html = null, ?string $replyTo = null, array $headers = []): array
     {
+        $sig = self::signature();
+        if ($sig && $html !== null && str_contains($html, self::SIGNATURE_MARK) && $sig['text'] !== '') {
+            $text .= "\n\n" . $sig['text'];
+        }
         if ($log = self::logFile()) {
             @file_put_contents($log, Util::json(['to' => $to, 'subject' => $subject, 'text' => $text, 'reply_to' => $replyTo, 'html' => $html !== null, 'headers' => $headers ?: null, 'body' => $html]) . "\n", FILE_APPEND | LOCK_EX);
             return ['sent' => true, 'message' => 'Mail protokolliert.'];
@@ -97,6 +101,67 @@ final class Mailer
      * Gerüst für alle Mails im Stil der App: Elfenbein, weiße Karte, Holzbraun, Castoro/Georgia.
      * $button: ['label' => …, 'url' => …]
      */
+    /** Platzhalter im HTML, an dessen Stelle die Fußzeile des Teams steht (Text + Logo aus der Team-App). */
+    public const SIGNATURE_MARK = '<!--pc-signatur-->';
+    private const SIGNATURE_CID = 'pc-signatur@perfumecloud';
+
+    /**
+     * Fußzeile der Team-Postfächer, die die Team-App schickt (Einstellungen → Vorlagen → Absender & Fußzeile).
+     * @return array{text:string, image:?string, type:?string, w:int, h:int, width:int}|null
+     */
+    public static function signature(): ?array
+    {
+        $s = Settings::get('mail_signature');
+        if (!is_array($s) || (($s['text'] ?? '') === '' && empty($s['image']))) {
+            return null;
+        }
+        return [
+            'text' => (string) ($s['text'] ?? ''),
+            'image' => is_string($s['image'] ?? null) ? $s['image'] : null,
+            'type' => is_string($s['type'] ?? null) ? $s['type'] : null,
+            'w' => (int) ($s['w'] ?? 0),
+            'h' => (int) ($s['h'] ?? 0),
+            'width' => (int) ($s['width'] ?? 220),
+        ];
+    }
+
+    /** Von der Team-App (Server zu Server): Text und Logo als data:-URL; leer = entfernen. */
+    public static function saveSignature(array $in): array
+    {
+        $text = trim(str_replace("\r\n", "\n", (string) ($in['text'] ?? '')));
+        $out = ['text' => mb_substr($text, 0, 1000), 'image' => null, 'type' => null, 'w' => 0, 'h' => 0, 'width' => 220];
+        $url = $in['image'] ?? null;
+        if (is_string($url) && preg_match('#^data:(image/(?:png|jpeg|gif));base64,([A-Za-z0-9+/=\s]+)$#', $url, $m)) {
+            $raw = (string) base64_decode($m[2], true);
+            $info = $raw !== '' && strlen($raw) <= 400_000 ? @getimagesizefromstring($raw) : false;
+            if (!$info || !in_array($info[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG, IMAGETYPE_GIF], true)) {
+                throw new HttpError(422, 'Das Bild der Fußzeile ließ sich nicht lesen.');
+            }
+            $out = ['image' => base64_encode($raw), 'type' => $m[1], 'w' => (int) $info[0], 'h' => (int) $info[1], 'width' => max(60, min(600, (int) ($in['width'] ?? 220), (int) $info[0]))] + $out;
+        }
+        if ($out['text'] === '' && $out['image'] === null) {
+            Settings::delete('mail_signature');
+        } else {
+            Settings::set('mail_signature', $out);
+        }
+        return ['ok' => true];
+    }
+
+    /** HTML-Block der Fußzeile für layout(). */
+    private static function signatureHtml(): string
+    {
+        $s = self::signature();
+        if (!$s) {
+            return '';
+        }
+        $h = $s['text'] !== '' ? nl2br(htmlspecialchars($s['text']), false) : '';
+        if ($s['image'] !== null && $s['w'] > 0) {
+            $height = (int) round($s['h'] * $s['width'] / max(1, $s['w']));
+            $h .= ($h !== '' ? '<br>' : '') . '<img src="cid:' . self::SIGNATURE_CID . '" width="' . $s['width'] . '" height="' . $height . '" alt="Perfume Cloud" style="display:block;margin-top:10px;border:0;max-width:100%;height:auto">';
+        }
+        return self::SIGNATURE_MARK . '<tr><td style="padding-top:26px"><div style="border-top:1px solid #EFE7DB;padding-top:18px;font-size:14px;line-height:1.5;color:#6b625b">' . $h . '</div></td></tr>';
+    }
+
     public static function layout(string $label, string $title, string $contentHtml, ?array $button = null, string $footer = ''): string
     {
         $btn = '';
@@ -114,6 +179,7 @@ final class Mailer
             . '<tr><td style="padding-top:12px;font-size:27px;line-height:1.2;color:#232120">' . $title . '</td></tr>'
             . '<tr><td style="padding-top:16px;font-size:16px;line-height:1.6">' . $contentHtml . '</td></tr>'
             . $btn
+            . self::signatureHtml()
             . '</table>'
             . ($footer !== '' ? '<p style="max-width:520px;margin:18px auto 0;font-size:12px;line-height:1.5;color:#6b625b;text-align:center">' . $footer . '</p>' : '')
             . '</td></tr></table></body></html>';
@@ -188,11 +254,23 @@ final class Mailer
             $headers[] = 'Content-Transfer-Encoding: base64';
             return implode("\r\n", $headers) . "\r\n\r\n" . chunk_split(base64_encode($text));
         }
-        $headers[] = "Content-Type: multipart/alternative; boundary=\"$boundary\"";
-        return implode("\r\n", $headers) . "\r\n\r\n"
-            . "--$boundary\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($text))
+        $alternative = "--$boundary\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($text))
             . "--$boundary\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($html))
             . "--$boundary--\r\n";
+        // Logo der Fußzeile als eingebettetes Bild (multipart/related)
+        $sig = self::signature();
+        if ($sig && $sig['image'] !== null && str_contains($html, 'cid:' . self::SIGNATURE_CID)) {
+            $rel = 'pcr' . bin2hex(random_bytes(8));
+            $ext = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif'][$sig['type']] ?? 'png';
+            $headers[] = "Content-Type: multipart/related; boundary=\"$rel\"; type=\"multipart/alternative\"";
+            return implode("\r\n", $headers) . "\r\n\r\n"
+                . "--$rel\r\nContent-Type: multipart/alternative; boundary=\"$boundary\"\r\n\r\n" . $alternative
+                . "--$rel\r\nContent-Type: {$sig['type']}; name=\"logo.$ext\"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <" . self::SIGNATURE_CID . ">\r\nContent-Disposition: inline; filename=\"logo.$ext\"\r\n\r\n"
+                . chunk_split($sig['image'])
+                . "--$rel--\r\n";
+        }
+        $headers[] = "Content-Type: multipart/alternative; boundary=\"$boundary\"";
+        return implode("\r\n", $headers) . "\r\n\r\n" . $alternative;
     }
 
     /** Minimaler SMTP-Client: SSL auf 465, sonst STARTTLS auf 587. */

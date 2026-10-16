@@ -32,7 +32,7 @@ final class Admin
         $p = Points::program();
         $since30 = $now - 30 * $day;
 
-        // Testkonten aus dem Probelauf zählen nirgends mit
+        // Testkonten aus der Testbestellung zählen nirgends mit
         $nt = 'member_id NOT IN (SELECT id FROM club_members WHERE test = 1)';
         $members = (int) Db::value('SELECT COUNT(*) FROM club_members WHERE joined_at IS NOT NULL AND test = 0');
         $tiers = [];
@@ -271,7 +271,7 @@ final class Admin
                 'origin' => Util::baseUrl(),
                 'test' => Settings::get('login_test'),
             ],
-            'login_email' => (bool) Settings::get('login_email', false),
+            'login_email' => (bool) Settings::get('login_email', true),
             'admin_by_email' => (bool) Settings::get('admin_by_email', true),
             'smtp' => $smtp + ['has_password' => Settings::getSecret('smtp_password') !== null],
             'welcome_mail' => (bool) Settings::get('welcome_mail', true),

@@ -284,6 +284,8 @@ export interface Integrations {
     hasSecret: boolean;
     configured: boolean;
     status: { ok: boolean; at: number; message: string } | null;
+    /** Letzte Prüfung der Berechtigungen („Speichern & testen“ / „Erneut prüfen“) */
+    check?: ShopifyCheck | null;
     lastSync: number;
     apiVersion: string;
   };
@@ -301,8 +303,18 @@ export interface Integrations {
   pushDevices: number;
   instagram: InstagramSettings;
   tests?: Record<string, MailCheck>;
-  test?: { ok: boolean; message: string };
+  test?: ShopifyCheck;
   summary?: Record<string, unknown>;
+}
+
+export interface ShopifyCheck {
+  ok: boolean;
+  message: string;
+  at?: number;
+  missing?: string[];
+  /** In der App-Version angefragt, im Shop aber noch nicht bestätigt */
+  unapproved?: string[];
+  approve_url?: string;
 }
 
 // ---------------- Members Club ----------------
@@ -501,6 +513,15 @@ export interface MailMessage {
   replies: { id: string; to: string; subject: string; user_id: ID | null; created_at: number }[];
   signature: string;
   footer: string;
+  /** Bild unter der eigenen Signatur bzw. unter der Team-Fußzeile (data:-URL) */
+  signature_image?: string | null;
+  footer_image?: string | null;
+}
+
+export interface SignatureImage {
+  image: string | null;
+  /** angezeigte Breite in der Mail (Pixel) */
+  width: number;
 }
 
 export interface ReplyTemplate {
@@ -516,6 +537,7 @@ export interface TemplatesResponse {
   placeholders: Record<string, string>;
   footer: string;
   fromName: string;
+  footerImage?: SignatureImage;
 }
 
 export interface ReplyResult {

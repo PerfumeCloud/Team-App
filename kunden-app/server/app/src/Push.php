@@ -208,7 +208,7 @@ final class Push
         ];
         $title = self::fill((string) (($custom['title'] ?? null) ?: $tpl['title']), $vars);
         if ((int) ($m['test'] ?? 0) === 1) {
-            $title = 'Probelauf · ' . $title;
+            $title = 'Testbestellung · ' . $title;
         }
         $body = self::fill((string) (($custom['body'] ?? null) ?: $tpl['body']), $vars);
         $now = Util::now();

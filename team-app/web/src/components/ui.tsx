@@ -9,35 +9,57 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft';
 
+const BUTTON_STYLES: Record<Variant, string> = {
+  primary: 'bg-accent text-accent-ink hover:brightness-110 active:brightness-95 shadow-sm',
+  secondary: 'bg-surface text-ink border border-line hover:bg-surface-2',
+  soft: 'bg-accent-soft text-accent hover:brightness-[0.98]',
+  ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
+  danger: 'bg-bad/10 text-bad hover:bg-bad/15',
+};
+const BUTTON_SIZES = { sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-lg', md: 'h-10 px-4 text-[14px] gap-2 rounded-xl', lg: 'h-12 px-5 text-[15px] gap-2 rounded-xl' };
+export const buttonClass = (variant: Variant, size: 'sm' | 'md' | 'lg', className?: string) =>
+  cx(
+    'inline-flex select-none items-center justify-center font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-50',
+    BUTTON_STYLES[variant],
+    BUTTON_SIZES[size],
+    className,
+  );
+
 export const Button = forwardRef<
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg'; loading?: boolean; icon?: ReactNode }
 >(function Button({ variant = 'primary', size = 'md', loading, icon, className, children, disabled, ...rest }, ref) {
-  const styles: Record<Variant, string> = {
-    primary: 'bg-accent text-accent-ink hover:brightness-110 active:brightness-95 shadow-sm',
-    secondary: 'bg-surface text-ink border border-line hover:bg-surface-2',
-    soft: 'bg-accent-soft text-accent hover:brightness-[0.98]',
-    ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
-    danger: 'bg-bad/10 text-bad hover:bg-bad/15',
-  };
-  const sizes = { sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-lg', md: 'h-10 px-4 text-[14px] gap-2 rounded-xl', lg: 'h-12 px-5 text-[15px] gap-2 rounded-xl' };
   return (
-    <button
-      ref={ref}
-      disabled={disabled || loading}
-      className={cx(
-        'inline-flex select-none items-center justify-center font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-50',
-        styles[variant],
-        sizes[size],
-        className,
-      )}
-      {...rest}
-    >
+    <button ref={ref} disabled={disabled || loading} className={buttonClass(variant, size, className)} {...rest}>
       {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : icon}
       {children}
     </button>
   );
 });
+
+/** Link, der wie ein Knopf aussieht. Externe Seiten öffnen immer in einem neuen Tab – die App bleibt offen. */
+export function LinkButton({
+  href,
+  variant = 'primary',
+  size = 'md',
+  icon,
+  className,
+  children,
+}: {
+  href: string;
+  variant?: Variant;
+  size?: 'sm' | 'md' | 'lg';
+  icon?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={buttonClass(variant, size, className)}>
+      {icon}
+      {children}
+    </a>
+  );
+}
 
 export function IconButton({
   label,

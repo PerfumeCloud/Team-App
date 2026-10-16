@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import {
   Bookmark,
   CalendarClock,
@@ -93,7 +93,14 @@ export default function Instagram() {
           <EmptyState
             icon={<InstagramIcon className="h-6 w-6" />}
             title="Instagram noch nicht verbunden"
-            text="Einmal das Instagram-Konto verbinden – danach gibt es hier Auswertungen, den Planer für Beiträge und alle Kommentare. Anleitung: docs/ANLEITUNG.md, Teil N."
+            text={
+              <>
+                Einmal das Instagram-Konto verbinden – danach gibt es hier Auswertungen, den Planer für Beiträge und alle Kommentare.{' '}
+                <Link to="/hilfe/instagram" className="font-medium text-accent hover:underline">
+                  Schritt-für-Schritt-Anleitung
+                </Link>
+              </>
+            }
             action={
               me?.role === 'admin' && (
                 <Button icon={<Settings className="h-4 w-4" />} onClick={() => navigate('/einstellungen/integrationen#instagram')}>

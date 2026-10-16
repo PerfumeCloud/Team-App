@@ -184,7 +184,7 @@ function KundenApp({ status }: { status: Status }) {
   return (
     <KundeCtx.Provider value={ctx}>
       {me.preview && <VorschauLeiste name={[me.member.first_name, me.member.last_name].filter(Boolean).join(' ') || me.member.email} />}
-      <KundenShell shopUrl={me.shop_url}>
+      <KundenShell shopUrl={me.shop_url} admin={me.admin && !me.preview}>
         <Routes>
           <Route path="/" element={<Uebersicht />} />
           <Route path="/bestellungen" element={<Bestellungen />} />

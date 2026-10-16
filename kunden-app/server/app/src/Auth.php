@@ -115,6 +115,8 @@ final class Auth
             'expires_at' => $now + self::LIFETIME_MS[$kind],
         ]);
         self::cookie($kind, $token, time() + intdiv(self::LIFETIME_MS[$kind], 1000));
+        // Gilt schon in dieser Anfrage (z. B. „admin“ in der Antwort auf die Anmeldung per Code)
+        $_COOKIE[self::COOKIES[$kind]] = $token;
         unset(self::$cache[$kind]);
         self::$preview = null;
     }
@@ -129,6 +131,7 @@ final class Auth
             Db::exec('DELETE FROM club_sessions WHERE id = ?', [$cur['session']['id']]);
         }
         self::cookie($kind, '', time() - 3600);
+        unset($_COOKIE[self::COOKIES[$kind]]);
         self::$cache[$kind] = null;
         return $idToken;
     }
@@ -196,11 +199,11 @@ final class Auth
         return Admins::public($a);
     }
 
-    // ---------- Anmeldung per E-Mail-Code (Ausweichweg, wenn die Shopify-Anmeldung nicht eingerichtet ist) ----------
+    // ---------- Anmeldung per E-Mail-Code direkt in der App (Standard; Shopify-Anmeldeseite als zweiter Weg) ----------
 
     public static function emailLoginEnabled(): bool
     {
-        return (bool) Settings::get('login_email', false) && Mailer::configured();
+        return (bool) Settings::get('login_email', true) && Mailer::configured();
     }
 
     public static function requestCode(string $email): void

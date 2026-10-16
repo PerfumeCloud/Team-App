@@ -13,9 +13,12 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 | **Update auf 1.6** | Marius, wenn die App schon läuft | ca. 15 Min. |
 | **K – Auswertungen und Datensicherung** | Marius | ca. 10 Min. |
 | **L – Antworten, Kundeninfos und Versand** | alle | zum Nachlesen |
-| **M – Probelauf für den Members Club** | Admins | ca. 10 Min. |
+| **M – Testbestellung für den Members Club** | Admins | ca. 10 Min. |
 | **N – Instagram** | Marius einmalig (Meta-App), danach alle mit Zugang | ca. 20 Min. |
 | **Update auf 1.7** | Marius, wenn die App schon läuft | ca. 5 Min. + Teil N |
+| **O – Postfach: Ordner, Gesendet, Erledigt** | alle | zum Nachlesen |
+| **P – Hilfe in der App** | alle | – |
+| **Update auf 1.8** | Marius, wenn die App schon läuft | ca. 10 Min. |
 
 **Bereitlegen:**
 - Zugang zum netcup **Customer Control Panel (CCP)**: <https://www.customercontrolpanel.de>
@@ -116,7 +119,7 @@ Kommt die Mail nicht an (z. B. weil info@ noch nicht verbunden ist, siehe A8), z
 ### A9 · Shopify verbinden
 1. <https://dev.shopify.com> öffnen und mit deinem Shopify-Konto (Shop-Inhaber) anmelden.
 2. Auf **Apps** und dann **App erstellen** klicken, Name `Perfume Cloud Team`.
-3. Bei der App-Version unter **Zugriffsbereiche / Scopes** diese drei anhaken: `read_orders`, `read_products`, `read_inventory`. Für Kundeninfos, „Versenden“ und den Probelauf kommen drei weitere dazu (siehe **A9a**), die könnt ihr gleich mit anhaken. Dann die Version **freigeben**.
+3. Bei der App-Version unter **Zugriffsbereiche / Scopes** diese drei anhaken: `read_orders`, `read_products`, `read_inventory`. Für Kundeninfos, „Versenden“ und die Testbestellung kommen drei weitere dazu (siehe **A9a**), die könnt ihr gleich mit anhaken. Dann die Version **freigeben**.
 4. Die App im Shop **Perfume Cloud** **installieren**.
 5. In den **Einstellungen** der App die **Client-ID** und das **Client-Secret** kopieren.
 6. In der Team-App auf **Einstellungen**, dann **Integrationen** und zu **Shopify**. Die myshopify-Adresse `ks8yin-mg.myshopify.com` ist schon eingetragen. Client-ID und Secret einfügen und **Speichern & testen** klicken.
@@ -129,7 +132,7 @@ Ohne diese Rechte läuft die App weiter, nur die jeweilige Funktion fehlt.
 |---|---|---|
 | `read_customers` + geschützte Kundendaten (Name, E-Mail, Adresse) | **Kundeninfos** neben einer Mail: Bestellungen, Versandstatus, Ort, Club-Stufe | keine Kundeninfos |
 | `write_merchant_managed_fulfillment_orders` | **Versenden**: Sendungsnummer in Shopify eintragen und die Bestellung als versendet markieren | Versand-Liste nur zum Ansehen |
-| `write_orders` | **Probelauf** im Members Club: die Testbestellung am Ende automatisch stornieren (Artikel zurück ins Lager) | Testbestellung von Hand im Shopify-Admin stornieren |
+| `write_orders` | **Testbestellung** im Members Club: am Ende automatisch stornieren (Artikel zurück ins Lager) | Testbestellung von Hand im Shopify-Admin stornieren |
 
 1. <https://dev.shopify.com> → **Apps** → **Perfume Cloud Team** → **Versionen** → **Version erstellen**. Bei den **Scopes** die drei bisherigen behalten und `read_customers`, `write_merchant_managed_fulfillment_orders` und `write_orders` dazu anhaken → **Freigeben**.
 2. **Geschützte Kundendaten** freischalten. Shopify gibt Name, E-Mail und Adresse von Kundinnen und Kunden nur heraus, wenn die App das angibt:
@@ -137,8 +140,8 @@ Ohne diese Rechte läuft die App weiter, nur die jeweilige Funktion fehlt.
    - **Protected customer data** → **Zugriff anfragen**, Grund z. B. „Kundenservice: Bestellungen und Versandstatus zur Absenderadresse einer Mail anzeigen“ → **Speichern**.
    - Darunter bei den **Feldern** **Name**, **E-Mail** und **Adresse** anhaken (Telefon braucht die App nicht), jeweils denselben Grund → **Speichern**.
    - Bei einer App nur für den eigenen Shop prüft Shopify das nicht, die Freigabe gilt sofort.
-3. Shopify-Admin → **Apps** → **Perfume Cloud Team**: Fragt Shopify nach den neuen Rechten, **Aktualisieren** bzw. **Installieren** bestätigen.
-4. Team-App → **Einstellungen → Integrationen → Shopify** → **Speichern & testen**. Fehlt noch etwas, nennt die App die fehlenden Rechte. Darunter mit **Kundeninfo testen** eine echte Kunden-Adresse oder Bestellnummer (z. B. `#1042`) eingeben: Es erscheinen Bestellungen, Ort und Club-Stufe.
+3. **Im Shop bestätigen** – sonst gelten die neuen Rechte nicht, auch wenn sie in der Version angehakt sind: Team-App → **Einstellungen → Integrationen → Shopify** → **In Shopify bestätigen** (öffnet einen neuen Tab), oder Shopify-Admin → **Apps** → **Perfume Cloud Team**. Shopify fragt nach den neuen Rechten → **Aktualisieren** bzw. **Installieren** bestätigen.
+4. Zurück in der Team-App **Erneut prüfen**. Die App unterscheidet „Im Shop noch nicht bestätigt“ (Schritt 3 fehlt) und „In der App-Version fehlen“ (Schritt 1 fehlt); bei allen Rechten steht „alle Berechtigungen da“. Darunter mit **Kundeninfo testen** eine echte Kunden-Adresse oder Bestellnummer (z. B. `#1042`) eingeben: Es erscheinen Bestellungen, Ort und Club-Stufe.
 
 Steht bei „Kundeninfo testen“ „Shopify verweigert den Zugriff auf Kundendaten“, fehlt Schritt 2.
 
@@ -306,7 +309,7 @@ Die Team-App zeigt die Kunden-App „Perfume Cloud Club“ (`app.perfumecloud.de
    - **Nachricht an Mitglieder senden:** Push an alle Mitglieder, an Silber und Gold oder nur an Gold. Vorlagen: **Neuer Duft**, **Früher Zugang (Gold)**, **Wieder da**, **Probe zur Bestellung**, **Feedback-Anfrage** (Gut / Neutral / Schlecht) und **Freie Nachricht**. Ablauf: schreiben (mit Vorschau) → **Zur Prüfung geben** → **Freigeben & senden** oder zu einem Zeitpunkt planen. Ist im Club-Admin das Vier-Augen-Prinzip an, gibt jemand anderes frei.
    - **Club-Admin öffnen:** öffnet den Admin-Bereich des Clubs in einem neuen Fenster, ohne erneute Anmeldung.
 
-4. **Probelauf** (nur Admins): siehe **Teil M**.
+4. **Testbestellung** (nur Admins): siehe **Teil M**.
 5. **Schlechte Bewertungen:** Ist im Club die Befragung nach der Lieferung an, wird jede Bewertung mit 2 Sternen oder weniger (einstellbar im Club-Admin) zu einer **Aufgabe** in der Planung (Priorität hoch, fällig heute, Kategorie „Kundenservice“). Darin stehen die Sterne je Duft, die Antworten, der Kommentar, Kontakt, Club-Stufe, der Link zur Bestellung in Shopify und ein Vorschlag für die Antwort aus dem Textbaustein „Entschuldigung …“. Gleichzeitig kommt ein Push „Unzufriedene Kundin“ (abschaltbar unter **Einstellungen → Benachrichtigungen**). Die App holt neue Hinweise jede Minute.
 
 **Push testen:** Unter **Einstellungen → Benachrichtigungen** stehen alle deine Geräte. **Test senden** zeigt je Gerät „Test angekommen beim Push-Dienst“ oder den Fehler. Steht dort „Dieses Gerät ist beim Server nicht angemeldet“, auf **Neu anmelden** tippen.
@@ -360,7 +363,7 @@ Jede Nacht ab 2 Uhr sichert die App alle Daten von Team-App **und** Club verschl
 Öffnest du im **Postfach** eine Kundenmail, steht daneben (am Handy über **Kunde**), was Shopify und der Club zur Absenderadresse wissen: Bestellungen mit Status und **Sendung verfolgen**, Ort, Newsletter, Club-Stufe und Punkte. Unter **Notizen des Teams** haltet ihr fest, was alle wissen sollten (z. B. „mag holzige Düfte, lieber per Mail“). Braucht A9a.
 
 ### L2 · Antworten aus der App
-**Antworten** öffnet den Editor mit deiner **Signatur** (Einstellungen → Allgemein) und den **Textbausteinen** zum Antippen. Platzhalter wie `{vorname}`, `{bestellnummer}` oder `{sendungslink}` füllt die App aus Shopify und dem Club. Mit **Ursprüngliche Mail zitieren** und **Danach als erledigt markieren**. Aus info@ und support@ geht die Antwort mit dem Absendernamen und der Fußzeile aus **Einstellungen → Vorlagen → Absender & Fußzeile**, aus dem eigenen Postfach mit deinem Namen.
+**Antworten** öffnet den Editor mit deiner **Signatur** (Einstellungen → Allgemein, auch mit **Bild**, z. B. Logo oder eingescannte Unterschrift) und den **Textbausteinen** zum Antippen. Platzhalter wie `{vorname}`, `{bestellnummer}` oder `{sendungslink}` füllt die App aus Shopify und dem Club. Mit **Ursprüngliche Mail zitieren** und **Danach als erledigt markieren**. Aus info@ und support@ geht die Antwort mit dem Absendernamen und der Fußzeile aus **Einstellungen → Vorlagen → Absender & Fußzeile** (dort auch **Logo unter der Fußzeile**), aus dem eigenen Postfach mit deinem Namen. Bilder gehen eingebettet mit der Mail raus (bis 400 KB, Breite per Regler 60–600 Pixel). Die Fußzeile samt Logo übernimmt auch der Members Club für seine Mails (ab Club 1.3).
 
 Textbausteine pflegen Admins unter **Einstellungen → Vorlagen**. Der Baustein, dessen Titel mit **„Entschuldigung“** beginnt, ist der Antwortvorschlag in den Aufgaben zu schlechten Bewertungen (Teil J).
 
@@ -369,24 +372,26 @@ Unter **Versand** (am Handy über **Zu versenden** auf der Übersicht) stehen al
 
 Unter **Einstellungen → Auswertungen → Versand**: **Erinnerung ab** (z. B. 2 Tagen: morgens ab 9 Uhr ein Push für liegengebliebene Bestellungen), vorausgewählter Versanddienst, Versandbestätigung an oder aus. Braucht A9a.
 
-## Teil M – Probelauf für den Members Club
+## Teil M – Testbestellung für den Members Club
 
-Einmal den ganzen Weg einer Bestellung durch den Club gehen, von „Bestellung eingegangen“ bis zum Stufenaufstieg, mit einem eigenen **Testkonto**. Nichts davon zählt in Statistik, Wochenrückblick, Mitgliederliste oder Newsletter. Nur Admins sehen den Bereich: **Members Club → Probelauf**.
+Einmal den ganzen Weg einer Bestellung durch den Club gehen, von „Bestellung eingegangen“ bis zum Stufenaufstieg, mit einem eigenen **Testkonto**. Nichts davon zählt in Statistik, Wochenrückblick, Mitgliederliste oder Newsletter. Nur Admins sehen den Bereich: **Members Club → Testbestellung**. (Bis Version 1.7 hieß das „Probelauf“.)
+
+Voraussetzung: Der Club läuft auf **Version 1.3** (KUNDEN-APP.md, „Update 1.2 → 1.3“). Ist er älter, meldet die Team-App „Der Members Club läuft noch auf Version …“ und verlinkt die Anleitung (in der App: **Hilfe → Members Club aktualisieren**).
 
 Damit Push-Mitteilungen auf deinem Handy ankommen: in der Club-App (`app.perfumecloud.de`) mit **derselben E-Mail wie in der Team-App** anmelden und unter **Konto** Mitteilungen erlauben. Mails gehen an dieselbe Adresse.
 
-**Schnelltest (simuliert):** Alles passiert im Club, kein Shop, keine echte Bestellung.
-1. **Art: Schnelltest**, Bestellwert eingeben (für Punkte und Stufe) → **Probelauf starten**.
-2. In der Liste die Schritte nacheinander **auslösen**: Versendet → Zugestellt → Befragung → Punkte gutgeschrieben → Empfehlung belohnt → Stufenaufstieg. Zu jedem Schritt steht, was passiert ist (z. B. welcher Push verschickt wurde).
+**Simuliert (ohne Shop):** Alles passiert im Club, kein Shop, keine echte Bestellung.
+1. **Art: Simuliert (ohne Shop)**, Bestellwert eingeben (für Punkte und Stufe) → **Testbestellung starten**.
+2. In der Liste die Schritte nacheinander **Auslösen**: Versendet → Zugestellt → Befragung → Punkte gutgeschrieben → Empfehlung belohnt → Stufenaufstieg. Zu jedem Schritt steht, was passiert ist (z. B. welcher Push verschickt wurde).
 3. **Befragung öffnen** zeigt die Bewertungsseite wie bei einer Kundin. Bewertest du dort mit 1 oder 2 Sternen, erscheint nach spätestens einer Minute (oder sofort mit **Jetzt abgleichen**) die Aufgabe in der Planung, zugewiesen an dich.
 4. **Aufräumen** löscht alle Testdaten.
 
-**Echte 0-€-Bestellung:** Ein echter Weg durch den Shop mit Kasse, Versandmail und Zustellung.
-1. **Art: Echte 0-€-Bestellung** → **Probelauf starten**. Die App erzeugt zwei Einmal-Codes (`PROBE-…` für 100 % auf die Ware und `PROBE-…-VERSAND` für kostenlosen Versand) und zeigt den Link in den Shop.
-2. Über den Link bestellen (er setzt den ersten Code), an der Kasse den Versand-Code dazu eingeben. Welches Kundenkonto du dabei nutzt, ist egal, die App erkennt die Bestellung am Code. Punkte und Stufe rechnet sie mit dem eingegebenen Bestellwert statt 0 €. Die Bestellung erscheint nach dem nächsten Abgleich (oder **Jetzt abgleichen**). Versand und Zustellung laufen echt über Shopify, die anderen Schritte lassen sich wie beim Schnelltest auslösen.
+**Echt im Shop (0 €):** Ein echter Weg durch den Shop mit Kasse, Versandmail und Zustellung.
+1. **Art: Echt im Shop (0 €)** → **Testbestellung starten**. Die App erzeugt zwei Einmal-Codes (`TEST-…` für 100 % auf die Ware und `TEST-…-VERSAND` für kostenlosen Versand) und zeigt den Link in den Shop.
+2. Über den Link bestellen (er setzt den ersten Code), an der Kasse den Versand-Code dazu eingeben. Welches Kundenkonto du dabei nutzt, ist egal, die App erkennt die Bestellung am Code. Punkte und Stufe rechnet sie mit dem eingegebenen Bestellwert statt 0 €. Die Bestellung erscheint nach dem nächsten Abgleich (oder **Jetzt abgleichen**). Versand und Zustellung laufen echt über Shopify, die anderen Schritte lassen sich wie oben auslösen.
 3. **Aufräumen** storniert die Bestellung in Shopify (Artikel zurück ins Lager, keine Mail an die Kundin) und löscht die Testdaten. Ohne `write_orders` (A9a) zeigt die App einen Link, dann in Shopify von Hand **Stornieren**.
 
-Testbestellungen zählen nicht in Statistik und Wochenrückblick.
+Testbestellungen zählen nicht in Statistik und Wochenrückblick. Laufende Probeläufe aus Version 1.7 laufen weiter (Codes `PROBE-…` gelten bis zum Aufräumen).
 
 ## Teil N – Instagram
 
@@ -480,6 +485,31 @@ Aufbau der Datei (für Claude oder zum Selbermachen):
 
 `kind`: `image`, `carousel`, `story` oder `reel`. Optional `mode: "manual"` für Erinnerung statt automatisch, `images` mit Bild-Adressen von `cdn.shopify.com`. Höchstens 30 Beiträge pro Datei. Ein Zeitpunkt in der Vergangenheit wird weggelassen.
 
+## Teil O – Postfach: Ordner, Gesendet, Erledigt
+
+- **Ordner wie in Outlook:** Im **Postfach** stehen am Computer links alle Postfächer mit ihren Ordnern, am Handy oben über **Ordner**. **Neuer Ordner** legt einen Ordner an (bei **Liegt in** auch als Unterordner), der **Stift** benennt um oder löscht (nur leere Ordner). Die Ordner liegen auf dem Mailserver: Sie erscheinen genauso in Outlook, Apple Mail und am iPhone, und Ordner von dort erscheinen in der App (nach spätestens 5 Minuten oder mit dem Neu-laden-Symbol).
+- **Einsortieren:** Bei jeder Mail **Verschieben** (Ordner-Symbol) → Ordner wählen. Gibt es ihn noch nicht: Namen eingeben → **Anlegen & verschieben**. Die Mail verschwindet aus dem Posteingang und liegt im Ordner, auch in Outlook.
+- **Gesendet:** beim jeweiligen Postfach **Gesendet** antippen. Dort stehen alle verschickten Mails, auch Antworten aus Outlook oder vom iPhone.
+- **Erledigt:** oben im Posteingang **Erledigt**. Die App zeigt alle abgehakten Mails der letzten **6 Monate** (vorher 30 Tage), mit **Ältere anzeigen** weiter zurück. **Wieder öffnen** holt eine Mail zurück.
+- Persönliche Postfächer sieht auch hier nur die Person, der sie gehören. Ordner-Aktionen in Team-Postfächern stehen im Verlauf.
+
+## Teil P – Hilfe in der App
+
+Unter **Hilfe** (am Computer links im Menü, am Handy oben das **Rettungsring-Symbol**) steht zu jeder Funktion eine Schritt-für-Schritt-Anleitung: Installation auf iPhone und Computer, Push, Widget, Shopify verbinden und Berechtigungen bestätigen, Postfächer, Cronjob, Members Club verbinden und aktualisieren, Testbestellung, Instagram, Signatur, Ordner, Versand, Sicherung und Wartung. Oben suchen (z. B. „read_inventory“, „Ordner“, „Push“) oder einen Bereich wählen. Jede Anleitung hat „Wenn es nicht klappt“ mit den häufigsten Fehlern und einen Knopf direkt zur passenden Einstellung. Fehlermeldungen in der App verlinken die passende Anleitung.
+
+**Links bleiben in der App:** Links zu Shop, Shopify, Instagram oder zur Sendungsverfolgung öffnen in einem **neuen Tab**. Die installierte App bleibt dabei offen, auf dem Handy wie am Computer.
+
+## Update auf Version 1.8 (wenn die App schon läuft)
+
+Neu: **Testbestellung** (vorher Probelauf), Shopify-Berechtigungen richtig erkennen und **In Shopify bestätigen**, **Signatur mit Bild**, **Ordner/Gesendet/Erledigt** im Postfach, **Hilfe**, Links in neuem Tab, bessere Darstellung am Handy. Alle Daten bleiben erhalten.
+
+1. Neue **`perfumecloud-team-app-upload.zip`** wie in A5 hochladen und mit „Vorhandene Dateien ersetzen“ entpacken (oder automatisch über Teil E).
+2. Die App einmal öffnen. Unter **Einstellungen** steht ganz unten „Version 1.8.0“. Falls etwas hakt: **Einstellungen → Integrationen → Wartung → Datenbank aktualisieren**.
+3. **Shopify:** **Einstellungen → Integrationen → Shopify**. Steht dort „Im Shop noch nicht bestätigt“, **In Shopify bestätigen** → in Shopify das Update annehmen → **Erneut prüfen** (A9a, Schritt 3–4).
+4. **Members Club auf 1.3** bringen: [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.2 → 1.3**. Erst dann gehen **Testbestellung** und die Fußzeile mit Logo in den Club-Mails.
+5. **Signatur und Logo** eintragen (Teil L2).
+6. Auf iPhones die App einmal ganz schließen und neu öffnen, damit die neue Version lädt.
+
 ## Wenn etwas hakt
 
 | Problem | Lösung |
@@ -495,7 +525,7 @@ Aufbau der Datei (für Claude oder zum Selbermachen):
 | „Zum Home-Bildschirm“ fehlt | Die Seite in **Safari** öffnen, nicht in einer anderen App. |
 | Passwort vergessen | Marius setzt unter **Einstellungen**, **Team**, **Passwort** ein neues. |
 | Mail-Test rot | IMAP-Server und Postfach-Passwort prüfen, Port 993. |
-| Shopify-Test rot | Client-ID und Secret neu kopieren. Prüfen, ob die drei Scopes angehakt sind und die App im Shop installiert ist. |
+| Shopify-Test rot | Client-ID und Secret neu kopieren. Prüfen, ob die Scopes angehakt sind, die Version freigegeben und die App im Shop installiert bzw. das Update bestätigt ist (A9a). |
 | „E-Mail existiert bereits“ beim Anlegen | Mit dieser Adresse gab es schon ein Konto. Neu anlegen holt es zurück. Oder **Integrationen → Wartung → Wiederherstellen**. |
 | Einladungs-Mail kommt nicht an | Den angezeigten **Einladungslink** per WhatsApp schicken. Prüfen, ob info@ unter **Postfächer** mit Passwort verbunden ist. Auch im Spam-Ordner nachsehen. |
 | Jemand bekommt keine Push-Nachrichten oder Mails | **Integrationen → Wartung**: Geräte-Status prüfen, dann **Datenbank aktualisieren** (Teil I). |
@@ -506,12 +536,15 @@ Aufbau der Datei (für Claude oder zum Selbermachen):
 | „Versenden“ meldet fehlende Berechtigung | A9a: `write_merchant_managed_fulfillment_orders` freigeben. |
 | Wochenrückblick oder Sicherung kommt nicht an | **Einstellungen → Auswertungen** → **Testmail**. Kommt sie nicht an: Postfach `auswertung@` anlegen (K1) und **Integrationen → Mails verschicken** prüfen. |
 | „Letzte Sicherung fehlgeschlagen“ | Die Meldung darunter nennt den Grund. Ohne Sicherungs-Passwort wird nichts gesichert (K3). |
-| Probelauf fehlt unter Members Club | Nur Admins sehen ihn. |
-| Probelauf: „Push nur im Protokoll“ | In der Club-App mit derselben E-Mail wie in der Team-App anmelden und Mitteilungen erlauben (Teil M). |
+| Testbestellung fehlt unter Members Club | Nur Admins sehen sie. |
+| Testbestellung: „Nicht gefunden“ oder „Der Members Club läuft noch auf Version …“ | Der Club ist älter als 1.3: Club-Paket hochladen (KUNDEN-APP.md, Update 1.2 → 1.3). In der App: **Hilfe → Members Club aktualisieren**. |
+| Testbestellung: „Push nur im Protokoll“ | In der Club-App mit derselben E-Mail wie in der Team-App anmelden und Mitteilungen erlauben (Teil M). |
+| Shopify: „es fehlen Berechtigungen: read_inventory“ (o. ä.), obwohl in der App-Version angehakt | Die neue Version ist im Shop noch nicht bestätigt: **Integrationen → Shopify → In Shopify bestätigen**, Update annehmen, **Erneut prüfen** (A9a). |
+| Am iPhone ist die App verzogen oder vergrößert | App ganz schließen und neu öffnen (lädt die neue Version). Ab 1.8 zoomt das iPhone beim Antippen von Eingabefeldern nicht mehr in die Seite. |
 | Instagram fehlt im Menü | Nur Admins und Personen mit **Instagram-Zugang** sehen es (N3). Andere sehen es erst, wenn das Konto verbunden ist. |
 | Instagram: „Invalid redirect_uri“ beim Verbinden | Die Weiterleitungs-URI in der Meta-App (N1, Schritt 6) muss genau so lauten wie in der Team-App angezeigt, mit `https://`. |
 | Instagram: „Insufficient developer role“ | Das Instagram-Konto ist noch kein Instagram-Tester der Meta-App oder die Einladung ist nicht angenommen (N1, Schritt 7). |
 | Instagram: „Es fehlen Berechtigungen“ | In der Meta-App die vier Berechtigungen hinzufügen (N1, Schritt 4), dann **Neu verbinden** und bei Instagram alles erlauben. |
 | Instagram: Veröffentlichen schlägt fehl, „Bild nicht abrufbar“ | Instagram holt die Bilder von `team.perfumecloud.de`. Die Adresse muss ohne Passwortschutz (z. B. Plesk-Verzeichnisschutz) erreichbar sein. |
 | Instagram: Beiträge ohne Zahlen | Die Zahlen kommen nach und nach (30 Beiträge pro Stunde). Für Beiträge von vor der Umstellung aufs professionelle Konto liefert Instagram keine Zahlen. |
-| Probelauf: Aufräumen storniert nicht | `write_orders` fehlt (A9a). Die Bestellung im Shopify-Admin von Hand stornieren, „Artikel wieder auf Lager“ anhaken, „Kunden benachrichtigen“ aus. |
+| Testbestellung: Aufräumen storniert nicht | `write_orders` fehlt (A9a). Die Bestellung im Shopify-Admin von Hand stornieren, „Artikel wieder auf Lager“ anhaken, „Kunden benachrichtigen“ aus. |

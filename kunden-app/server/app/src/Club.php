@@ -80,10 +80,15 @@ final class Club
         if (empty($in['terms'])) {
             throw new HttpError(422, 'Bitte bestätige die Teilnahmebedingungen.');
         }
-        $first = Util::str($in['first_name'] ?? null, 100);
+        // Der Vorname steht in der Begrüßung („Guten Morgen, Anna“) – ohne Namen aus Shopify fragt die App danach
+        $first = self::cleanName($in['first_name'] ?? null);
+        if ($first === null && trim((string) $m['first_name']) === '') {
+            throw new HttpError(422, 'Bitte gib deinen Vornamen ein.');
+        }
         $now = Util::now();
         $update = ['joined_at' => $now, 'meta_dirty' => 1, 'updated_at' => $now, 'tier' => Tiers::KEYS[0]];
-        if ($first !== null && !$m['first_name']) {
+        $nameChanged = $first !== null && $first !== $m['first_name'];
+        if ($nameChanged) {
             $update['first_name'] = $first;
         }
         Db::update('club_members', $update, ['id' => $m['id']]);
@@ -96,8 +101,11 @@ final class Club
 
         // Shopify: Tag „club“ (für Segmente, Mails, Flow), erste Punkte aus bisherigen Bestellungen, Willkommensmail
         $member = $m;
-        Http::defer(static function () use ($member): void {
+        Http::defer(static function () use ($member, $nameChanged): void {
             if (Shopify::configured()) {
+                if ($nameChanged) {
+                    self::pushName($member);
+                }
                 try {
                     $d = Shopify::graphql(
                         'mutation ClubTag($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }',
@@ -127,6 +135,56 @@ final class Club
             }
         });
         return $m;
+    }
+
+    /** Vorname ändern (Konto-Seite). Geht auch ins Shopify-Kundenkonto, damit Shop und App gleich grüßen. */
+    public static function rename(array $m, array $in): array
+    {
+        $first = self::cleanName($in['first_name'] ?? null);
+        if ($first === null) {
+            throw new HttpError(422, 'Bitte gib deinen Vornamen ein.');
+        }
+        if ($first !== $m['first_name']) {
+            Db::update('club_members', ['first_name' => $first, 'updated_at' => Util::now()], ['id' => $m['id']]);
+            $m = Db::one('SELECT * FROM club_members WHERE id = ?', [$m['id']]);
+            $member = $m;
+            Http::defer(static function () use ($member): void {
+                if (Shopify::configured()) {
+                    self::pushName($member);
+                }
+            });
+        }
+        return $m;
+    }
+
+    private static function cleanName(mixed $v): ?string
+    {
+        if (!is_string($v)) {
+            return null;
+        }
+        // Steuerzeichen und doppelte Leerzeichen raus; nur ein Vorname, keine Mailadresse
+        $v = trim((string) preg_replace('/\s+/u', ' ', (string) preg_replace('/[\x00-\x1F\x7F]/u', '', $v)));
+        if ($v === '') {
+            return null;
+        }
+        if (str_contains($v, '@') || mb_strlen($v) > 60) {
+            throw new HttpError(422, 'Bitte nur deinen Vornamen eingeben (höchstens 60 Zeichen).');
+        }
+        return $v;
+    }
+
+    /** Vorname ins Shopify-Kundenkonto schreiben (Fehler nur ins Log – die App hat den Namen ja schon). */
+    private static function pushName(array $m): void
+    {
+        try {
+            $d = Shopify::graphql(
+                'mutation ClubName($input: CustomerInput!) { customerUpdate(input: $input) { userErrors { field message } } }',
+                ['input' => ['id' => $m['shopify_id'], 'firstName' => $m['first_name']]]
+            );
+            Shopify::check($d['customerUpdate'] ?? [], 'Vorname');
+        } catch (\Throwable $e) {
+            Util::log('Vorname nach Shopify: ' . $e->getMessage());
+        }
     }
 
     /** Austritt: offene Codes werden ungültig, Punkte verfallen, Daten werden gelöscht. */

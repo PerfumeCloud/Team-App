@@ -128,7 +128,7 @@ final class Reports
 
     // ---------- Wochenrückblick ----------
 
-    /** Bestellungen aus dem Probelauf zählen nicht mit. @return string[] */
+    /** Testbestellungen aus dem Members Club zählen nicht mit. @return string[] */
     public static function testOrderIds(): array
     {
         $ids = Settings::get('test_orders', []);

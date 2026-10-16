@@ -362,10 +362,12 @@ function Composer({
           </span>
         </p>
       )}
-      <p className="mt-2 whitespace-pre-line text-[12px] leading-relaxed text-ink-3">
-        {msg.signature}
-        {msg.footer ? `\n\n${msg.footer}` : ''}
-      </p>
+      <div className="mt-2 space-y-2 text-[12px] leading-relaxed text-ink-3">
+        <p className="whitespace-pre-line">{msg.signature}</p>
+        {msg.signature_image && <img src={msg.signature_image} alt="Bild unter deiner Signatur" className="max-h-16 max-w-[220px] object-contain object-left" />}
+        {msg.footer && <p className="whitespace-pre-line">{msg.footer}</p>}
+        {msg.footer_image && <img src={msg.footer_image} alt="Bild unter der Team-Fußzeile" className="max-h-16 max-w-[220px] object-contain object-left" />}
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
         <label className="flex items-center gap-2 text-[13px] text-ink-2">

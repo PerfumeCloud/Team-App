@@ -484,7 +484,13 @@ export const useStore = create<State>((set, get) => ({
   },
 
   putEmail(mail) {
-    set((s) => ({ emails: { ...s.emails, [mail.id]: mail } }));
+    set((s) => {
+      const emails = { ...s.emails };
+      // Verschoben oder gelöscht: aus dem Posteingang nehmen
+      if (mail.deleted) delete emails[mail.id];
+      else emails[mail.id] = mail;
+      return { emails };
+    });
     updateBadge();
   },
 

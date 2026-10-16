@@ -83,7 +83,8 @@ export default function Shipping() {
       {data?.missing && data.missing.length > 0 && (
         <Hint>
           In Shopify fehlt noch die Berechtigung <b>{data.missing.join(', ')}</b>. Die Liste funktioniert, aber „Als versendet markieren“ klappt erst, wenn ein
-          Admin sie freigibt (Anleitung: docs/ANLEITUNG.md → „Shopify-Rechte erweitern“). Der Testlauf geht schon.
+          Admin sie freigibt. Ist sie im Dev Dashboard schon angehakt, muss die neue App-Version noch im Shop bestätigt werden: Einstellungen → Integrationen →
+          Shopify → „In Shopify bestätigen“ (Hilfe → „Shopify-Berechtigungen“).
         </Hint>
       )}
       {data?.error && <Hint tone="bad">{data.error}</Hint>}
@@ -108,7 +109,7 @@ export default function Shipping() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[17px] font-semibold text-ink">{o.name}</span>
-                    {o.test && <Chip tone="accent">Probelauf</Chip>}
+                    {o.test && <Chip tone="accent">Testbestellung</Chip>}
                     {!o.paid && <Chip tone="bad">{o.financial_label || 'Nicht bezahlt'}</Chip>}
                     {o.partial && <Chip tone="warn">Teilweise versendet</Chip>}
                   </div>

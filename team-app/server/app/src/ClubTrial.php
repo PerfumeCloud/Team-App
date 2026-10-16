@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace PC;
 
 /**
- * Probelauf (nur Admins): einmal den ganzen Weg einer Bestellung durch den Club gehen –
+ * Testbestellung (nur Admins, früher „Probelauf“): einmal den ganzen Weg einer Bestellung durch den Club gehen –
  * als Schnelltest (simuliert) oder mit einer echten 0-€-Bestellung über Einmal-Codes.
  * Der Club führt die Schritte aus; die Team-App merkt sich die Testbestellung (zählt nirgends mit)
  * und storniert sie beim Aufräumen in Shopify.
@@ -24,7 +24,7 @@ final class ClubTrial
             throw new HttpError(422, 'Bitte einen Bestellwert zwischen 1 € und 1.000 € angeben.');
         }
         $r = Club::request('POST', '/internal/trial/start', ['user' => Club::user($me), 'mode' => $mode, 'amount_cents' => $amount]);
-        // Hinweise aus dem Probelauf (z. B. 2 Sterne) gehen nur an die Person, die ihn gestartet hat
+        // Hinweise aus der Testbestellung (z. B. 2 Sterne) gehen nur an die Person, die ihn gestartet hat
         Settings::set('club_trial', ['user_id' => $me['id'], 'started_at' => Util::now()]);
         return self::wrap($r);
     }
@@ -42,7 +42,7 @@ final class ClubTrial
         try {
             Club::pullAlerts();
         } catch (\Throwable $e) {
-            Util::log('Probelauf: Hinweise nicht abgeholt – ' . $e->getMessage());
+            Util::log('Testbestellung: Hinweise nicht abgeholt – ' . $e->getMessage());
         }
         return self::wrap($r);
     }
@@ -72,7 +72,7 @@ final class ClubTrial
         }
         try {
             $d = Shopify::graphql(
-                'mutation TeamTrialCancel($id: ID!) { orderCancel(orderId: $id, reason: OTHER, restock: true, notifyCustomer: false, refundMethod: { originalPaymentMethodsRefund: true }, staffNote: "Probelauf der Team-App") { job { id } orderCancelUserErrors { message } } }',
+                'mutation TeamTrialCancel($id: ID!) { orderCancel(orderId: $id, reason: OTHER, restock: true, notifyCustomer: false, refundMethod: { originalPaymentMethodsRefund: true }, staffNote: "Testbestellung der Team-App") { job { id } orderCancelUserErrors { message } } }',
                 ['id' => $gid]
             );
             $errors = $d['orderCancel']['orderCancelUserErrors'] ?? [];
@@ -81,12 +81,12 @@ final class ClubTrial
             }
             return ['cancelled' => true, 'note' => 'In Shopify storniert, Artikel zurück ins Lager, keine Mail an die Kundin.'];
         } catch (\Throwable $e) {
-            Util::log('Probelauf: Storno fehlgeschlagen – ' . $e->getMessage());
+            Util::log('Testbestellung: Storno fehlgeschlagen – ' . $e->getMessage());
             return ['cancelled' => false, 'note' => 'Storno fehlgeschlagen (' . $e->getMessage() . ') – bitte im Shopify-Admin stornieren.'];
         }
     }
 
-    /** Echte Testbestellung merken: Versand zeigt „Probelauf“, der Wochenrückblick lässt sie weg. */
+    /** Echte Testbestellung merken: Versand zeigt „Testbestellung“, der Wochenrückblick lässt sie weg. */
     private static function remember(string $gid): void
     {
         $id = Shopify::numericId($gid);
