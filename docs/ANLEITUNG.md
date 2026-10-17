@@ -501,6 +501,15 @@ Unter **Hilfe** (am Computer links im Menü, am Handy oben das **Rettungsring-Sy
 
 **Links bleiben in der App:** Links zu Shop, Shopify, Instagram oder zur Sendungsverfolgung öffnen in einem **neuen Tab**. Die installierte App bleibt dabei offen, auf dem Handy wie am Computer.
 
+## Update auf Version 1.8.2 (Push-Check bei der Testbestellung)
+
+Behebt: Bei der Testbestellung kamen keine Pushs an. Gründe waren: Die Club-Pushs gingen nur an ein Club-Konto mit **derselben** Adresse wie in der Team-App, Club und Team-App hielten sie nachts in der Ruhezeit zurück, und ohne Shopify-Recht `read_orders` sieht die Team-App keine Bestellung.
+
+1. Neue **`perfumecloud-team-app-upload.zip`** hochladen und mit „Vorhandene Dateien ersetzen“ entpacken. Unter **Einstellungen** steht ganz unten „Version 1.8.2“.
+2. Members Club auf **1.3.2** bringen: [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.3.1 → 1.3.2**.
+3. **Members Club → Testbestellung** öffnen. Unten steht der **Push-Check**: Jede Zeile soll grün sein. Meldest du dich in der Club-App mit einer anderen Adresse an (z. B. der privaten), trag sie unter **Weitere eigene Adresse** ein und wähle das Konto aus. **Testpush** zeigt sofort, ob es auf dem Handy ankommt.
+4. Die Testbestellung schickt ihre Pushs jetzt auch in der Ruhezeit. **Jetzt abgleichen** holt die Shop-Bestellung sofort, statt auf den Cronjob zu warten.
+
 ## Update auf Version 1.8.1 (wenn 1.8 schon läuft)
 
 Behebt: **Wochenrückblick** zeigte nach „Statistik öffnen“ „Verbindung verweigert“ (Links aus dem Rückblick öffnen jetzt in der App bzw. in einem neuen Tab), und **In Shopify bestätigen** führte nur in die App-Liste (jetzt direkt auf Shopifys Bestätigungsseite, dazu **App in Shopify öffnen** als zweiter Weg).

@@ -49,7 +49,7 @@ export default function Willkommen() {
   }
 
   return (
-    <KundenShell shopUrl={me.shop_url} ohneDock admin={me.admin}>
+    <KundenShell shopUrl={me.shop_url} ohneDock>
       <Seitenkopf label="Willkommen" titel={<>Schön, dass du <em>da bist{name ? `, ${name}` : ''}</em></>}>
         <p>Ein Schritt noch, dann sammelst du mit jeder Bestellung Punkte.</p>
       </Seitenkopf>

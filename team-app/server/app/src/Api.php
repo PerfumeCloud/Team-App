@@ -267,6 +267,11 @@ final class Api
                 Auth::requireAdmin();
                 return ClubTrial::cleanup();
             }],
+            ['GET', '/club/trial/check', static fn () => ClubTrial::check(Auth::requireAdmin())],
+            ['POST', '/club/trial/test-push', static fn () => ClubTrial::testPush(Auth::requireAdmin(), Http::body())],
+            ['POST', '/club/trial/device', static fn () => ClubTrial::device(Auth::requireAdmin(), Http::body())],
+            ['POST', '/club/access/emails', static fn () => ClubTrial::email(Auth::requireAdmin(), Http::body())],
+            ['POST', '/club/access/emails/remove', static fn () => ClubTrial::email(Auth::requireAdmin(), Http::body(), true)],
             // Einmal-Link (60 Sekunden) in den Club-Admin
             ['POST', '/club/sso', static fn () => Club::request('POST', '/internal/sso', ['user' => Club::user(Auth::requireClub())])],
 

@@ -152,7 +152,7 @@ const igServer = http.createServer((req, res) => {
 });
 
 // Nachbau von Shopify (nur Anmeldung und Berechtigungen): gewährt = im Shop bestätigt, angefragt = in der App-Version
-const shopMock = { tokenScope: '', granted: [], requested: [], approveLinks: true };
+const shopMock = { tokenScope: '', granted: [], requested: [], approveLinks: true, orders: [] };
 const shopServer = http.createServer((req, res) => {
   let raw = '';
   req.on('data', (c) => (raw += c));
@@ -176,6 +176,7 @@ const shopServer = http.createServer((req, res) => {
       return send(200, { data: { currentAppInstallation: { accessScopes: shopMock.granted.map((handle) => ({ handle })), app: { handle: null, requestedAccessScopes: shopMock.requested.map((handle) => ({ handle })) } } } });
     }
     if (q.includes('shop {')) return send(200, { data: { shop: { name: 'Perfume Cloud', myshopifyDomain: 'ks8yin-mg.myshopify.com', currencyCode: 'EUR' } } });
+    if (q.includes('query Orders')) return send(200, { data: { orders: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: shopMock.orders.splice(0) } } });
     send(200, { data: {} });
   });
 });
@@ -183,7 +184,7 @@ const shopServer = http.createServer((req, res) => {
 // Nachbau des Clubs (Kunden-App): /api/internal/… mit X-Club-Key
 const CLUB_KEY = 'club-test-schluessel-123';
 const clubCalls = [];
-const club = { broadcasts: [], denySso: new Set(), fourEyes: true, alerts: [], trial: null, old: false };
+const club = { broadcasts: [], denySso: new Set(), fourEyes: true, alerts: [], trial: null, old: false, accounts: [] };
 const TRIAL_STEPS = ['ordered', 'pending', 'shipped', 'delivered', 'survey', 'credited', 'referral', 'tier'];
 const CLUB_LABELS = { draft: 'Entwurf', review: 'Zur Prüfung', approved: 'Freigegeben', sending: 'Wird verschickt', sent: 'Verschickt' };
 let clubUrl = '';
@@ -227,7 +228,7 @@ const clubServer = http.createServer((req, res) => {
     if (route === 'GET /api/internal/trial') return send(200, trialView());
     if (route === 'POST /api/internal/trial/start') {
       if (club.trial) return send(409, { error: 'Es läuft schon ein Probelauf. Bitte erst aufräumen.' });
-      club.trial = { active: true, mode: body.mode, by: body.user, amount_cents: body.amount_cents, codes: body.mode === 'real' ? ['PROBE-AB12C', 'PROBE-AB12C-VERSAND'] : [], order: null, device_member: false, steps: TRIAL_STEPS.map((key) => ({ key, label: key, done: false })) };
+      club.trial = { active: true, mode: body.mode, by: body.user, amount_cents: body.amount_cents, codes: body.mode === 'real' ? ['TEST-AB12C', 'TEST-AB12C-VERSAND'] : [], order: null, device_member: !!body.device_member_id, device_member_id: body.device_member_id ?? null, steps: TRIAL_STEPS.map((key) => ({ key, label: key, done: false })) };
       return send(200, club.trial);
     }
     if (route === 'POST /api/internal/trial/step') {
@@ -242,6 +243,27 @@ const clubServer = http.createServer((req, res) => {
         club.alerts.push({ id: 'a-test', kind: 'low_rating', test: true, created_at: Date.now(), payload: { survey_id: 's-test', order_id: 'gid://shopify/Order/9001', order_name: '#9001', email: 'probelauf+ab12@club.invalid', name: 'Probelauf', member: true, tier: 'Bronze', stars: 1, avg: 1, items: [{ title: 'Sunset Dune', stars: 1 }], questions: [], comment: null } });
       }
       return send(200, trialView());
+    }
+    // Push-Check: Club-Konten der Person, eigene Adressen eintragen, Testpush, Ziel der Pushs
+    const access = () => ({ version: '1.4.0', team_mode: false, team_users: true, admin_by_email: true, accounts: [{ email: body.user.email, team: true, member: null, devices: 0, admin: true, reasons: [] }, ...club.accounts] });
+    if (route === 'POST /api/internal/access') return send(200, access());
+    if (route === 'POST /api/internal/access/emails') {
+      if (club.accounts.some((a) => a.email === body.email)) return send(409, { error: 'Diese Adresse steht schon in der Liste.' });
+      club.accounts.push({ email: body.email, team: false, member: { id: 'm-privat', name: 'Marius', joined: true }, devices: 1, admin: true, reasons: [] });
+      return send(200, access());
+    }
+    if (route === 'POST /api/internal/access/emails/remove') {
+      club.accounts = club.accounts.filter((a) => a.email !== body.email);
+      return send(200, access());
+    }
+    if (route === 'POST /api/internal/push/test') {
+      if (body.member_id !== 'm-privat') return send(422, { error: 'Dieses Club-Konto gehört nicht zu dir. Bitte ein Konto aus der Liste wählen.' });
+      return send(200, { devices: 1, results: [{ device: 'iPhone', ok: true, status: 201, reason: '' }], email: 'privat@example.de' });
+    }
+    if (route === 'POST /api/internal/trial/device') {
+      if (!club.trial) return send(409, { error: 'Es läuft keine Testbestellung.' });
+      club.trial.device_member_id = body.member_id;
+      return send(200, club.trial);
     }
     if (route === 'POST /api/internal/trial/cleanup') {
       const order = club.trial?.order?.real ? { id: club.trial.order.id, name: club.trial.order.name } : null;
@@ -1214,10 +1236,10 @@ test('Club: schlechte Bewertung wird zur Aufgabe mit Push, Probelauf nur für Ad
   let old = await admin.req('GET', '/club/trial');
   assert.equal(old.status, 426);
   assert.match(old.data.error, /Members Club läuft noch auf Version 1\.1\.0/);
-  assert.match(old.data.error, /Club-Paket 1\.3\.0 hochladen/);
+  assert.match(old.data.error, /Club-Paket 1\.3\.2 hochladen/);
   old = await admin.req('POST', '/admin/club/ping');
   assert.equal(old.data.test.ok, false, 'Verbindungstest meldet die alte Version');
-  assert.match(old.data.test.message, /Version 1\.1\.0 · bitte auf 1\.3\.0 aktualisieren/);
+  assert.match(old.data.test.message, /Version 1\.1\.0 · bitte auf 1\.3\.2 aktualisieren/);
   await admin.req('POST', '/admin/club/ping');
   club.old = false;
   assert.equal((await admin.req('POST', '/admin/club/ping')).data.test.ok, true);
@@ -1227,12 +1249,37 @@ test('Club: schlechte Bewertung wird zur Aufgabe mit Push, Probelauf nur für Ad
   assert.equal(r.data.active, false);
   assert.deepEqual(r.data.cancel, { shopify: false, allowed: false });
   assert.equal((await admin.req('POST', '/club/trial/start', { mode: 'real', amount_cents: 50 })).status, 422);
-  r = await admin.req('POST', '/club/trial/start', { mode: 'real', amount_cents: 4000 });
+
+  // Push-Check: Team-App-Seite und Club-Konten; private Adresse eintragen, Testpush dorthin
+  assert.equal((await kim.req('GET', '/club/trial/check')).status, 403);
+  r = await admin.req('GET', '/club/trial/check');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.team.read_orders, false, 'Shopify nicht verbunden');
+  assert.equal(r.data.team.orders_push, true);
+  assert.deepEqual(r.data.club.accounts.map((a) => a.email), ['marius@example.de']);
+  r = await admin.req('POST', '/club/access/emails', { email: 'privat@example.de' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.club.accounts.map((a) => a.email), ['marius@example.de', 'privat@example.de']);
+  assert.equal(clubCalls.at(-2).body.user.email, 'marius@example.de', 'mit der Person aus der Team-App');
+  assert.equal((await admin.req('POST', '/club/access/emails', { email: 'privat@example.de' })).status, 409);
+  r = await admin.req('POST', '/club/trial/test-push', { channel: 'club', member_id: 'm-privat' });
+  assert.equal(r.data.results[0].ok, true);
+  assert.equal((await admin.req('POST', '/club/trial/test-push', { channel: 'club', member_id: 'fremd' })).status, 422);
+  r = await admin.req('POST', '/club/trial/test-push', { channel: 'team' });
+  assert.equal(r.status, 200);
+  assert.equal(typeof r.data.devices, 'number');
+  assert.equal((await kim.req('POST', '/club/trial/test-push', { channel: 'team' })).status, 403);
+
+  r = await admin.req('POST', '/club/trial/start', { mode: 'real', amount_cents: 4000, device_member_id: 'm-privat' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.codes.length, 2);
   const startCall = clubCalls.filter((c) => c.path === '/api/internal/trial/start').at(-1);
   assert.equal(startCall.body.user.email, 'marius@example.de');
   assert.equal(startCall.body.amount_cents, 4000);
+  assert.equal(startCall.body.device_member_id, 'm-privat', 'Pushs an das gewählte Club-Konto');
+  r = await admin.req('POST', '/club/trial/device', { member_id: 'm-privat' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.device_member_id, 'm-privat');
   assert.equal((await admin.req('POST', '/club/trial/start', { mode: 'sim' })).status, 409);
   r = await admin.req('POST', '/club/trial/step', { step: 'shipped' });
   assert.equal(r.status, 409);
@@ -1910,6 +1957,34 @@ test('Shopify: neue Berechtigungen aus der App-Version, die im Shop noch nicht b
   assert.equal(r.data.test.ok, true, JSON.stringify(r.data.test));
   assert.match(r.data.test.message, /alle Berechtigungen da/);
   assert.deepEqual((await admin.req('GET', '/club/trial')).data.cancel, { shopify: true, allowed: true }, 'Testbestellung darf stornieren');
+
+  // „Neue Bestellung“: die Testbestellung kommt auch in der Ruhezeit sofort, eine normale Bestellung wartet
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Berlin' }).formatToParts(new Date()).find((x) => x.type === 'hour').value);
+  helper('setting', 'quiet_hours', JSON.stringify({ start: hour, end: (hour + 2) % 24 }));
+  club.trial = null;
+  assert.equal((await admin.req('POST', '/club/trial/start', { mode: 'real', amount_cents: 4000 })).status, 200);
+  const now = new Date().toISOString();
+  const order = (id, name, codes) => ({
+    id: `gid://shopify/Order/${id}`, name, createdAt: now, updatedAt: now, cancelledAt: null, test: false, discountCodes: codes,
+    displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED', currentTotalPriceSet: { shopMoney: { amount: '0.00', currencyCode: 'EUR' } },
+    lineItems: { nodes: [{ title: 'Sunset Dune', variantTitle: '50 ml', quantity: 1, sku: 'SD50', originalTotalSet: { shopMoney: { amount: '59.00' } }, product: { id: 'gid://shopify/Product/1' } }] },
+  });
+  shopMock.orders = [order(9101, '#9101', ['TEST-AB12C', 'TEST-AB12C-VERSAND']), order(9102, '#9102', [])];
+  helper('setting', 'orders_cursor', String(Date.now() - 60000)); // Abgleich lief schon früher (kein Erstabgleich)
+  const okHits = () => pushHits.length; // alle Geräte mit „Neue Bestellung“
+  const hitsBefore = okHits();
+  r = await admin.req('POST', '/club/trial/sync');
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(await eventually(() => okHits() === hitsBefore + 1), 'genau ein Push: die Testbestellung');
+  r = await admin.req('GET', '/club/trial/check');
+  assert.equal(r.data.team.read_orders, true);
+  assert.equal(r.data.team.quiet_now, true);
+  assert.equal(r.data.team.order_push.name, '#9101');
+  assert.ok(r.data.team.order_push.sent >= 1);
+  await new Promise((res) => setTimeout(res, 300));
+  assert.equal(okHits(), hitsBefore + 1, 'normale Bestellung wartet die Ruhezeit ab');
+  helper('setting', 'quiet_hours', 'null');
+  await admin.req('POST', '/club/trial/cleanup');
 
   r = await admin.req('DELETE', '/admin/shopify');
   assert.equal(r.data.shopify.configured, false);

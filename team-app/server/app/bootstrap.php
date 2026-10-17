@@ -12,7 +12,7 @@ declare(strict_types=1);
  */
 
 define('APP_ROOT', dirname(__DIR__));
-define('APP_VERSION', '1.8.1');
+define('APP_VERSION', '1.8.2');
 
 spl_autoload_register(static function (string $class): void {
     if (strncmp($class, 'PC\\', 3) !== 0) {

@@ -225,7 +225,9 @@ final class Push
                 return true;
             }
         }
-        return self::insert($m['id'], $key, $title, $body, $url ?? self::defaultUrl($key), $dedupe, null, self::notBefore($now));
+        // Testbestellung: sofort, auch in der Ruhezeit – sonst kommt beim Ausprobieren am Abend nichts an
+        $notBefore = (int) ($m['test'] ?? 0) === 1 ? $now : self::notBefore($now);
+        return self::insert($m['id'], $key, $title, $body, $url ?? self::defaultUrl($key), $dedupe, null, $notBefore);
     }
 
     public static function insert(string $memberId, string $kind, string $title, string $body, ?string $url, ?string $dedupe, ?string $broadcastId, int $notBefore): bool

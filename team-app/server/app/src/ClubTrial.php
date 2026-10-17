@@ -23,7 +23,8 @@ final class ClubTrial
         if ($amount < 100 || $amount > 100000) {
             throw new HttpError(422, 'Bitte einen Bestellwert zwischen 1 € und 1.000 € angeben.');
         }
-        $r = Club::request('POST', '/internal/trial/start', ['user' => Club::user($me), 'mode' => $mode, 'amount_cents' => $amount]);
+        $device = is_string($in['device_member_id'] ?? null) && $in['device_member_id'] !== '' ? $in['device_member_id'] : null;
+        $r = Club::request('POST', '/internal/trial/start', ['user' => Club::user($me), 'mode' => $mode, 'amount_cents' => $amount, 'device_member_id' => $device]);
         // Hinweise aus der Testbestellung (z. B. 2 Sterne) gehen nur an die Person, die ihn gestartet hat
         Settings::set('club_trial', ['user_id' => $me['id'], 'started_at' => Util::now()]);
         return self::wrap($r);
@@ -35,9 +36,12 @@ final class ClubTrial
         return self::wrap(Club::request('POST', '/internal/trial/step', ['step' => $step]));
     }
 
-    /** Club gleicht Bestellungen sofort ab (statt auf den Cronjob zu warten) – auch Hinweise holen. */
+    /** Club gleicht Bestellungen sofort ab (statt auf den Cronjob zu warten) – auch Hinweise holen und „Neue Bestellung“ der Team-App. */
     public static function sync(): array
     {
+        if (Shopify::configured() && !Shopify::missing(['read_orders'])) {
+            Jobs::run('testbestellung', ['orders' => true]);
+        }
         $r = Club::request('POST', '/internal/trial/sync', []);
         try {
             Club::pullAlerts();
@@ -45,6 +49,74 @@ final class ClubTrial
             Util::log('Testbestellung: Hinweise nicht abgeholt – ' . $e->getMessage());
         }
         return self::wrap($r);
+    }
+
+    // ---------- Push-Check ----------
+
+    /**
+     * Kommen die Pushs der Testbestellung an? Team-App („Neue Bestellung“): Gerät, Einstellung, Shopify-Recht,
+     * Abgleich, Ruhezeit. Club („Punkte gutgeschrieben“ usw.): an welches Club-Konto der Person sie gehen.
+     */
+    public static function check(array $me): array
+    {
+        $q = Settings::get('quiet_hours');
+        $trial = Settings::get('club_trial');
+        $team = [
+            'devices' => count(Notify::devices($me['id'])),
+            'orders_push' => !empty(Auth::prefs($me)['push']['orders']),
+            'shopify' => Shopify::configured(),
+            'read_orders' => Shopify::configured() && !Shopify::missing(['read_orders']),
+            'last_sync' => (int) Settings::get('orders_last_sync', 0) ?: null,
+            'cron_last_run' => (int) Settings::get('cron_last_run', 0) ?: null,
+            'quiet_now' => Notify::quietHours(),
+            'quiet' => ['start' => is_array($q) && isset($q['start']) ? (int) $q['start'] : 22, 'end' => is_array($q) && isset($q['end']) ? (int) $q['end'] : 7],
+            'order_push' => is_array($trial) && is_array($trial['order_push'] ?? null) ? $trial['order_push'] : null,
+        ];
+        try {
+            $club = Club::request('POST', '/internal/access', ['user' => Club::user($me)]);
+        } catch (HttpError $e) {
+            $club = ['error' => $e->getMessage()];
+        }
+        return ['team' => $team, 'club' => $club];
+    }
+
+    /** Testpush: channel team = Geräte in der Team-App, club = ein eigenes Club-Konto. */
+    public static function testPush(array $me, array $in): array
+    {
+        if (($in['channel'] ?? '') === 'club') {
+            return Club::request('POST', '/internal/push/test', ['user' => Club::user($me), 'member_id' => (string) ($in['member_id'] ?? '')]);
+        }
+        return Notify::test($me);
+    }
+
+    /** Anderes eigenes Club-Konto für die Pushs der laufenden Testbestellung. */
+    public static function device(array $me, array $in): array
+    {
+        return self::wrap(Club::request('POST', '/internal/trial/device', ['user' => Club::user($me), 'member_id' => (string) ($in['member_id'] ?? '')]));
+    }
+
+    /** Weitere eigene Adresse als Admin-E-Mail im Club eintragen (oder entfernen). */
+    public static function email(array $me, array $in, bool $remove = false): array
+    {
+        Club::request('POST', $remove ? '/internal/access/emails/remove' : '/internal/access/emails', ['user' => Club::user($me), 'email' => (string) ($in['email'] ?? '')]);
+        return self::check($me);
+    }
+
+    /** Die Team-App hat „Neue Bestellung“ für die Testbestellung verschickt (OrdersJob). */
+    public static function orderPushed(string $name, int $sent): void
+    {
+        $t = Settings::get('club_trial');
+        if (is_array($t)) {
+            $t['order_push'] = ['name' => $name, 'sent' => $sent, 'at' => Util::now()];
+            Settings::set('club_trial', $t);
+        }
+    }
+
+    /** Läuft eine Testbestellung (in den letzten 3 Tagen gestartet)? */
+    public static function running(): bool
+    {
+        $t = Settings::get('club_trial');
+        return is_array($t) && (int) ($t['started_at'] ?? 0) > Util::now() - 3 * 86400 * 1000;
     }
 
     /** Testdaten im Club löschen; die echte Testbestellung in Shopify stornieren (falls erlaubt). */

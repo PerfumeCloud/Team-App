@@ -80,6 +80,17 @@ Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungsl
 4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort die **Testbestellung**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
 
+## Update 1.3.1 → 1.3.2 (kein Admin-Knopf für Kunden, Grund bei der Admin-Anmeldung, Push bei der Testbestellung)
+
+1. Neue **`perfumecloud-club-upload.zip`** nach `app.perfumecloud.de/httpdocs` hochladen, „Vorhandene Dateien ersetzen“, App einmal öffnen.
+2. Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: „Version 1.3.2“.
+
+**Was sich ändert:**
+- Die Kundenansicht hat **keinen Admin-Knopf** mehr. In den Admin-Bereich geht es über `app.perfumecloud.de/admin` oder in der Team-App über **Members Club → Club-Admin öffnen**.
+- **Admin-Anmeldung mit Grund:** Wer sich unter `/admin` mit dem Kundenkonto anmeldet und nicht erkannt wird, sieht, mit welcher Adresse er angemeldet ist und warum es nicht klappt (z. B. „Diese Adresse gehört zu keinem Team-Konto …“). Ist die Adresse inzwischen eingetragen, reicht **Zum Admin-Bereich**.
+- **Eigene Adressen aus der Team-App eintragen:** Im Push-Check der Testbestellung (Team-App) trägt man weitere eigene Adressen als Admin-E-Mail ein. Sie gehören zur Person, auch wenn Club und Team-App getrennte Datenbanken haben.
+- **Testbestellung:** Die Pushs gehen an das gewählte eigene Club-Konto (ohne Wahl: das erste mit Gerät) und kommen auch in der Ruhezeit sofort.
+
 ## Update 1.3 → 1.3.1 (Admin-E-Mails)
 
 1. Neue **`perfumecloud-club-upload.zip`** nach `app.perfumecloud.de/httpdocs` hochladen, „Vorhandene Dateien ersetzen“, App einmal öffnen.

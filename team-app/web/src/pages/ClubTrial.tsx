@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { dateTime, euro, int } from '../lib/format';
 import { toast } from '../lib/toast';
+import { defaultDevice, PushCheck, type PushCheckData } from './ClubTrialCheck';
 
 type StepKey = 'ordered' | 'pending' | 'shipped' | 'delivered' | 'survey' | 'credited' | 'referral' | 'tier';
 
@@ -29,6 +30,8 @@ interface TrialView {
   order?: { id: string; name: string; real: boolean } | null;
   devices?: number;
   device_member?: boolean;
+  device_member_id?: string | null;
+  device_email?: string | null;
   balance?: number;
   pending?: number;
   survey_link?: string | null;
@@ -69,6 +72,9 @@ export default function ClubTrial() {
   const [mode, setMode] = useState<'sim' | 'real'>('sim');
   const [amount, setAmount] = useState('59');
   const [result, setResult] = useState<CleanupResult['order']>(null);
+  const [check, setCheck] = useState<PushCheckData | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [device, setDevice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -79,9 +85,21 @@ export default function ClubTrial() {
     }
   }, []);
 
+  const loadCheck = useCallback(async () => {
+    setChecking(true);
+    try {
+      setCheck(await api<PushCheckData>('GET', '/club/trial/check'));
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadCheck();
+  }, [load, loadCheck]);
 
   // Während der Testbestellung regelmäßig nachsehen (Push-Status, Abgleich)
   useEffect(() => {
@@ -122,9 +140,16 @@ export default function ClubTrial() {
       </div>
     );
 
+  // Ziel der Club-Pushs: während der Testbestellung das gespeicherte Konto, sonst die Wahl im Push-Check
+  const target = v.active ? (v.device_member_id ?? null) : (device ?? defaultDevice(check));
+  const chooseDevice = (id: string) => {
+    if (v.active) void run('device', () => api<TrialView>('POST', '/club/trial/device', { member_id: id }));
+    else setDevice(id);
+  };
+
   const start = () => {
     const cents = Math.round(Number(amount.replace(',', '.')) * 100);
-    void run('start', () => api<TrialView>('POST', '/club/trial/start', { mode, amount_cents: cents }));
+    void run('start', () => api<TrialView>('POST', '/club/trial/start', { mode, amount_cents: cents, device_member_id: target }));
     setResult(null);
   };
 
@@ -209,8 +234,7 @@ export default function ClubTrial() {
           <p className="flex items-start gap-2 rounded-xl bg-surface-2 p-3 text-[13px] text-ink-2">
             <BellRing className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Push-Nachrichten kommen auf deine Geräte, wenn du mit <b>{me?.email}</b> im Club angemeldet bist und Mitteilungen erlaubt hast. Mails gehen an
-              dieselbe Adresse.
+              Club-Pushs gehen an das im Push-Check gewählte Club-Konto, Mails an <b>{me?.email}</b>.
             </span>
           </p>
           {mode === 'real' && !v.cancel.allowed && (
@@ -245,7 +269,11 @@ export default function ClubTrial() {
               <div>
                 <div className="text-[13px] text-ink-2">Deine Geräte im Club</div>
                 <div className="tnum text-[18px] font-semibold text-ink">{int(v.devices ?? 0)}</div>
-                {!v.device_member && <div className="text-[12px] text-warn">Mit {me?.email} nicht im Club angemeldet – Push nur im Protokoll</div>}
+                {v.device_email ? (
+                  <div className="break-all text-[12px] text-ink-3">Pushs an {v.device_email}</div>
+                ) : (
+                  <div className="text-[12px] text-warn">Kein Club-Konto gewählt – Push nur im Protokoll (siehe Push-Check)</div>
+                )}
               </div>
               {v.order && (
                 <div>
@@ -285,7 +313,7 @@ export default function ClubTrial() {
                 variant="secondary"
                 icon={<RefreshCw className="h-3.5 w-3.5" />}
                 loading={busy === 'sync'}
-                onClick={() => void run('sync', () => api('POST', '/club/trial/sync'))}
+                onClick={() => void run('sync', () => api<TrialView>('POST', '/club/trial/sync')).then(loadCheck)}
               >
                 Jetzt abgleichen
               </Button>
@@ -347,6 +375,8 @@ export default function ClubTrial() {
           </ol>
         </>
       )}
+
+      {check && <PushCheck data={check} onData={setCheck} selected={target} onSelect={chooseDevice} onReload={() => void loadCheck()} reloading={checking} />}
     </div>
   );
 }

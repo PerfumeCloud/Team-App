@@ -299,6 +299,11 @@ export interface Admin {
   manage?: boolean;
 }
 
+/** Anmeldeseite des Admin-Bereichs: Warum wird die Adresse des angemeldeten Mitglieds (nicht) erkannt? */
+export interface AdminWhy {
+  member: { email: string; recognized: boolean; via: string | null; name: string | null; reasons: string[] } | null;
+}
+
 export interface AdminMe {
   admin: Admin;
   own_member_id: string | null;

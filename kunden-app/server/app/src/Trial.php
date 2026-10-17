@@ -80,6 +80,69 @@ final class Trial
         return $s && $memberId === $s['member_id'] && !empty($s['device_member_id']) ? (string) $s['device_member_id'] : $memberId;
     }
 
+    /**
+     * Club-Konten der Person, an die Test-Pushs gehen können: das Konto mit ihrer Team-Adresse und die Konten
+     * der ihr zugeordneten Admin-E-Mails (z. B. die private Adresse, mit der sie im Shop einkauft).
+     * @return list<array{member_id:string, email:string, name:string, devices:int}>
+     */
+    public static function deviceChoices(array $user): array
+    {
+        $out = [];
+        foreach (Admins::addressesOf((string) $user['id'], (string) ($user['email'] ?? '')) as $email) {
+            $m = Db::one('SELECT id, email, first_name, last_name FROM club_members WHERE email = ? AND joined_at IS NOT NULL AND test = 0', [$email]);
+            if ($m) {
+                $out[] = ['member_id' => $m['id'], 'email' => $m['email'], 'name' => trim($m['first_name'] . ' ' . $m['last_name']), 'devices' => Push::devices($m['id'])];
+            }
+        }
+        return $out;
+    }
+
+    /** Gewähltes Konto prüfen; ohne Wahl das erste Konto mit Gerät. */
+    private static function pickDevice(array $user, mixed $wanted): ?string
+    {
+        $choices = self::deviceChoices($user);
+        if (is_string($wanted) && $wanted !== '') {
+            foreach ($choices as $c) {
+                if ($c['member_id'] === $wanted) {
+                    return $c['member_id'];
+                }
+            }
+            throw new HttpError(422, 'Dieses Club-Konto gehört nicht zu dir. Bitte ein Konto aus der Liste wählen.');
+        }
+        foreach ($choices as $c) {
+            if ($c['devices'] > 0) {
+                return $c['member_id'];
+            }
+        }
+        return $choices[0]['member_id'] ?? null;
+    }
+
+    /** Während der Testbestellung ein anderes eigenes Club-Konto für die Pushs wählen. */
+    public static function setDevice(array $user, string $memberId): array
+    {
+        $s = self::state();
+        if (!$s) {
+            throw new HttpError(409, 'Es läuft keine Testbestellung.');
+        }
+        $s['device_member_id'] = self::pickDevice($user, $memberId);
+        self::put($s);
+        // Nachrichten, die mangels Gerät liegen geblieben sind, noch einmal versuchen
+        Db::exec("UPDATE club_push_queue SET status = 'queued', not_before = ? WHERE member_id = ? AND status = 'no_device'", [Util::now(), $s['member_id']]);
+        Push::flush($s['member_id']);
+        return self::view();
+    }
+
+    /** Testpush an ein eigenes Club-Konto (ohne Testbestellung). */
+    public static function testPush(array $user, string $memberId): array
+    {
+        $id = self::pickDevice($user, $memberId);
+        $m = $id !== null ? Db::one('SELECT * FROM club_members WHERE id = ?', [$id]) : null;
+        if (!$m) {
+            throw new HttpError(404, 'Zu deinen Adressen gibt es kein Club-Konto.');
+        }
+        return Push::test($m, 'Testpush vom Club', 'Club-Pushs kommen auf diesem Gerät an.', '/') + ['email' => $m['email']];
+    }
+
     // ---------- Start ----------
 
     public static function start(array $user, array $in): array
@@ -117,7 +180,7 @@ final class Trial
             'tier' => Tiers::KEYS[0],
             'test' => 1,
         ]);
-        $device = Db::value('SELECT id FROM club_members WHERE email = ? AND joined_at IS NOT NULL AND test = 0', [$email]);
+        $device = self::pickDevice($user, $in['device_member_id'] ?? null);
         $state = [
             'id' => Util::uuid(),
             'mode' => $mode,
@@ -508,6 +571,8 @@ final class Trial
             'order' => $s['order_id'] ? ['id' => $s['order_id'], 'name' => $s['order_name'], 'real' => str_starts_with((string) $s['order_id'], 'gid://')] : null,
             'devices' => $s['device_member_id'] ? Push::devices((string) $s['device_member_id']) : 0,
             'device_member' => (bool) $s['device_member_id'],
+            'device_member_id' => $s['device_member_id'] ?: null,
+            'device_email' => $s['device_member_id'] ? Db::value('SELECT email FROM club_members WHERE id = ?', [$s['device_member_id']]) : null,
             'member_url' => Util::baseUrl() . '/admin/mitglieder/' . $s['member_id'],
             'balance' => $m ? Points::balance($m['id']) : 0,
             'pending' => $m ? Points::pending($m['id']) : 0,

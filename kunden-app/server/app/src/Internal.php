@@ -89,6 +89,60 @@ final class Internal
         ];
     }
 
+    // ---------- Club-Konto und Admin-Zugang einer Person aus der Team-App ----------
+
+    /**
+     * Für die Team-App (Testbestellung → Club-Konto): Version, Datenbank und je Adresse der Person, ob es ein
+     * Club-Konto mit Geräten gibt und ob sie damit als Admin erkannt wird.
+     */
+    public static function access(array $user): array
+    {
+        $team = mb_strtolower(trim((string) $user['email']));
+        $accounts = [];
+        foreach (Admins::addressesOf($user['id'], $team) as $email) {
+            $m = Db::one('SELECT id, first_name, last_name, joined_at FROM club_members WHERE email = ? AND test = 0', [$email]);
+            $d = Admins::diagnose($email);
+            $accounts[] = [
+                'email' => $email,
+                'team' => $email === $team,
+                'member' => $m ? ['id' => $m['id'], 'name' => trim($m['first_name'] . ' ' . $m['last_name']), 'joined' => $m['joined_at'] !== null] : null,
+                'devices' => $m ? Push::devices($m['id']) : 0,
+                'admin' => $d['recognized'],
+                'reasons' => $d['reasons'],
+            ];
+        }
+        return [
+            'version' => APP_VERSION,
+            'team_mode' => Db::team(),
+            'team_users' => Admins::teamUsers(),
+            'admin_by_email' => (bool) Settings::get('admin_by_email', true),
+            'accounts' => $accounts,
+        ];
+    }
+
+    /** Weitere Adresse der Person als Admin-E-Mail eintragen (z. B. die private, mit der sie im Shop einkauft). */
+    public static function addEmail(array $user, string $email): array
+    {
+        Admins::addEmail(self::by($user), ['email' => $email, 'admin_id' => Admins::find($user['id']) ? $user['id'] : null, 'owner' => $user['id']]);
+        return self::access($user);
+    }
+
+    public static function removeEmail(array $user, string $email): array
+    {
+        $email = mb_strtolower(trim($email));
+        if (!in_array($email, Admins::addressesOf($user['id'], ''), true)) {
+            throw new HttpError(404, 'Diese Adresse gehört nicht zu dir.');
+        }
+        Admins::removeEmail(self::by($user), $email);
+        return self::access($user);
+    }
+
+    /** Die Team-App ruft das nur für ihre Admins auf; ohne gemeinsame Datenbank kennt der Club die Person nicht. */
+    private static function by(array $user): array
+    {
+        return Admins::find($user['id']) ?? ['id' => $user['id'], 'name' => $user['name'], 'email' => $user['email'], 'password_hash' => '', 'source' => 'team', 'team_role' => 'admin', 'club_access' => true];
+    }
+
     /** Neue Hinweise abholen (z. B. schlechte Bewertung) – die Team-App legt daraus Aufgaben an. */
     public static function claimAlerts(int $max = 20): array
     {

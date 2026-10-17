@@ -3,7 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useSearchPa
 import { BellRing, Eye, LayoutDashboard, LogOut, Megaphone, Settings, SquareArrowOutUpRight, Users } from 'lucide-react';
 import { api, ApiError, fehlertext, vorschauStarten } from '../../lib/api';
 import { useTitel } from '../../lib/hooks';
-import type { AdminMe } from '../../lib/types';
+import type { AdminMe, AdminWhy } from '../../lib/types';
 import { Duenen, Hb, Hinweis, Laden, Seitenkopf, Toaster } from '../../components/ui';
 import { Logo } from '../../components/Shell';
 import Dashboard from './Dashboard';
@@ -140,6 +140,14 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(params.get('fehler'));
+  const [warum, setWarum] = useState<AdminWhy['member']>(null);
+
+  // Mit dem Kundenkonto angemeldet, aber nicht im Admin-Bereich? Dann den Grund zeigen.
+  useEffect(() => {
+    api<AdminWhy>('GET', '/admin/why')
+      .then((r) => setWarum(r.member))
+      .catch(() => setWarum(null));
+  }, []);
 
   async function absenden(e: FormEvent) {
     e.preventDefault();
@@ -166,9 +174,27 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           <Seitenkopf label="Für das Team" titel={<>Club <em>Admin</em></>}>
             <p>Am schnellsten geht es über die Team-App (Club → Admin-Bereich) oder mit deinem Shopify-Kundenkonto in der Club-App, wenn deine E-Mail dort als Admin eingetragen ist.</p>
           </Seitenkopf>
+          {warum && (
+            <div className="karte formular" aria-live="polite">
+              <h2 className="karte-titel">{warum.recognized ? 'Als Admin erkannt' : 'Nicht als Admin erkannt'}</h2>
+              <p>
+                Angemeldet mit dem Kundenkonto <b>{warum.email}</b>.
+              </p>
+              <Hinweis fehler={!warum.recognized}>
+                {warum.reasons.map((r) => (
+                  <p key={r}>{r}</p>
+                ))}
+              </Hinweis>
+              {warum.recognized && (
+                <div>
+                  <Hb dunkel onClick={() => (navigate('/admin', { replace: true }), onLogin())}>Zum Admin-Bereich</Hb>
+                </div>
+              )}
+            </div>
+          )}
           <div className="code-reihe">
             <Hb dunkel live href="/api/auth/shopify/start?next=%2Fadmin">
-              Mit Kundenkonto anmelden
+              {warum ? 'Erneut mit Kundenkonto anmelden' : 'Mit Kundenkonto anmelden'}
             </Hb>
           </div>
           <form className="karte formular" onSubmit={absenden}>

@@ -460,7 +460,7 @@ export const HELP: HelpArticle[] = [
   {
     id: 'club-update',
     category: 'club',
-    title: 'Members Club aktualisieren (auf Version 1.3.1)',
+    title: 'Members Club aktualisieren (auf Version 1.3.2)',
     intro:
       'Meldet die Team-App „Der Members Club läuft noch auf Version …“ oder zeigt die Testbestellung „Nicht gefunden“, ist der Club älter als die Team-App.',
     admin: true,
@@ -470,8 +470,8 @@ export const HELP: HelpArticle[] = [
       'netcup **Plesk** → **Dateien** → Ordner `app.perfumecloud.de/httpdocs` öffnen.',
       '**Hochladen** → ZIP wählen → beim Menü **⋯** **Dateien extrahieren**, „Vorhandene Dateien ersetzen“ anhaken.',
       '`app.perfumecloud.de` einmal öffnen. Der Club ergänzt die Datenbank selbst.',
-      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.3.1“.',
-      'Danach klappen **Testbestellung**, die Fußzeile mit Logo in den Club-Mails und die neue Anmeldeseite der Club-App.',
+      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.3.2“.',
+      'Danach klappen **Testbestellung** mit Push-Check, die Fußzeile mit Logo in den Club-Mails und die Anmeldeseite der Club-App mit Grund, wenn du nicht als Admin erkannt wirst.',
     ],
     problems: [
       {
@@ -490,15 +490,15 @@ export const HELP: HelpArticle[] = [
     admin: true,
     keywords: 'club admin email e-mail erkennt nicht admin knopf fehlt privat icloud freischalten zugänge',
     steps: [
-      'Den Club-Admin öffnen: **Members Club → Club-Admin öffnen** (öffnet einen neuen Tab).',
-      'Dort **Einstellungen → Zugänge** → Abschnitt **Admin-E-Mails** → **E-Mail eintragen**.',
-      'Die Adresse eingeben, mit der du dich in der Club-App anmeldest. Bei **Gehört zu** dich selbst wählen (dann gelten deine Rechte) → **Eintragen**.',
-      'Die Club-App neu laden: oben steht **Admin**. Wer schon angemeldet ist, bekommt den Admin-Bereich beim nächsten Öffnen.',
+      'Am schnellsten: Team-App → **Members Club → Testbestellung** → **Push-Check** → unter **Weitere eigene Adresse** die Adresse eintragen, mit der du dich in der Club-App anmeldest → **Eintragen**. Sie gehört dann zu dir, es gelten deine Rechte.',
+      'Oder im Club-Admin: **Einstellungen → Zugänge** → **Admin-E-Mails** → **E-Mail eintragen**, bei **Gehört zu** dich selbst wählen.',
+      'In den Admin-Bereich geht es über `app.perfumecloud.de/admin` oder **Members Club → Club-Admin öffnen**. In der Kundenansicht gibt es dafür keinen Knopf.',
+      'Wirst du nicht erkannt, zeigt `app.perfumecloud.de/admin` nach der Anmeldung mit dem Kundenkonto den Grund.',
     ],
     problems: [
       {
         q: 'Den Abschnitt „Admin-E-Mails“ gibt es nicht',
-        a: 'Der Club ist älter als 1.3.1: **Members Club aktualisieren**.',
+        a: 'Der Club ist älter als 1.3.2: **Members Club aktualisieren**.',
       },
       {
         q: '„Darf keine Zugänge verwalten“',
@@ -513,17 +513,21 @@ export const HELP: HelpArticle[] = [
     title: 'Testbestellung durchspielen',
     intro: 'Einmal den ganzen Weg einer Bestellung durch den Club: Versand, Zustellung, Bewertung, Punkte, Stufe. Zählt nirgends mit.',
     admin: true,
-    keywords: 'testbestellung probelauf test bestellung club punkte',
+    keywords: 'testbestellung probelauf test bestellung club punkte push check testpush kommt nicht an',
     steps: [
-      'In der Club-App (`app.perfumecloud.de`) mit **derselben E-Mail wie in der Team-App** anmelden und unter **Konto** Mitteilungen erlauben.',
-      'Team-App → **Members Club → Testbestellung**.',
+      'In der Club-App (`app.perfumecloud.de`, auf dem iPhone vom Home-Bildschirm) anmelden und unter **Konto** Mitteilungen erlauben.',
+      'Team-App → **Members Club → Testbestellung** → unten der **Push-Check**: alles grün? Nutzt du in der Club-App eine andere Adresse als in der Team-App, sie unter **Weitere eigene Adresse** eintragen und das Konto auswählen. **Testpush** zeigt sofort, ob es ankommt.',
       '**Simuliert (ohne Shop):** Bestellwert eingeben → **Testbestellung starten** → die Schritte nacheinander **Auslösen**.',
       '**Echt im Shop (0 €):** Die App erzeugt zwei Einmal-Codes (`TEST-…` und `TEST-…-VERSAND`) und einen Link in den Shop. Bestellen, an der Kasse den Versand-Code dazu.',
       '**Aufräumen** löscht die Testdaten und storniert die Shop-Bestellung.',
     ],
     problems: [
       { q: '„Nicht gefunden“ oder „Club läuft noch auf Version …“', a: 'Der Club ist älter als 1.3. Siehe „Members Club aktualisieren“.' },
-      { q: 'Push nur im Protokoll', a: 'In der Club-App mit derselben E-Mail anmelden und Mitteilungen erlauben.' },
+      { q: 'Push nur im Protokoll', a: 'Im Push-Check ein Club-Konto mit Gerät wählen (oder die Adresse eintragen, mit der du in der Club-App angemeldet bist) und dort Mitteilungen erlauben.' },
+      {
+        q: 'Kein Push „Neue Bestellung“ in der Team-App',
+        a: 'Im Push-Check nachsehen: Gerät angemeldet, Push für Bestellungen an, Shopify-Recht `read_orders` da? **Jetzt abgleichen** holt die Bestellung sofort. Die Testbestellung kommt auch in der Ruhezeit.',
+      },
       {
         q: 'Aufräumen storniert nicht',
         a: '`write_orders` fehlt. Bestellung im Shopify-Admin von Hand stornieren, „Artikel wieder auf Lager“ an, „Kunden benachrichtigen“ aus.',

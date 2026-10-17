@@ -1407,6 +1407,70 @@ test('Testbestellung: echt im Shop (0 €) mit Einmal-Codes', async () => {
   assert.equal(sql("SELECT COUNT(*) AS n FROM club_surveys WHERE order_id = 'gid://shopify/Order/6001'")[0].n, 0);
 });
 
+test('Push-Check: private Adresse eintragen, Testpush, Testbestellung auch in der Ruhezeit, Grund auf der Admin-Anmeldung', async () => {
+  // Lea meldet sich in der Team-App mit lea@team.de an, im Shop kauft sie als anna@example.de (Annas Telefon steht für Leas Handy)
+  const user = { id: 'team-lea', name: 'Lea Team', email: 'lea@team.de' };
+  let r = await internalReq('POST', '/access', { user });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.version.length > 0, true);
+  assert.deepEqual(r.data.accounts.map((a) => [a.email, a.team, a.member, a.devices, a.admin]), [['lea@team.de', true, null, 0, false]]);
+  assert.match(r.data.accounts[0].reasons.join(' '), /eigene Datenbank/);
+
+  r = await internalReq('POST', '/access/emails', { user, email: 'Anna@Example.de' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const privat = r.data.accounts.find((a) => a.email === 'anna@example.de');
+  assert.equal(privat.team, false);
+  assert.equal(privat.member.id, annaId);
+  assert.ok(privat.devices >= 1);
+  assert.equal(privat.admin, true, 'mit der eingetragenen Adresse als Admin erkannt');
+  assert.equal((await internalReq('POST', '/access/emails', { user, email: 'anna@example.de' })).status, 409);
+
+  // Testpush an das eigene Club-Konto, nicht an fremde
+  r = await internalReq('POST', '/push/test', { user, member_id: annaId });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(r.data.results.some((x) => x.ok));
+  await waitPush(annaPhone, (x) => x.title === 'Testpush vom Club');
+  const fremd = sql("SELECT id FROM club_members WHERE email <> 'anna@example.de' AND joined_at IS NOT NULL AND test = 0 LIMIT 1")[0].id;
+  assert.equal((await internalReq('POST', '/push/test', { user, member_id: fremd })).status, 422);
+
+  // Ruhezeit jetzt: die Pushs der Testbestellung kommen trotzdem sofort
+  const hour = Number(new Intl.DateTimeFormat('de-DE', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Europe/Berlin' }).format(new Date()));
+  assert.equal((await admin.req('PUT', '/admin/push', { quiet: { start: hour, end: (hour + 2) % 24 } })).status, 200);
+  r = await internalReq('POST', '/trial/start', { user, mode: 'sim', amount_cents: 3000 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.device_member_id, annaId, 'ohne Wahl: das erste eigene Konto mit Gerät');
+  assert.equal(r.data.device_email, 'anna@example.de');
+  for (const step of ['ordered', 'pending', 'shipped']) r = await internalReq('POST', '/trial/step', { step });
+  assert.equal(r.data.steps.find((s) => s.key === 'shipped').push.status, 'sent', JSON.stringify(r.data.steps));
+  await waitPush(annaPhone, (x) => x.title === 'Testbestellung · Dein Paket ist unterwegs');
+  assert.equal((await internalReq('POST', '/trial/device', { user, member_id: fremd })).status, 422);
+  r = await internalReq('POST', '/trial/device', { user, member_id: annaId });
+  assert.equal(r.status, 200);
+  await internalReq('POST', '/trial/cleanup', {});
+  await admin.req('PUT', '/admin/push', { quiet: { start: 21, end: 8 } });
+
+  // Admin-Anmeldung: Grund statt stiller Rückkehr
+  assert.deepEqual((await new Client().req('GET', '/admin/why')).data, { member: null });
+  await setMock({ login: { customer: ANNA, deny: false } });
+  const anna = new Client();
+  assert.equal(await anna.shopifyLogin('/admin'), '/admin', 'mit eingetragener Adresse direkt in den Admin-Bereich');
+  r = await anna.req('GET', '/admin/why');
+  assert.equal(r.data.member.recognized, true);
+  assert.match(r.data.member.reasons[0], /Admin-E-Mails/);
+
+  r = await internalReq('POST', '/access/emails/remove', { user, email: 'anna@example.de' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.accounts.length, 1);
+  assert.equal((await internalReq('POST', '/access/emails/remove', { user, email: 'anna@example.de' })).status, 404, 'gehört nicht (mehr) zu Lea');
+  const wieder = new Client();
+  assert.equal(await wieder.shopifyLogin('/admin'), '/admin/anmelden?pruefen=1', 'nicht erkannt: zur Anmeldung mit Grund');
+  r = await wieder.req('GET', '/admin/why');
+  assert.equal(r.data.member.email, 'anna@example.de');
+  assert.equal(r.data.member.recognized, false);
+  assert.match(r.data.member.reasons.join(' '), /eigene Datenbank/);
+  assert.equal((await wieder.req('GET', '/admin/me')).status, 401);
+});
+
 test('Fußzeile der Team-App (Text + Logo) steht unter den Mails des Clubs', async () => {
   const png = execFileSync('php', ['-r', '$i = imagecreatetruecolor(200, 50); ob_start(); imagepng($i); echo base64_encode(ob_get_clean());']).toString();
   assert.equal((await internalReq('POST', '/signature', { text: 'x', image: 'data:image/png;base64,AAAA' })).status, 422);

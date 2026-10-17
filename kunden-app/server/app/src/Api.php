@@ -89,12 +89,13 @@ final class Api
                 }
                 $m = Club::fromShopify($r['customer']);
                 Auth::start('member', $m['id'], $r['id_token']);
-                // Team-Mitglieder (gleiche E-Mail wie in der Team-App) bekommen den Admin-Bereich dazu. Dorthin geht es
-                // aber nur, wenn sie von dort kamen – von der Startseite aus landen sie wie alle in der Club-App
-                // (mit Vornamen und Beitritt); der Admin-Bereich ist dann oben über „Admin“ erreichbar.
+                // Team-Mitglieder (gleiche E-Mail wie in der Team-App oder eine Admin-E-Mail) bekommen den Admin-Bereich dazu.
+                // Dorthin geht es nur, wenn sie von dort kamen – sonst landen sie wie alle in der Club-App. Wer von der
+                // Admin-Anmeldung kam und nicht erkannt wird, sieht dort den Grund.
                 $next = (string) $r['next'];
-                if (Auth::adminFromMember($m) && str_starts_with($next, '/admin')) {
-                    return self::redirect($next);
+                $admin = Auth::adminFromMember($m);
+                if (str_starts_with($next, '/admin')) {
+                    return self::redirect($admin ? $next : '/admin/anmelden?pruefen=1');
                 }
                 return self::redirect($m['joined_at'] ? $r['next'] : '/willkommen');
             }],
@@ -250,6 +251,18 @@ final class Api
                 }
                 Auth::start('admin', $admin['id']);
                 return self::redirect('/admin');
+            }],
+            // Anmeldeseite des Admin-Bereichs: Warum wird die Adresse des angemeldeten Mitglieds (nicht) erkannt?
+            ['GET', '/admin/why', static function () {
+                $m = Auth::member();
+                if (!$m) {
+                    return ['member' => null];
+                }
+                // Erkannt (z. B. Adresse gerade als Admin-E-Mail eingetragen)? Dann gleich die Admin-Sitzung starten.
+                if (!Auth::preview()) {
+                    Auth::adminFromMember($m);
+                }
+                return ['member' => Admins::diagnose((string) $m['email'])];
             }],
             ['GET', '/admin/me', static function () {
                 $a = Auth::requireAdmin();
@@ -521,6 +534,11 @@ final class Api
                 return Trial::view(['message' => is_string($r['orders'] ?? null) ? 'Abgleich: ' . $r['orders'] : ($r['skipped'] ?? 'Abgleich gelaufen')]);
             }],
             ['POST', '/internal/trial/cleanup', static fn () => Trial::cleanup()],
+            ['POST', '/internal/trial/device', static fn () => Trial::setDevice(self::teamUser(), (string) (Http::body()['member_id'] ?? ''))],
+            ['POST', '/internal/push/test', static fn () => Trial::testPush(self::teamUser(), (string) (Http::body()['member_id'] ?? ''))],
+            ['POST', '/internal/access', static fn () => Internal::access(self::teamUser())],
+            ['POST', '/internal/access/emails', static fn () => Internal::addEmail(self::teamUser(), (string) (Http::body()['email'] ?? ''))],
+            ['POST', '/internal/access/emails/remove', static fn () => Internal::removeEmail(self::teamUser(), (string) (Http::body()['email'] ?? ''))],
             // Fußzeile der Team-Postfächer (Text + Logo) für die Mails des Clubs
             ['POST', '/internal/signature', static fn () => Mailer::saveSignature(Http::body())],
 

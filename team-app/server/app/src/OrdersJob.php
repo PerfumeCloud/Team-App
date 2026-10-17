@@ -17,6 +17,7 @@ query Orders($first: Int!, $after: String, $query: String) {
       updatedAt
       cancelledAt
       test
+      discountCodes
       displayFinancialStatus
       displayFulfillmentStatus
       currentTotalPriceSet { shopMoney { amount currencyCode } }
@@ -104,7 +105,7 @@ GQL;
                     'synced_at' => $now,
                 ]);
                 if (!$exists && !$initial && $created > $now - 3 * 3600 * 1000 && empty($o['cancelledAt'])) {
-                    $newOrders[] = ['name' => $o['name'], 'cents' => self::cents($o['currentTotalPriceSet']['shopMoney']['amount'] ?? '0'), 'items' => $itemCount, 'first' => $items[0]['t'] ?? ''];
+                    $newOrders[] = ['name' => $o['name'], 'cents' => self::cents($o['currentTotalPriceSet']['shopMoney']['amount'] ?? '0'), 'items' => $itemCount, 'first' => $items[0]['t'] ?? '', 'trial' => self::isTrial($o)];
                 }
                 $maxUpdated = max($maxUpdated, $updated);
                 $count++;
@@ -119,6 +120,20 @@ GQL;
         Settings::set('orders_last_sync', $now);
         self::refreshLowStock();
 
+        // Testbestellung: Push sofort, auch in der Ruhezeit – damit das Ausprobieren am Abend klappt
+        foreach ($newOrders as $i => $o) {
+            if ($o['trial']) {
+                $sent = Notify::users(null, 'orders', [
+                    'title' => 'Neue Bestellung ' . $o['name'] . ' (Testbestellung)',
+                    'body' => Util::euro($o['cents']) . ' · ' . $o['items'] . ' Artikel' . ($o['first'] ? ' · ' . $o['first'] : ''),
+                    'url' => '/club/testbestellung',
+                    'tag' => 'order-' . $o['name'],
+                ]);
+                ClubTrial::orderPushed((string) $o['name'], $sent);
+                unset($newOrders[$i]);
+            }
+        }
+        $newOrders = array_values($newOrders);
         if ($newOrders && !Notify::quietHours()) {
             if (count($newOrders) <= 3) {
                 foreach ($newOrders as $o) {
@@ -140,6 +155,17 @@ GQL;
             }
         }
         return "$count Bestellungen aktualisiert" . ($newOrders ? ', ' . count($newOrders) . ' neu' : '');
+    }
+
+    /** Echte Testbestellung aus der Team-App: Einmal-Code TEST-… und eine laufende Testbestellung. */
+    private static function isTrial(array $o): bool
+    {
+        foreach ((array) ($o['discountCodes'] ?? []) as $code) {
+            if (is_string($code) && str_starts_with(strtoupper($code), 'TEST-')) {
+                return ClubTrial::running();
+            }
+        }
+        return false;
     }
 
     public static function refreshLowStock(): void

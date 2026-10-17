@@ -102,14 +102,20 @@ final class Admins
 
     private const MAIL_PREFIX = 'mail-';
 
-    /** @return list<array{email:string, admin_id:?string, by:string, at:int}> */
+    /**
+     * owner: Person aus der Team-App, der die Adresse gehört (für die Test-Pushs) – auch wenn der Club sie ohne
+     * gemeinsame Datenbank nicht kennt und deshalb keine admin_id setzen kann.
+     * @return list<array{email:string, admin_id:?string, owner:?string, by:string, at:int}>
+     */
     public static function extraEmails(): array
     {
         $list = Settings::get('admin_emails', []);
         $out = [];
         foreach (is_array($list) ? $list : [] as $e) {
             if (is_array($e) && is_string($e['email'] ?? null) && $e['email'] !== '') {
-                $out[] = ['email' => mb_strtolower($e['email']), 'admin_id' => is_string($e['admin_id'] ?? null) && $e['admin_id'] !== '' ? $e['admin_id'] : null, 'by' => (string) ($e['by'] ?? ''), 'at' => (int) ($e['at'] ?? 0)];
+                $adminId = is_string($e['admin_id'] ?? null) && $e['admin_id'] !== '' ? $e['admin_id'] : null;
+                $owner = is_string($e['owner'] ?? null) && $e['owner'] !== '' ? $e['owner'] : $adminId;
+                $out[] = ['email' => mb_strtolower($e['email']), 'admin_id' => $adminId, 'owner' => $owner, 'by' => (string) ($e['by'] ?? ''), 'at' => (int) ($e['at'] ?? 0)];
             }
         }
         return $out;
@@ -147,7 +153,63 @@ final class Admins
         return null;
     }
 
-    /** Admin-E-Mail eintragen. $in: email, admin_id (optional: Person, deren Rechte gelten). */
+    /** Adressen, unter denen eine Person aus der Team-App im Club erkannt wird: ihre Team-Adresse und die ihr zugeordneten Admin-E-Mails. @return list<string> */
+    public static function addressesOf(string $userId, string $teamEmail): array
+    {
+        $teamEmail = mb_strtolower(trim($teamEmail));
+        $out = $teamEmail !== '' ? [$teamEmail] : [];
+        foreach (self::extraEmails() as $e) {
+            if ($e['owner'] === $userId && !in_array($e['email'], $out, true)) {
+                $out[] = $e['email'];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Warum wird diese Adresse (nicht) als Admin erkannt? Für die Anmeldeseite des Admin-Bereichs und die Team-App.
+     * @return array{email:string, recognized:bool, via:?string, name:?string, reasons:list<string>}
+     */
+    public static function diagnose(string $email): array
+    {
+        $email = mb_strtolower(trim($email));
+        $auto = (bool) Settings::get('admin_by_email', true);
+        $admin = $email === '' ? null : ($auto ? self::byEmail($email) : self::byExtraEmail($email));
+        $entry = null;
+        foreach (self::extraEmails() as $e) {
+            if ($e['email'] === $email) {
+                $entry = $e;
+                break;
+            }
+        }
+        $out = ['email' => $email, 'recognized' => $admin !== null, 'via' => $admin ? ($entry ? 'list' : $admin['source']) : null, 'name' => $admin['name'] ?? null, 'reasons' => []];
+        if ($admin) {
+            $out['reasons'][] = match (true) {
+                $entry !== null => 'Erkannt über die Admin-E-Mails' . ($entry['admin_id'] !== null ? ' (gehört zu ' . $admin['name'] . ')' : '') . '.',
+                $admin['source'] === 'club' => 'Erkannt über den Club-Zugang von ' . $admin['name'] . '.',
+                default => 'Erkannt über das Team-Konto von ' . $admin['name'] . '.',
+            };
+            return $out;
+        }
+        if ($entry !== null) {
+            $out['reasons'][] = 'Die Adresse steht unter Admin-E-Mails, aber die zugeordnete Person hat keinen Club-Admin-Zugang mehr.';
+        } elseif (!$auto) {
+            $out['reasons'][] = 'Die Erkennung über die Team-App ist in den Club-Einstellungen ausgeschaltet. Es zählen nur die Admin-E-Mails.';
+        }
+        if (!self::teamUsers()) {
+            $out['reasons'][] = 'Der Club nutzt eine eigene Datenbank und kennt die Konten der Team-App nicht. Die Adresse muss unter Admin-E-Mails stehen (eintragen in der Team-App: Members Club → Testbestellung → Push-Check → „Weitere eigene Adresse“).';
+        } elseif ($auto && $entry === null) {
+            $u = Db::one('SELECT role, club_access, deleted FROM users WHERE LOWER(email) = ?', [$email]);
+            $out['reasons'][] = match (true) {
+                $u !== null && (int) $u['deleted'] === 1 => 'Das Team-Konto mit dieser Adresse ist gelöscht.',
+                $u !== null => 'Das Team-Konto mit dieser Adresse hat kein Club-Admin-Recht (Team-App: Team → Person → „Club-Admin“).',
+                default => 'Diese Adresse gehört zu keinem Team-Konto und steht nicht unter Admin-E-Mails. Meldest du dich in der Team-App mit einer anderen Adresse an, trag diese hier als eigene Adresse ein (Team-App: Members Club → Testbestellung → Push-Check → „Weitere eigene Adresse“).',
+            };
+        }
+        return $out;
+    }
+
+    /** Admin-E-Mail eintragen. $in: email, admin_id (optional: Person, deren Rechte gelten), owner (optional: Person aus der Team-App). */
     public static function addEmail(array $by, array $in): array
     {
         self::requireManage($by);
@@ -166,7 +228,8 @@ final class Admins
             throw new HttpError(422, 'Diese Person hat keinen Zugang zum Club-Admin. Bitte zuerst freischalten oder „Keine Person“ wählen.');
         }
         $list = self::extraEmails();
-        $list[] = ['email' => $email, 'admin_id' => $adminId, 'by' => (string) $by['name'], 'at' => Util::now()];
+        $owner = is_string($in['owner'] ?? null) && $in['owner'] !== '' ? mb_substr($in['owner'], 0, 36) : $adminId;
+        $list[] = ['email' => $email, 'admin_id' => $adminId, 'owner' => $owner, 'by' => (string) $by['name'], 'at' => Util::now()];
         Settings::set('admin_emails', $list);
         return self::overview();
     }
