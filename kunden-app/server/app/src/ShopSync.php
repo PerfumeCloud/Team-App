@@ -59,7 +59,8 @@ final class ShopSync
             'expiry_warn' => Points::warnDays($p),
             'waitlist' => (static function (): array {
                 $w = Waitlist::status();
-                return ['full' => $w['full'], 'text' => $w['text']];
+                // limited: Das Theme fragt vor dem Eintragen beim Club nach (App-Proxy), ob noch Platz ist
+                return ['full' => $w['full'], 'text' => $w['text'], 'limited' => $w['max'] > 0];
             })(),
             'redeem_points' => (int) $p['redeem_points'],
             'redeem_cents' => (int) $p['redeem_cents'],
@@ -67,6 +68,8 @@ final class ShopSync
             'welcome_points' => (int) $p['welcome_points'],
             'wait_days' => (int) $p['wait_days'],
             'code_days' => (int) $p['code_days'],
+            // 1.4: Punkte direkt im Warenkorb einlösen (App-Proxy unter /apps/club), gilt so viele Stunden
+            'cart' => ['proxy' => '/apps/club', 'hours' => Points::CART_HOURS],
             'expiry_months' => (int) $p['points_expiry_months'],
             'bonus' => [
                 'birthday' => (int) $p['bonus_birthday'],
@@ -75,6 +78,9 @@ final class ShopSync
                 'referrer' => (int) $p['bonus_referrer'],
                 'referred' => (int) $p['bonus_referred'],
             ],
+            // Bewertungsbonus nur einmal, Empfehlungsbonus nur zeigen, wenn Empfehlungen eingeschaltet sind
+            'review_once' => (bool) $p['review_once'],
+            'referral' => Referrals::enabled(),
             'promos' => $promos,
             'updated' => gmdate('c'),
         ];

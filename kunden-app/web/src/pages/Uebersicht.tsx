@@ -98,7 +98,7 @@ export default function Uebersicht() {
 
       {codes.length > 0 && (
         <section className="raster">
-          <h2 className="karte-titel">{codes.length === 1 ? 'Dein offener Code' : 'Deine offenen Codes'}</h2>
+          <h2 className="karte-titel">{codes.every((c) => c.source === 'cart') ? 'Gerade im Warenkorb' : codes.length === 1 ? 'Dein offener Code' : 'Deine offenen Codes'}</h2>
           <div className="raster raster-2">
             {codes.map((c) => (
               <CodeKarte key={c.id} c={c} />

@@ -199,22 +199,25 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
           {zahl('welcome_points', 'Willkommensbonus (Punkte)')}
         </div>
         <div className="formular-reihe">
-          {zahl('redeem_points', 'Punkte je Prämienstufe')}
+          {zahl('redeem_points', 'Punkte je Schritt im Warenkorb')}
           <Feld titel="… sind so viel wert (€)">
             <input inputMode="decimal" value={geld.redeem} onChange={(e) => setGeld({ ...geld, redeem: e.target.value })} />
           </Feld>
         </div>
         <div className="formular-reihe">
-          <Feld titel="Höchstwert je Code (€)">
+          <Feld titel="Höchstens je Bestellung (€)" hilfe="Im Warenkorb, und nie mehr als der Warenwert">
             <input inputMode="decimal" value={geld.max} onChange={(e) => setGeld({ ...geld, max: e.target.value })} />
           </Feld>
-          {zahl('max_open_codes', 'Offene Codes je Person')}
+          <div />
         </div>
         <div className="formular-reihe">
           {zahl('wait_days', 'Einlösbar nach der Bestellung (Tage)', 'Punkte sind sofort gutgeschrieben, einlösbar nach dieser Rückgabefrist')}
           {zahl('retro_days', 'Bestellungen vor dem Beitritt zählen (Tage)')}
         </div>
-        <Schalter titel="Code nur für das eigene Kundenkonto" text="Empfohlen. Verhindert, dass Codes weitergegeben werden." an={p.bind_customer} onChange={(v) => setProg({ ...p, bind_customer: v })} />
+        <p className="klein leise">
+          Eingelöst wird direkt im Warenkorb des Shops: Die App erstellt einen einmaligen Rabatt nur für das Kundenkonto und setzt ihn sofort ein. Er gilt 24 Stunden; wer nicht bestellt
+          oder „Zurücknehmen“ tippt, bekommt die Punkte zurück.
+        </p>
         <Schalter titel="Mit Versand-Rabatten kombinierbar" an={p.combine_shipping} onChange={(v) => setProg({ ...p, combine_shipping: v })} />
         <Schalter titel="Mit anderen Bestell-Rabatten kombinierbar" an={p.combine_order} onChange={(v) => setProg({ ...p, combine_order: v })} />
         <Schalter titel="Mit Produkt-Rabatten kombinierbar" an={p.combine_product} onChange={(v) => setProg({ ...p, combine_product: v })} />
@@ -223,8 +226,8 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
 
       <Abschnitt
         id="verfall"
-        titel="Verfall von Punkten und Codes"
-        text="Nicht eingelöste Punkte und Codes verfallen automatisch. Mitglieder bekommen vorher je Stufe eine Push-Erinnerung (keine Mail) und sehen den Hinweis in der App. Die Frist steht auch in den Texten der App."
+        titel="Verfall von Punkten"
+        text="Nicht eingelöste Punkte verfallen automatisch. Mitglieder bekommen vorher je Stufe eine Push-Erinnerung (keine Mail) und sehen den Hinweis in der App. Die Frist steht auch in den Texten der App."
         onSave={alles}
       >
         <div className="formular-reihe">
@@ -233,13 +236,9 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
             <input inputMode="numeric" value={warn} onChange={(e) => setWarn(e.target.value)} placeholder="60, 30" />
           </Feld>
         </div>
-        <div className="formular-reihe">
-          {zahl('code_days', 'Ein Code gilt (Tage)')}
-          <div />
-        </div>
         <Schalter
-          titel="Abgelaufene Codes geben die Punkte zurück"
-          text="Aus: Mit dem Code verfallen auch seine Punkte."
+          titel="Ältere Codes aus der App: abgelaufen gibt die Punkte zurück"
+          text="Gilt nur für Codes, die vor 1.4 in der App erstellt wurden. Im Warenkorb eingelöste Punkte kommen immer zurück, wenn nicht bestellt wird."
           an={p.code_expiry_refund}
           onChange={(v) => setProg({ ...p, code_expiry_refund: v })}
         />

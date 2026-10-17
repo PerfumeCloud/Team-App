@@ -1,35 +1,48 @@
 import { useState } from 'react';
-import { ExternalLink, Lock, Undo2 } from 'lucide-react';
+import { ExternalLink, Lock, ShoppingBag, Undo2 } from 'lucide-react';
 import { api, fehlertext } from '../lib/api';
 import { useKunde } from '../lib/kontext';
 import { useLoad, useTitel } from '../lib/hooks';
 import { toast } from '../lib/toast';
 import { datum, euro, punkte, punkteWort, tageBis } from '../lib/format';
+import { warenkorbText } from '../lib/regeln';
 import type { Code, Points, PointsResponse } from '../lib/types';
-import { Dialog, Erfolg, Hb, Hinweis, KopierKnopf, Laden, Seitenkopf } from '../components/ui';
+import { Dialog, Hb, Hinweis, KopierKnopf, Laden, Seitenkopf } from '../components/ui';
 import { codeStatus, FruehereCodes, Verlauf } from '../components/Verlauf';
 import { AktionBanner, PunkteFragen, SoFunktionierts, WertTabelle } from '../components/Club';
 
+/** Offene Einlösung im Warenkorb oder ein älterer Code aus der App (bleibt gültig). */
 export function CodeKarte({ c, onZurueck }: { c: Code; onZurueck?: (c: Code) => void }) {
+  const korb = c.source === 'cart';
   const tage = tageBis(c.expires_at);
   return (
     <div className="karte code-karte">
-      <span className="label">Code über {euro(c.value_cents)}</span>
-      <div className="code">
-        <b>{c.code}</b>
-        <KopierKnopf text={c.code} nurIcon label="Code kopieren" />
-      </div>
+      <span className="label">{korb ? `Im Warenkorb eingelöst: ${euro(c.value_cents)}` : `Code über ${euro(c.value_cents)}`}</span>
+      {!korb && (
+        <div className="code">
+          <b>{c.code}</b>
+          <KopierKnopf text={c.code} nurIcon label="Code kopieren" />
+        </div>
+      )}
       <p className="klein leise">
-        {codeStatus(c)}
-        {tage <= 14 && c.status === 'active' ? ` (noch ${tage} ${tage === 1 ? 'Tag' : 'Tage'})` : ''} · ab {euro(c.min_cents)} Bestellwert · einmal einlösbar
+        {korb ? (
+          <>
+            {punkteWort(c.points)} · {codeStatus(c)}. Bestellst du nicht, sind die Punkte danach wieder da.
+          </>
+        ) : (
+          <>
+            {codeStatus(c)}
+            {tage <= 14 && c.status === 'active' ? ` (noch ${tage} ${tage === 1 ? 'Tag' : 'Tage'})` : ''} · ab {euro(c.min_cents)} Bestellwert · einmal einlösbar
+          </>
+        )}
       </p>
       <div className="code-reihe">
-        <Hb klein dunkel href={c.url} icon={<ExternalLink />}>
-          Im Shop einlösen
+        <Hb klein dunkel href={c.url} icon={korb ? <ShoppingBag /> : <ExternalLink />}>
+          {korb ? 'Zum Warenkorb' : 'Im Shop einlösen'}
         </Hb>
         {onZurueck && (
           <button className="knopf" onClick={() => onZurueck(c)}>
-            <Undo2 /> Zurückgeben
+            <Undo2 /> {korb ? 'Zurücknehmen' : 'Zurückgeben'}
           </button>
         )}
       </div>
@@ -41,43 +54,24 @@ export default function Praemien() {
   useTitel('Prämien');
   const { me, reloadMe } = useKunde();
   const { data, setData, error, reload } = useLoad<PointsResponse>('/points');
-  const [auswahl, setAuswahl] = useState<number | null>(null);
-  const [fragen, setFragen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [neu, setNeu] = useState<Code | null>(null);
   const [zurueck, setZurueck] = useState<Code | null>(null);
 
   if (!data) return error ? <Hinweis fehler>{error}</Hinweis> : <Laden />;
 
   const { points, program: p, history, codes } = data;
   const offen = codes.filter((c) => c.status === 'active' || c.status === 'creating');
+  const imKorb = offen.filter((c) => c.source === 'cart');
+  const alteCodes = offen.filter((c) => c.source !== 'cart');
   const frueher = codes.filter((c) => c.status !== 'active' && c.status !== 'creating');
-  const stufe = points.steps.find((s) => s.steps === auswahl) ?? null;
-  // Alle erreichbaren Stufen und die nächsten zwei als Ansporn – nicht gleich zehn gesperrte Kacheln
-  const sichtbar = [...points.steps.filter((s) => s.affordable), ...points.steps.filter((s) => !s.affordable).slice(0, 2)];
+  const warenkorb = `${me.shop_url.replace(/\/$/, '')}/cart`;
+  const reicht = points.balance >= p.redeem_points;
 
   function aktualisieren(pts: Points, code: Code) {
     setData((d) => (d ? { ...d, points: pts, codes: [code, ...d.codes.filter((c) => c.id !== code.id)] } : d));
     void reload();
     void reloadMe();
-  }
-
-  async function erstellen() {
-    if (!stufe) return;
-    setBusy(true);
-    setFehler(null);
-    try {
-      const r = await api<{ code: Code; points: Points }>('POST', '/codes', { steps: stufe.steps });
-      setFragen(false);
-      setAuswahl(null);
-      aktualisieren(r.points, r.code);
-      setNeu(r.code);
-    } catch (e) {
-      setFehler(fehlertext(e));
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function zurueckgeben() {
@@ -99,19 +93,19 @@ export default function Praemien() {
   return (
     <>
       <Seitenkopf label="Prämien" titel={<>Punkte <em>einlösen</em></>}>
-        <p>Wähle, wie viel Rabatt du möchtest. Du bekommst einen Code für deinen nächsten Einkauf im Shop.</p>
+        <p>Du löst deine Punkte direkt im Warenkorb des Shops ein. Der Rabatt steht sofort drin, ohne Code zum Abtippen.</p>
       </Seitenkopf>
 
       {!p.active && <Hinweis>Das Einlösen ist gerade pausiert. Deine Punkte bleiben natürlich erhalten.</Hinweis>}
       <AktionBanner p={p} />
       {points.expiring && (
         <Hinweis>
-          {punkteWort(points.expiring.points)} ({euro(points.expiring.cents)}) verfallen am {datum(points.expiring.at, true)}. Löse sie vorher ein, dann gehen sie nicht verloren.
+          {punkteWort(points.expiring.points)} ({euro(points.expiring.cents)}) verfallen am {datum(points.expiring.at, true)}. Löse sie vorher im Warenkorb ein, dann gehen sie nicht verloren.
         </Hinweis>
       )}
       {points.balance < 0 && <Hinweis>Nach einer Rückgabe liegt dein Konto bei {punkteWort(points.balance)}. Neue Punkte gleichen das zuerst aus.</Hinweis>}
 
-      <section className="karte">
+      <section className="karte einloesen-karte">
         <div className="karte-kopf">
           <h2>
             {punkte(points.balance)} <em style={{ color: 'var(--em)' }}>{points.balance === 1 ? 'Punkt' : 'Punkte'}</em>
@@ -123,42 +117,56 @@ export default function Praemien() {
             </span>
           )}
         </div>
-        <div className="praemien" role="group" aria-label="Prämie wählen">
-          {sichtbar.map((s) => (
-            <button
-              key={s.steps}
-              type="button"
-              className="praemie"
-              aria-pressed={auswahl === s.steps}
-              disabled={!s.affordable || !p.active}
-              onClick={() => setAuswahl(auswahl === s.steps ? null : s.steps)}
-            >
-              {!s.affordable && <Lock className="schloss" aria-hidden="true" />}
-              <b>
-                {(s.cents / 100).toLocaleString('de-DE')}
-                <em> €</em>
-              </b>
-              <span>{punkteWort(s.points)}</span>
-            </button>
-          ))}
-        </div>
-        {points.to_next > 0 && (
-          <p className="klein leise">
-            Noch {punkteWort(points.to_next)} bis {euro(points.next_cents)}.
-          </p>
-        )}
-        <div>
-          <Hb dunkel disabled={!stufe || me.preview} onClick={() => setFragen(true)}>
-            {stufe ? `Code über ${euro(stufe.cents)} erstellen` : 'Prämie wählen'}
+        <p className="einloesen-wert">
+          {reicht ? (
+            <>
+              Das sind <b>{euro(points.value_cents)}</b> Rabatt{points.value_cents > p.max_cents ? `, je Bestellung bis zu ${euro(p.max_cents)}` : ''}.
+            </>
+          ) : (
+            <>Einlösen kannst du ab {punkteWort(p.redeem_points)}. Noch {punkteWort(Math.max(0, p.redeem_points - points.balance))}.</>
+          )}
+        </p>
+        <ol className="schritte">
+          <li>
+            <b>Im Shop anmelden</b>
+            <p>Mit derselben E-Mail wie hier im Club.</p>
+          </li>
+          <li>
+            <b>Punkte wählen</b>
+            <p>
+              Im Warenkorb in {p.redeem_points}er-Schritten oder alle auf einmal, höchstens {euro(p.max_cents)} und nie mehr als der Warenwert.
+            </p>
+          </li>
+          <li>
+            <b>Einlösen tippen</b>
+            <p>Der Rabatt steht sofort im Warenkorb und an der Kasse.</p>
+          </li>
+        </ol>
+        <div className="code-reihe">
+          <Hb dunkel href={warenkorb} icon={<ShoppingBag />} disabled={!p.active}>
+            Zum Warenkorb
           </Hb>
         </div>
+        <p className="klein leise">{warenkorbText(p)}</p>
       </section>
 
-      {offen.length > 0 && (
+      {imKorb.length > 0 && (
         <section className="raster">
-          <h2 className="karte-titel">Deine offenen Codes</h2>
+          <h2 className="karte-titel">Gerade im Warenkorb</h2>
           <div className="raster raster-2">
-            {offen.map((c) => (
+            {imKorb.map((c) => (
+              <CodeKarte key={c.id} c={c} onZurueck={c.status === 'active' && !me.preview ? setZurueck : undefined} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {alteCodes.length > 0 && (
+        <section className="raster">
+          <h2 className="karte-titel">{alteCodes.length === 1 ? 'Dein offener Code' : 'Deine offenen Codes'}</h2>
+          <p className="klein leise">Früher in der App erstellt. Sie bleiben gültig, bis sie ablaufen.</p>
+          <div className="raster raster-2">
+            {alteCodes.map((c) => (
               <CodeKarte key={c.id} c={c} onZurueck={c.status === 'active' && !me.preview ? setZurueck : undefined} />
             ))}
           </div>
@@ -182,35 +190,9 @@ export default function Praemien() {
 
       <SoFunktionierts p={p} rate={data.tier?.rate} />
 
-      {fragen && stufe && (
-        <Dialog
-          titel={`Code über ${euro(stufe.cents)} erstellen?`}
-          onClose={() => !busy && setFragen(false)}
-          knoepfe={
-            <>
-              <button className="knopf" onClick={() => setFragen(false)} disabled={busy}>
-                Abbrechen
-              </button>
-              <Hb dunkel klein busy={busy} onClick={() => void erstellen()}>
-                Code erstellen
-              </Hb>
-            </>
-          }
-        >
-          <p>Dafür werden {punkteWort(stufe.points)} von deinem Konto abgebucht.</p>
-          <ul className="klein" style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--amber-hell)' }}>
-            <li>gültig {p.code_days} Tage, bis {datum(Date.now() + p.code_days * 86400000, true)}</li>
-            <li>ab einem Bestellwert von {euro(stufe.cents)}</li>
-            <li>einmal einlösbar, nur mit deinem Kundenkonto</li>
-            <li>du kannst ihn zurückgeben, solange er nicht benutzt ist</li>
-          </ul>
-          {fehler && <Hinweis fehler>{fehler}</Hinweis>}
-        </Dialog>
-      )}
-
       {zurueck && (
         <Dialog
-          titel="Code zurückgeben?"
+          titel={zurueck.source === 'cart' ? 'Aus dem Warenkorb zurücknehmen?' : 'Code zurückgeben?'}
           onClose={() => !busy && setZurueck(null)}
           knoepfe={
             <>
@@ -218,31 +200,18 @@ export default function Praemien() {
                 Behalten
               </button>
               <Hb klein dunkel busy={busy} onClick={() => void zurueckgeben()} icon={<Undo2 />}>
-                Zurückgeben
+                {zurueck.source === 'cart' ? 'Zurücknehmen' : 'Zurückgeben'}
               </Hb>
             </>
           }
         >
           <p>
-            Die {punkteWort(zurueck.points)} gehen zurück auf dein Konto. Der Code {zurueck.code} ist danach ungültig.
+            {zurueck.source === 'cart'
+              ? `Die ${punkteWort(zurueck.points)} gehen zurück auf dein Konto. Der Rabatt verschwindet aus dem Warenkorb.`
+              : `Die ${punkteWort(zurueck.points)} gehen zurück auf dein Konto. Der Code ${zurueck.code} ist danach ungültig.`}
           </p>
           {fehler && <Hinweis fehler>{fehler}</Hinweis>}
         </Dialog>
-      )}
-
-      {neu && (
-        <Erfolg name={neu.code} titel={`Dein Code über ${euro(neu.value_cents)} ist bereit`}>
-          <p>Gib ihn an der Kasse ein oder tippe auf „Im Shop einlösen“, dann ist er schon hinterlegt.</p>
-          <div className="code-reihe" style={{ justifyContent: 'center', marginTop: '.4rem' }}>
-            <KopierKnopf text={neu.code} label="Code kopieren" />
-            <Hb dunkel klein href={neu.url} icon={<ExternalLink />}>
-              Im Shop einlösen
-            </Hb>
-          </div>
-          <button className="textlink klein" onClick={() => setNeu(null)} style={{ marginTop: '.4rem' }}>
-            Schließen
-          </button>
-        </Erfolg>
       )}
     </>
   );

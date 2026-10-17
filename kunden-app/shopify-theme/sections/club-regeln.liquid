@@ -1,5 +1,6 @@
 {%- comment -%}
-  So funktioniert der Perfume Cloud Club. Alle Zahlen kommen aus dem Shop-Metafeld club.programm, das die Club-App
+  So funktioniert der Perfume Cloud Club. Ab Club 1.4 gibt es dafür den Abschnitt „Club auf der Startseite“
+  (club-start) mit Metallkarten und eigenem Stand; dieser Abschnitt bleibt für bestehende Seiten erhalten. Alle Zahlen kommen aus dem Shop-Metafeld club.programm, das die Club-App
   nach jeder Änderung im Admin-Bereich neu schreibt: Punkte je Euro, Stufen und Vorteile, Boni, Verfall, Aktionen.
   Im Theme muss deshalb nichts von Hand angepasst werden.
 {%- endcomment -%}
@@ -88,17 +89,17 @@
       <li class="club-schritt">
         <span class="nr" aria-hidden="true">01</span>
         <p class="club-schritt-titel">Punkte sammeln</p>
-        <p>Für jeden Euro Einkaufswert bekommst du {{ grund_text }} {% if grund == 1 %}Punkt{% else %}Punkte{% endif %}{% if prog.tiers_enabled and prog.tiers.size > 1 %}, ab {{ prog.tiers[1].name | escape }} mehr{% endif %}. {% if prog.wait_days > 0 %}Gutgeschrieben {{ prog.wait_days }} Tage nach dem Versand.{% else %}Gutgeschrieben, sobald dein Paket unterwegs ist.{% endif %}</p>
+        <p>Für jeden Euro Einkaufswert bekommst du {{ grund_text }} {% if grund == 1 %}Punkt{% else %}Punkte{% endif %}{% if prog.tiers_enabled and prog.tiers.size > 1 %}, ab {{ prog.tiers[1].name | escape }} mehr{% endif %}. Sie stehen sofort nach der Bestellung im Konto{% if prog.wait_days > 0 %} und sind nach {{ prog.wait_days }} Tagen einlösbar{% endif %}.</p>
       </li>
       <li class="club-schritt">
         <span class="nr" aria-hidden="true">02</span>
-        <p class="club-schritt-titel">Rabatt einlösen</p>
-        <p>{{ prog.redeem_points }} Punkte sind {{ prog.redeem_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Rabatt. Den Code erstellst du in der Club-App{% if prog.code_days > 0 %}, er gilt {{ prog.code_days }} Tage{% endif %}{% if prog.max_cents > 0 %}, bis {{ prog.max_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} je Bestellung{% endif %}.</p>
+        <p class="club-schritt-titel">Im Warenkorb einlösen</p>
+        <p>{{ prog.redeem_points }} Punkte sind {{ prog.redeem_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code{% if prog.max_cents > 0 %}, bis {{ prog.max_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} je Bestellung{% endif %}.</p>
       </li>
       <li class="club-schritt">
         <span class="nr" aria-hidden="true">03</span>
         <p class="club-schritt-titel">Bonus obendrauf</p>
-        <p>{% if prog.welcome_points > 0 %}{{ prog.welcome_points }} Punkte zum Beitritt, dazu {% endif %}Punkte zum Geburtstag, für Bewertungen und wenn du Freunde einlädst.</p>
+        <p>{% if prog.welcome_points > 0 %}{{ prog.welcome_points }} Punkte zum Beitritt, dazu {% endif %}Punkte zum Geburtstag{% if prog.review_once %} und für deine erste Bewertung{% else %} und für Bewertungen{% endif %}{% if prog.referral %}, dazu Punkte, wenn Freunde über deinen Link bestellen{% endif %}.</p>
       </li>
     </ol>
 
@@ -120,7 +121,7 @@
               {%- if t.key == meine -%}<span class="club-marke">Deine Stufe</span>{%- endif -%}
             </div>
             <p class="club-stufe-satz"><b>{{ t_text }}</b> {% if t.rate == 1 %}Punkt{% else %}Punkte{% endif %} je Euro</p>
-            <p class="club-stufe-ab">{% if t.min_cents > 0 %}ab {{ t.min_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Einkauf in {{ prog.tier_months }} Monaten{% else %}für alle Mitglieder{% endif %}</p>
+            <p class="club-stufe-ab">{% if t.min_cents > 0 %}ab {{ t.min_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Einkauf {% if prog.tier_basis == 'lifetime' %}seit dem Beitritt{% else %}in {{ prog.tier_months }} Monaten{% endif %}{% else %}für alle Mitglieder{% endif %}</p>
             {%- if t.benefits.size > 0 -%}
               <ul>{% for b in t.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
             {%- endif -%}
@@ -136,17 +137,16 @@
           {%- if prog.welcome_points > 0 -%}<li><span>Beitritt zum Club</span><b>{{ prog.welcome_points }} Punkte</b></li>{%- endif -%}
           {%- if prog.bonus.birthday > 0 -%}<li><span>Zum Geburtstag</span><b>{{ prog.bonus.birthday }} Punkte</b></li>{%- endif -%}
           {%- if prog.bonus.newsletter > 0 -%}<li><span>Newsletter-Anmeldung</span><b>{{ prog.bonus.newsletter }} Punkte</b></li>{%- endif -%}
-          {%- if prog.bonus.review > 0 -%}<li><span>Bewertung eines Dufts</span><b>{{ prog.bonus.review }} Punkte</b></li>{%- endif -%}
-          {%- if prog.bonus.referrer > 0 -%}<li><span>Freund eingeladen, für dich</span><b>{{ prog.bonus.referrer }} Punkte</b></li>{%- endif -%}
-          {%- if prog.bonus.referred > 0 -%}<li><span>Freund eingeladen, für deinen Freund</span><b>{{ prog.bonus.referred }} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.review > 0 -%}<li><span>{% if prog.review_once %}Deine erste Bewertung{% else %}Bewertung eines Dufts{% endif %}</span><b>{{ prog.bonus.review }} Punkte</b></li>{%- endif -%}
+          {%- if prog.referral and prog.bonus.referrer > 0 -%}<li><span>Freund bestellt über deinen Link, für dich</span><b>{{ prog.bonus.referrer }} Punkte</b></li>{%- endif -%}
+          {%- if prog.referral and prog.bonus.referred > 0 -%}<li><span>Für deinen Freund</span><b>{{ prog.bonus.referred }} Punkte</b></li>{%- endif -%}
         </ul>
       </div>
     {%- endif -%}
 
     <p class="club-klein">
-      Punkte gibt es auf den Warenwert nach Rabatten, ohne Versand.
+      Punkte gibt es auf den Warenwert nach Rabatten, ohne Versand. Bei Storno oder Rückgabe werden sie wieder abgezogen.
       {%- if prog.expiry_months > 0 %} Nicht eingelöste Punkte verfallen {{ prog.expiry_months }} Monate nach der Gutschrift.{% endif -%}
-      {%- if prog.code_days > 0 %} Nicht eingelöste Rabattcodes verfallen nach {{ prog.code_days }} Tagen.{% endif -%}
       {%- if section.settings.bedingungen != blank %} <a href="{{ section.settings.bedingungen }}">Teilnahmebedingungen</a>{% endif -%}
     </p>
 
@@ -170,7 +170,7 @@
   "name": "Club-Regeln",
   "settings": [
     { "type": "inline_richtext", "id": "titel", "label": "Überschrift", "default": "Sammeln, einlösen, <em>aufsteigen</em>" },
-    { "type": "textarea", "id": "text", "label": "Text", "default": "Im Perfume Cloud Club bekommst du für jede Bestellung Punkte und tauschst sie gegen Rabatt." },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Im Perfume Cloud Club bekommst du für jede Bestellung Punkte und löst sie direkt im Warenkorb ein." },
     { "type": "checkbox", "id": "stufen", "label": "Stufen zeigen", "default": true },
     { "type": "checkbox", "id": "boni", "label": "Bonuspunkte zeigen", "default": true },
     { "type": "url", "id": "bedingungen", "label": "Link zu den Teilnahmebedingungen" }

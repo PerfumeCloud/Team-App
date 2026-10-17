@@ -291,8 +291,12 @@ Am einfachsten: Claude Bescheid sagen, dann überträgt Claude die Dateien ins L
 |---|---|
 | `assets/club.css`, `assets/club.js` | Aussehen und Live-Rechnung |
 | `snippets/club-daten.liquid`, `club-kopf.liquid`, `club-punkte.liquid` | Daten, Header-Chip, Punktezeile |
-| `sections/club-warenkorb.liquid` + `templates/cart.json` | Warenkorb-Seite mit Punkten |
-| `sections/club-regeln.liquid` + `templates/page.club.json` | Abschnitt „Club-Regeln“ und Seitenvorlage `club` |
+| `snippets/club-einloesen.liquid` | Ab 1.4: Punkte im Warenkorb einlösen (braucht den App-Proxy aus Teil N) |
+| `snippets/club-karte.liquid`, `club-zahl.liquid`, `club-komma.liquid` | Ab 1.4: Metallkarte der Stufe, Zahlen mit Tausenderpunkt und Komma |
+| `snippets/warteliste-voll.liquid` | Ab 1.4: Hinweis statt Formular, wenn die Warteliste voll ist |
+| `sections/club-warenkorb.liquid` + `templates/cart.json` | Warenkorb-Seite mit Punkten und Einlösen |
+| `sections/club-start.liquid` | Ab 1.4: Club auf der Startseite (Gäste: vier Stufen, Mitglieder: eigene Karte und Stand) |
+| `sections/club-regeln.liquid` + `templates/page.club.json` | Abschnitt „Club-Regeln“ (älter) und Seitenvorlage `club` (nutzt ab 1.4 „Club auf der Startseite“) |
 
 Dann in `sections/kopf.liquid` direkt vor dem Konto-Link eine Zeile einfügen: `{% render 'club-kopf' %}`.
 
@@ -366,6 +370,30 @@ Jedes Mitglied bekommt in der App (Übersicht und **Konto → Freunde einladen**
 **So läuft eine Empfehlung:** Bestellung mit Code → Mitglied bekommt einen Push „Über deinen Link wurde bestellt“ → Punkte sind „unterwegs“ → 14 Tage nach dem Versand gutgeschrieben (wie eigene Bestellungen) → Push „Danke fürs Weitersagen“. Eigene Bestellungen, Bestandskunden (wenn eingestellt), stornierte Bestellungen und Bestellungen unter dem Mindestwert bringen nichts. Wird eine Bestellung nach der Gutschrift storniert, zieht die App die Punkte wieder ab. Unten auf der Seite stehen die letzten Bestellungen über Links mit Grund, falls es keine Punkte gab, und die besten Empfehler.
 
 Die bisherige **Club-Einladung** (Bonus „Freunde einladen“ in den Regeln) bleibt daneben bestehen. Für dieselbe Person gibt es aber nur einmal Punkte.
+
+---
+
+## Teil N – Punkte im Warenkorb einlösen (App-Proxy, ab 1.4)
+
+Ab Version 1.4 lösen Mitglieder ihre Punkte direkt im Warenkorb des Shops ein: Punkte wählen, **Einlösen** tippen, der Rabatt steht sofort in der Summe. Dafür leitet Shopify die Adresse `perfumecloud.de/apps/club/…` an die Club-App weiter und sagt ihr dabei, wer im Shop angemeldet ist (App-Proxy). Eine zweite Anmeldung braucht es nicht.
+
+1. <https://dev.shopify.com> → **Apps** → **Perfume Cloud Club** → **Versionen** → **Version erstellen**.
+2. Bei **Zugriffsbereiche / Scopes** zusätzlich zu den bisherigen `write_app_proxy` anhaken.
+3. Im Abschnitt **App proxy** eintragen:
+   - **Subpath prefix:** `apps`
+   - **Subpath:** `club`
+   - **Proxy URL:** `https://app.perfumecloud.de/api/proxy`
+4. Version **freigeben**. Im Shopify-Admin unter **Apps** das Update der App bestätigen (wegen des neuen Scopes).
+5. Testen: Im Browser `https://www.perfumecloud.de/apps/club/warteliste` öffnen. Richtig ist eine kurze Zeile wie `{"voll":false,"text":null}`. Eine Shopify-Fehlerseite heißt: Proxy noch nicht aktiv (Schritt 4) oder Adresse vertippt.
+6. Mit dem eigenen Kundenkonto im Shop anmelden, etwas in den Warenkorb legen, `/cart` öffnen: Oben in der Summe steht **Club-Punkte einlösen** mit deinem Stand.
+
+**Gut zu wissen:**
+- Die Club-App prüft jede Anfrage mit dem **Client-Secret** aus Teil B (Signatur von Shopify), nimmt nur Anfragen der letzten 5 Minuten und nur aus eurem Shop an. Einlösen geht nur für das angemeldete Kundenkonto.
+- Den Pfad bitte nicht unter **Einstellungen → Apps → Perfume Cloud Club → App-Proxy-URL anpassen** ändern: Das Theme erwartet `/apps/club`.
+- Eingelöste Punkte werden ein einmaliger Rabatt nur für dieses Kundenkonto (`CLUB-PUNKTE-…`, an der Kasse sichtbar), höchstens so viel wie der Warenwert und das Höchstmaß je Bestellung. Er gilt 24 Stunden. Wird nicht bestellt, gehen die Punkte von selbst zurück aufs Konto. Ein neues Einlösen ersetzt das alte.
+- Ältere Codes aus der App (bis 1.3) bleiben gültig, bis sie ablaufen. Neue Codes in der App gibt es nicht mehr.
+- Klappt der Proxy nicht, zeigt der Warenkorb „Einlösen im Warenkorb ist gerade nicht erreichbar. Deine Punkte sind sicher.“ und einen Link zur Club-App. Bestellen geht trotzdem.
+- **Warteliste mit Höchstzahl** (Club-Admin → Warteliste): Das Theme fragt über denselben Proxy vor dem Eintragen, ob noch Platz ist. Ohne Proxy trägt das Formular wie bisher ein, die Liste kann dann knapp über die Höchstzahl wachsen.
 
 ---
 

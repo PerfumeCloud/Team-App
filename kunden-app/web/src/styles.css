@@ -327,6 +327,11 @@ a.karte:hover{transform:translateY(-2px);border-color:rgba(35,33,32,.4);box-shad
 .schritte li::before{content:counter(s,decimal-leading-zero);font-family:"Tenor Sans",sans-serif;font-size:.75rem;letter-spacing:.2em;color:var(--gold)}
 .schritte b{font-weight:400;font-style:italic;font-size:1.2rem;color:var(--titel)}
 .schritte p{font-size:.9375rem;color:var(--amber-hell)}
+/* Prämien: Punkte im Warenkorb einlösen (ab 1.4) */
+.einloesen-karte{display:grid;gap:1.1rem}
+.einloesen-wert{font-size:1.0625rem}
+.einloesen-wert b{font-weight:400;font-style:italic;color:var(--titel)}
+.einloesen-karte .schritte li{padding:1rem 1.1rem}
 
 /* ===== Startseite (abgemeldet) ===== */
 .start{display:grid;gap:clamp(2rem,5vw,3.5rem);align-items:center}

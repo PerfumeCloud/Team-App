@@ -18,6 +18,9 @@ final class Api
                 if ($key === '' || !hash_equals($key, (string) ($_SERVER['HTTP_X_CLUB_KEY'] ?? ''))) {
                     throw new HttpError(403, 'Ungültiger Schlüssel.');
                 }
+            } elseif (str_starts_with($path, '/proxy/')) {
+                // Shop → Club über den Shopify App-Proxy: Signatur statt Sitzung, schreibend nur als JSON
+                Proxy::guard($method);
             } elseif ($method !== 'GET' && $method !== 'HEAD' && ($_SERVER['HTTP_X_PC'] ?? '') !== '1' && !preg_match('#^/abmelden/[0-9a-f]{32}$#', $path)) {
                 // Ausnahme: Abmelden mit einem Klick aus dem Mailprogramm (List-Unsubscribe-Post, RFC 8058) – ändert nur den Widerspruch
                 // Schutz gegen Anfragen von fremden Seiten: Schreibende Anfragen brauchen den eigenen Header
@@ -194,12 +197,10 @@ final class Api
                     'tier' => Tiers::info($m),
                 ];
             }],
+            // 1.4: Kein Code-Umtausch mehr in der App – eingelöst wird im Warenkorb. Offene Codes bleiben gültig.
             ['POST', '/codes', static function () {
-                $m = Auth::requireJoined();
-                Util::limit('redeem:' . $m['id'], 10, 3600, 'Bitte warte ein bisschen, bevor du den nächsten Code erstellst.');
-                $code = Points::redeem($m, (int) (Http::body()['steps'] ?? 0));
-                Http::defer(static fn () => Points::pushMetafields());
-                return ['code' => $code, 'points' => Points::summary($m)];
+                Auth::requireJoined();
+                throw new HttpError(410, 'Punkte löst du jetzt direkt im Warenkorb ein – ohne Code.');
             }],
             ['DELETE', "/codes/$uuid", static function (string $id) {
                 $m = Auth::requireJoined();
@@ -207,6 +208,12 @@ final class Api
                 Http::defer(static fn () => Points::pushMetafields());
                 return ['code' => $code, 'points' => Points::summary($m)];
             }],
+
+            // ----- Shop: Warenkorb und Warteliste (perfumecloud.de/apps/club/* über den Shopify App-Proxy) -----
+            ['GET', '/proxy/punkte', static fn () => Proxy::status((int) (Http::query('cents') ?? 0))],
+            ['POST', '/proxy/einloesen', static fn () => Proxy::redeem(Http::body())],
+            ['POST', '/proxy/zuruecknehmen', static fn () => Proxy::release(Http::body())],
+            ['GET', '/proxy/warteliste', static fn () => Waitlist::check()],
 
             // ----- Push-Mitteilungen -----
             ['GET', '/push/key', static fn () => ['key' => WebPush::keys()['public']]],

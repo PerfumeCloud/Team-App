@@ -1,0 +1,12 @@
+{%- comment -%}
+  Zahl mit Komma und höchstens zwei Stellen, ohne Nullen am Ende: 1.5 → „1,5“, 2.0 → „2“: {% render 'club-komma', x: t.rate %}
+{%- endcomment -%}
+{%- liquid
+  assign x = x | default: 0 | times: 1.0 | round: 2
+  assign ganz = x | floor
+  if ganz == x
+    echo ganz
+  else
+    echo x | append: '' | replace: '.', ','
+  endif
+-%}

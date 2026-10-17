@@ -5,7 +5,7 @@ import { api, fehlertext } from '../lib/api';
 import { useStatus } from '../lib/kontext';
 import { useTitel } from '../lib/hooks';
 import { euro, punkteWort } from '../lib/format';
-import { boni, codeText, einloesenText, sammelText, verfallText, wartenText } from '../lib/regeln';
+import { boni, einloesenText, sammelText, verfallText, warenkorbText, wartenText } from '../lib/regeln';
 import { einladung } from '../lib/einladung';
 import { AktionBanner, BoniListe, StufenListe } from '../components/Club';
 import type { Me, Points, Program } from '../lib/types';
@@ -20,6 +20,7 @@ const STANDARD: Program = {
   redeem_cents: 500,
   max_cents: 5000,
   code_days: 90,
+  cart_hours: 24,
   code_expiry_refund: true,
   wait_days: 14,
   welcome_points: 50,
@@ -169,7 +170,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
               </span>
               <h2 className="karte-titel">Punkte werden Rabatt</h2>
               <p>
-                {punkteWort(program.redeem_points)} sind {euro(program.redeem_cents)} wert. Du löst sie mit einem Tipp als Code für deinen nächsten Einkauf ein.
+                {punkteWort(program.redeem_points)} sind {euro(program.redeem_cents)} wert. Du löst sie mit einem Tipp direkt im Warenkorb ein.
               </p>
             </li>
             <li>
@@ -196,7 +197,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
           )}
 
           <p className="kleingedruckt">
-            {wartenText(program)} {einloesenText(program)} {codeText(program)} {verfall}{' '}
+            {wartenText(program)} {einloesenText(program)} {warenkorbText(program)} {verfall}{' '}
             {status.terms_url && (
               <>
                 Es gelten die{' '}

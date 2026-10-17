@@ -6,7 +6,7 @@ import { useKunde, useStatus } from '../lib/kontext';
 import { useTitel } from '../lib/hooks';
 import { abmelden } from '../lib/konto';
 import { punkteWort } from '../lib/format';
-import { codeText, einloesenText, sammelText, verfallText } from '../lib/regeln';
+import { einloesenText, sammelText, verfallText, warenkorbText } from '../lib/regeln';
 import { einladung, einladungVergessen } from '../lib/einladung';
 import { AktionBanner } from '../components/Club';
 import type { Me } from '../lib/types';
@@ -89,7 +89,7 @@ export default function Willkommen() {
             ) : (
               'Teilnahmebedingungen'
             )}
-            . Punkte werden mit der Bestellung gutgeschrieben{p.wait_days > 0 ? ` und sind ${p.wait_days} Tage danach einlösbar` : ''}; bei Storno oder Rückgabe werden sie wieder abgezogen. {codeText(p)} {verfallText(p)} Austreten kann ich jederzeit.
+            . Punkte werden mit der Bestellung gutgeschrieben{p.wait_days > 0 ? ` und sind ${p.wait_days} Tage danach einlösbar` : ''}; bei Storno oder Rückgabe werden sie wieder abgezogen. {warenkorbText(p)} {verfallText(p)} Austreten kann ich jederzeit.
           </span>
         </label>
         {fehler && <Hinweis fehler>{fehler}</Hinweis>}

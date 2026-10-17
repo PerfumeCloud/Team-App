@@ -31,6 +31,8 @@ export interface Program {
   max_cents: number;
   code_days: number;
   code_expiry_refund: boolean;
+  /** So lange gilt eine Einlösung im Warenkorb (Stunden) */
+  cart_hours?: number;
   wait_days: number;
   welcome_points: number;
   retro_days: number;
@@ -119,6 +121,8 @@ export interface Code {
   expires_at: number;
   used_at: number | null;
   order_name: string | null;
+  /** app = Code aus der App (bis 1.3), cart = im Warenkorb eingelöst */
+  source?: 'app' | 'cart';
   url: string;
 }
 

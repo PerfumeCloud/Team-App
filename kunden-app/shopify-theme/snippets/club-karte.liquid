@@ -1,0 +1,16 @@
+{%- comment -%}
+  Club-Stufe als Metallkarte wie in der Club-App: Bronze, Silber, Gold, Platin (eigene Stufen in Sand).
+  {% render 'club-karte', t: stufe, nr: 2, club: 'Perfume Cloud Club', links: '860 Punkte', rechts: '43 €' %}
+{%- endcomment -%}
+{%- liquid
+  assign metall = 'eigen'
+  case t.key
+    when 'bronze', 'silber', 'gold', 'platin'
+      assign metall = t.key
+  endcase
+-%}
+<div class="club-metall k-{{ metall }}" aria-hidden="true">
+  <div class="oben"><span>{{ club | escape }}</span><span>Stufe {{ nr }}</span></div>
+  <div class="name">{{ t.name | escape }}</div>
+  <div class="unten"><span>{{ links }}</span><span>{{ rechts }}</span></div>
+</div>

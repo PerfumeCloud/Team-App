@@ -238,6 +238,7 @@ final class Points
             'max_cents' => $p['max_cents'],
             'code_days' => $p['code_days'],
             'code_expiry_refund' => $p['code_expiry_refund'],
+            'cart_hours' => self::CART_HOURS,
             'wait_days' => $p['wait_days'],
             'welcome_points' => $p['welcome_points'],
             'retro_days' => $p['retro_days'],
@@ -657,7 +658,8 @@ final class Points
             'waiting' => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_ledger WHERE member_id = ? AND status = 'locked' AND (unlock_rule IS NULL OR unlock_rule <> 'time')", [$member['id']]),
             'pending' => $pending,
             'locked' => self::locked($member['id']),
-            'value_cents' => $affordable * (int) $p['redeem_cents'],
+            // Wert der Punkte (anteilig: 109 Punkte = 5,45 €), sobald sie für das Einlösen im Warenkorb reichen
+            'value_cents' => $balance >= (int) $p['redeem_points'] ? self::worth($balance, $p) : 0,
             // im Minus (nach einer Rückgabe): erst ausgleichen, dann bis zur ersten Prämie
             'to_next' => $affordable >= $maxSteps ? 0 : ($balance < 0 ? (int) $p['redeem_points'] - $balance : (int) $p['redeem_points'] - ($balance % (int) $p['redeem_points'])),
             'next_cents' => min($maxSteps, $affordable + 1) * (int) $p['redeem_cents'],
@@ -814,7 +816,7 @@ final class Points
         return $id;
     }
 
-    // ---------- Einlösen: persönlicher Rabattcode in Shopify ----------
+    // ---------- Einlösen: einmaliger Rabatt im Warenkorb (früher: Code in der App) ----------
 
     public static function codes(string $memberId): array
     {
@@ -835,11 +837,34 @@ final class Points
             'expires_at' => (int) $c['expires_at'],
             'used_at' => $c['used_at'] !== null ? (int) $c['used_at'] : null,
             'order_name' => $c['order_name'],
-            'url' => Shopify::shopUrl() . '/discount/' . rawurlencode($c['code']),
+            'source' => $c['source'] ?? 'app',
+            'url' => Shopify::shopUrl() . '/discount/' . rawurlencode($c['code']) . (($c['source'] ?? 'app') === 'cart' ? '?redirect=/cart' : ''),
         ];
     }
 
-    public static function redeem(array $member, int $steps): array
+    /** So lange gilt eine Einlösung im Warenkorb. Danach (oder mit „Zurücknehmen“) sind die Punkte wieder da. */
+    public const CART_HOURS = 24;
+
+    /** Höchstens so viele Punkte passen in den Warenkorb: Warenwert und max_cents, umgerechnet (100 Punkte = 5 €). */
+    public static function cartCap(int $cartCents, ?array $p = null): int
+    {
+        $p ??= self::program();
+        $cents = min((int) $p['max_cents'], max(0, $cartCents));
+        return intdiv($cents * (int) $p['redeem_points'], max(1, (int) $p['redeem_cents']));
+    }
+
+    /** Aktive Einlösung im Warenkorb (höchstens eine je Person). */
+    public static function cartCode(string $memberId): ?array
+    {
+        return Db::one("SELECT * FROM club_codes WHERE member_id = ? AND source = 'cart' AND status = 'active' ORDER BY created_at DESC", [$memberId]);
+    }
+
+    /**
+     * Punkte direkt im Warenkorb einlösen (über den App-Proxy des Shops): einmaliger Rabatt nur für dieses Kundenkonto,
+     * höchstens der Warenwert und höchstens max_cents. $points in Schritten von redeem_points, mit $all alle Punkte
+     * (anteilig, 340 Punkte = 17 €). Eine frühere Einlösung im Warenkorb wird ersetzt, ihre Punkte kommen ohne Mitteilung zurück.
+     */
+    public static function redeemCart(array $member, int $points, bool $all, int $cartCents): array
     {
         $p = self::program();
         if (!$p['active']) {
@@ -848,24 +873,58 @@ final class Points
         if (!Shopify::configured()) {
             throw new HttpError(503, 'Das Einlösen ist noch nicht eingerichtet.');
         }
-        $maxSteps = max(1, intdiv((int) $p['max_cents'], (int) $p['redeem_cents']));
-        if ($steps < 1 || $steps > $maxSteps) {
-            throw new HttpError(422, 'Bitte wähle eine Prämie aus.');
+        $step = (int) $p['redeem_points'];
+        $open = self::cartCode($member['id']);
+        if ($open) {
+            self::releaseCode($open, false);
         }
-        $points = $steps * (int) $p['redeem_points'];
-        $value = $steps * (int) $p['redeem_cents'];
-        $now = Util::now();
-        $expires = $now + (int) $p['code_days'] * self::DAY_MS;
+        $balance = self::balance($member['id']);
+        $cap = self::cartCap($cartCents, $p);
+        if ($all) {
+            $points = min($balance, $cap);
+        }
+        if ($balance < $step) {
+            throw new HttpError(422, 'Einlösen kannst du ab ' . $step . ' Punkten.');
+        }
+        if ($points < $step || (!$all && $points % $step !== 0)) {
+            throw new HttpError(422, 'Bitte wähle die Punkte in ' . $step . 'er-Schritten.');
+        }
+        if ($points > $cap) {
+            throw new HttpError(422, $cartCents < (int) $p['max_cents']
+                ? 'Höchstens so viel, wie dein Warenkorb wert ist.'
+                : 'Höchstens ' . Util::euro((int) $p['max_cents']) . ' je Bestellung.');
+        }
+        if ($points > $balance) {
+            throw new HttpError(422, 'Dafür reichen deine Punkte noch nicht.');
+        }
+        $value = self::worth($points, $p);
+        return self::issue($member, $points, $value, Util::now() + self::CART_HOURS * 3600 * 1000, 'cart');
+    }
 
+    /** Einlösung im Warenkorb zurücknehmen: Punkte zurück. null = es war nichts eingelöst. */
+    public static function releaseCart(array $member): ?array
+    {
+        $c = self::cartCode($member['id']);
+        if (!$c) {
+            return null;
+        }
+        if (!self::releaseCode($c, true)) {
+            throw new HttpError(409, 'Der Rabatt wurde schon bei einer Bestellung verwendet.');
+        }
+        return self::publicCode(Db::one('SELECT * FROM club_codes WHERE id = ?', [$c['id']]));
+    }
+
+    /** Punkte abbuchen und den Rabattcode in Shopify anlegen. Klappt das nicht, sind die Punkte sofort wieder da. */
+    private static function issue(array $member, int $points, int $value, int $expires, string $source): array
+    {
+        $p = self::program();
+        $now = Util::now();
         // Punkte sofort abbuchen (gesperrt, damit doppeltes Tippen nicht zweimal abbucht) …
         $codeId = Util::uuid();
-        $code = self::newCode();
-        $ledgerId = Db::tx(static function () use ($member, $points, $value, $now, $expires, $codeId, $code, $p): string {
+        $code = self::newCode($source);
+        $note = $source === 'cart' ? 'Im Warenkorb eingelöst: ' . Util::euro($value) : 'Code ' . $code . ' über ' . Util::euro($value);
+        $ledgerId = Db::tx(static function () use ($member, $points, $value, $now, $expires, $codeId, $code, $source, $note): string {
             Db::lockRow('club_members', $member['id']);
-            $open = (int) Db::value("SELECT COUNT(*) FROM club_codes WHERE member_id = ? AND status IN ('active', 'creating')", [$member['id']]);
-            if ($open >= (int) $p['max_open_codes']) {
-                throw new HttpError(409, 'Du hast schon ' . $open . ' offene Codes. Löse erst einen davon ein.');
-            }
             if (self::balance($member['id']) < $points) {
                 throw new HttpError(422, 'Dafür reichen deine Punkte noch nicht.');
             }
@@ -878,30 +937,32 @@ final class Points
                 'value_cents' => $value,
                 'min_cents' => $value,
                 'status' => 'creating',
+                'source' => $source,
                 'created_at' => $now,
                 'expires_at' => $expires,
                 'used_at' => null,
                 'order_name' => null,
                 'updated_at' => $now,
             ]);
-            return self::book($member['id'], 'redeem', -$points, 'Code ' . $code . ' über ' . Util::euro($value), $codeId, null, [], false);
+            return self::book($member['id'], 'redeem', -$points, $note, $codeId, null, [], false);
         });
 
         // … dann den Code in Shopify anlegen. Klappt das nicht, werden die Punkte zurückgebucht.
         try {
-            $discountId = self::createDiscount($member, $code, $value, $now, $expires, $p);
+            $discountId = self::createDiscount($member, $code, $value, $now, $expires, $p, $source === 'cart');
         } catch (\Throwable $e) {
             Util::log('Rabattcode: ' . $e->getMessage());
             Db::exec('DELETE FROM club_ledger WHERE id = ?', [$ledgerId]);
             Db::exec("UPDATE club_codes SET status = 'failed', updated_at = ? WHERE id = ?", [Util::now(), $codeId]);
-            throw new HttpError(502, 'Der Code konnte gerade nicht erstellt werden. Deine Punkte sind unverändert – bitte versuche es gleich noch einmal.');
+            throw new HttpError(502, 'Der Rabatt konnte gerade nicht erstellt werden. Deine Punkte sind unverändert – bitte versuche es gleich noch einmal.');
         }
         Db::exec("UPDATE club_codes SET status = 'active', discount_id = ?, updated_at = ? WHERE id = ?", [$discountId, Util::now(), $codeId]);
-        Events::booked($member['id'], 'redeem', -$points, 'Code ' . $code . ' über ' . Util::euro($value));
+        Events::booked($member['id'], 'redeem', -$points, $note);
         return self::publicCode(Db::one('SELECT * FROM club_codes WHERE id = ?', [$codeId]));
     }
 
-    private static function newCode(): string
+    /** PC-ABCD-EFGH (früher in der App) bzw. CLUB-PUNKTE-ABC234 (im Warenkorb, so steht es auch an der Kasse). */
+    private static function newCode(string $source = 'app'): string
     {
         $chars = self::CODE_CHARS;
         do {
@@ -909,22 +970,23 @@ final class Points
             for ($i = 0; $i < 8; $i++) {
                 $s .= $chars[random_int(0, strlen($chars) - 1)];
             }
-            $code = 'PC-' . substr($s, 0, 4) . '-' . substr($s, 4);
+            $code = $source === 'cart' ? 'CLUB-PUNKTE-' . substr($s, 0, 6) : 'PC-' . substr($s, 0, 4) . '-' . substr($s, 4);
         } while (Db::value('SELECT 1 FROM club_codes WHERE code = ?', [$code]));
         return $code;
     }
 
-    private static function createDiscount(array $member, string $code, int $value, int $now, int $expires, array $p): string
+    private static function createDiscount(array $member, string $code, int $value, int $now, int $expires, array $p, bool $cart = false): string
     {
         $who = trim(($member['first_name'] ?? '') . ' ' . mb_substr((string) ($member['last_name'] ?? ''), 0, 1));
         $input = [
-            'title' => 'Club-Prämie ' . Util::euro($value) . ' · ' . ($who !== '' ? $who . ($member['last_name'] ? '.' : '') : $member['email']) . ' · ' . $code,
+            'title' => ($cart ? 'Club-Punkte ' : 'Club-Prämie ') . Util::euro($value) . ' · ' . ($who !== '' ? $who . ($member['last_name'] ? '.' : '') : $member['email']) . ' · ' . $code,
             'code' => $code,
             'startsAt' => Util::iso($now - 60000),
             'endsAt' => Util::iso($expires),
             'usageLimit' => 1,
             'appliesOncePerCustomer' => true,
-            'context' => $p['bind_customer'] ? ['customers' => ['add' => [$member['shopify_id']]]] : ['all' => 'ALL'],
+            // Im Warenkorb immer nur für das eigene Kundenkonto
+            'context' => $cart || $p['bind_customer'] ? ['customers' => ['add' => [$member['shopify_id']]]] : ['all' => 'ALL'],
             'customerGets' => [
                 'value' => ['discountAmount' => ['amount' => Util::decimal($value), 'appliesOnEachItem' => false]],
                 'items' => ['all' => true],
@@ -977,24 +1039,34 @@ final class Points
         }
     }
 
-    /** Unbenutzten Code zurückgeben → Punkte zurück. */
+    /** Unbenutzten Code zurückgeben → Punkte zurück (offene Codes aus der App und Einlösungen im Warenkorb). */
     public static function cancelCode(array $member, string $codeId): array
     {
         $c = Db::one('SELECT * FROM club_codes WHERE id = ? AND member_id = ?', [$codeId, $member['id']]);
         if (!$c || $c['status'] !== 'active') {
             throw new HttpError(404, 'Diesen Code gibt es nicht mehr.');
         }
-        if ((self::usage($c['discount_id']) ?? 0) > 0) {
-            Db::exec("UPDATE club_codes SET status = 'used', used_at = ?, updated_at = ? WHERE id = ?", [Util::now(), Util::now(), $c['id']]);
+        if (!self::releaseCode($c, true)) {
             throw new HttpError(409, 'Der Code wurde bereits bei einer Bestellung verwendet.');
         }
+        return self::publicCode(Db::one('SELECT * FROM club_codes WHERE id = ?', [$c['id']]));
+    }
+
+    /** Code in Shopify löschen und die Punkte zurückbuchen. false = wurde schon bei einer Bestellung verwendet. */
+    private static function releaseCode(array $c, bool $notify): bool
+    {
+        if ((self::usage($c['discount_id']) ?? 0) > 0) {
+            Db::exec("UPDATE club_codes SET status = 'used', used_at = ?, updated_at = ? WHERE id = ?", [Util::now(), Util::now(), $c['id']]);
+            return false;
+        }
         self::deleteDiscount($c['discount_id']);
-        Db::tx(static function () use ($c): void {
+        Db::tx(static function () use ($c, $notify): void {
             if (Db::exec("UPDATE club_codes SET status = 'cancelled', updated_at = ? WHERE id = ? AND status = 'active'", [Util::now(), $c['id']]) === 1) {
-                self::book($c['member_id'], 'refund', (int) $c['points'], 'Code ' . $c['code'] . ' zurückgegeben', $c['id']);
+                $note = ($c['source'] ?? 'app') === 'cart' ? 'Aus dem Warenkorb zurückgenommen' : 'Code ' . $c['code'] . ' zurückgegeben';
+                self::book($c['member_id'], 'refund', (int) $c['points'], $note, $c['id'], null, [], $notify);
             }
         });
-        return self::publicCode(Db::one('SELECT * FROM club_codes WHERE id = ?', [$c['id']]));
+        return true;
     }
 
     /**
@@ -1004,20 +1076,23 @@ final class Points
     public static function checkCodes(): string
     {
         $now = Util::now();
-        $refund = (bool) self::program()['code_expiry_refund'];
+        $refundSetting = (bool) self::program()['code_expiry_refund'];
         $expired = 0;
         foreach (Db::all("SELECT * FROM club_codes WHERE status = 'active' AND expires_at <= ? LIMIT 50", [$now]) as $c) {
+            // Im Warenkorb nicht bestellt: Punkte immer zurück
+            $cart = ($c['source'] ?? 'app') === 'cart';
+            $refund = $cart || $refundSetting;
             $used = self::usage($c['discount_id']);
             if ($used !== null && $used > 0) {
                 Db::exec("UPDATE club_codes SET status = 'used', used_at = COALESCE(used_at, ?), updated_at = ? WHERE id = ?", [$now, $now, $c['id']]);
                 continue;
             }
             self::deleteDiscount($c['discount_id']);
-            Db::tx(static function () use ($c, $now, $refund, &$expired): void {
+            Db::tx(static function () use ($c, $now, $refund, $cart, &$expired): void {
                 $status = $refund ? 'expired' : 'lapsed';
                 if (Db::exec("UPDATE club_codes SET status = ?, updated_at = ? WHERE id = ? AND status = 'active'", [$status, $now, $c['id']]) === 1) {
                     if ($refund) {
-                        self::book($c['member_id'], 'refund', (int) $c['points'], 'Code ' . $c['code'] . ' ist abgelaufen – Punkte zurück', $c['id']);
+                        self::book($c['member_id'], 'refund', (int) $c['points'], $cart ? 'Im Warenkorb eingelöst, aber nicht bestellt – Punkte zurück' : 'Code ' . $c['code'] . ' ist abgelaufen – Punkte zurück', $c['id']);
                     } else {
                         Push::queue($c['member_id'], 'code_lapsed', ['code' => $c['code'], 'euro' => Util::euro((int) $c['value_cents'])], 'lapsed:' . $c['id']);
                     }
@@ -1039,7 +1114,7 @@ final class Points
     {
         $now = Util::now();
         $n = 0;
-        foreach (Db::all("SELECT * FROM club_codes WHERE status = 'active' AND expires_at > ? AND expires_at <= ?", [$now, $now + 7 * self::DAY_MS]) as $c) {
+        foreach (Db::all("SELECT * FROM club_codes WHERE status = 'active' AND source <> 'cart' AND expires_at > ? AND expires_at <= ?", [$now, $now + 7 * self::DAY_MS]) as $c) {
             $n += Push::queue($c['member_id'], 'code_expiring', [
                 'code' => $c['code'],
                 'euro' => Util::euro((int) $c['value_cents']),
@@ -1072,8 +1147,10 @@ final class Points
                     'wert_cents' => self::worth($balance),
                     'gesperrt' => $held['points'],
                     'gesamt' => $balance + $held['points'],
-                    'nutzbar_ab' => $first ? date('Y-m-d', intdiv($first['at'], 1000)) : null,
+                    // Wartet die Bestellung noch auf die Zahlung, steht noch kein Datum fest
+                    'nutzbar_ab' => $first && !$first['payment'] ? date('Y-m-d', intdiv($first['at'], 1000)) : null,
                     'nutzbar_ab_punkte' => $first ? $first['points'] : 0,
+                    'nutzbar_zahlung' => $first ? $first['payment'] : false,
                     'stufe' => $tier ? $tier['key'] : Tiers::of($m)['key'],
                     'stufe_name' => $tier ? $tier['name'] : Tiers::of($m)['name'],
                     'umsatz_cents' => (int) $m['tier_spend_cents'],

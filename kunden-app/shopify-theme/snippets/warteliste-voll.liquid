@@ -1,0 +1,9 @@
+{%- comment -%}
+  Warteliste mit Höchstzahl (ab Club 1.4): Die Club-App zählt die Einträge und schreibt ins Shop-Metafeld club.programm,
+  ob die Liste voll ist. Dann steht hier statt des Formulars der Text aus dem Admin-Bereich der Club-App.
+  {% render 'warteliste-voll', text: shop.metafields.club.programm.value.waitlist.text %}
+{%- endcomment -%}
+<div class="warte-voll{% if klasse %} {{ klasse }}{% endif %}" role="status">
+  <p class="form-titel">Warteliste</p>
+  <p>{{ text | default: 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!' | escape }}</p>
+</div>

@@ -1,4 +1,4 @@
-/* Perfume Cloud Club im Shop: Punkteanzeige, Punktestand im Kopf, Warenkorb und Club-Regeln.
+/* Perfume Cloud Club im Shop: Punkteanzeige, Punktestand im Kopf, Warenkorb mit Einlösen, Club auf der Startseite.
    Nur Farben aus der Theme-Palette (Elfenbein, Holz, Amber), feste 1px-Linien statt Schatten für scharfe Kanten. */
 
 /* ===== Zeile „Mit dieser Bestellung sammelst du 59 Punkte“ ===== */
@@ -7,7 +7,7 @@
 .club-punkte-zeichen{width:1.25rem;height:1.25rem;flex:none;margin-top:.15rem;fill:var(--wood,#80562F)}
 .club-punkte-text{display:grid;gap:.15rem;min-width:0}
 .club-punkte-text p{margin:0;line-height:1.4}
-.club-punkte-text b{font-weight:700;white-space:nowrap}
+.club-punkte-text b{font-weight:400;white-space:nowrap}
 .club-punkte-unter{font-size:.875rem;color:rgba(35,33,32,.72)}
 .club-punkte-unter a{color:var(--wood,#80562F);text-decoration:underline}
 .club-punkte-aktion{display:inline-block;padding:.05rem .45rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.75rem;letter-spacing:.06em;vertical-align:.08em}
@@ -59,15 +59,16 @@
 .club-kopfzeile h2{font-size:clamp(2.5rem,1.5rem + 3.6vw,4.4rem);line-height:1}
 .club-kopfzeile p{font-size:1.1875rem}
 .club-aktion-band{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.8rem 1.1rem;border-radius:1rem;border:1px solid var(--wood,#80562F);background:rgba(128,86,47,.08)}
-.club-aktion-band b{font-weight:700}
+.club-aktion-band b{font-weight:400;font-style:italic}
 .club-schritte{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
 @media (min-width:760px){.club-schritte{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .club-schritt{display:grid;align-content:start;gap:.5rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:1px solid rgba(35,33,32,.22);background:rgba(255,255,255,.35)}
-.club-schritt .nr{font-family:"Tenor Sans",sans-serif;font-size:.8125rem;letter-spacing:.16em;color:var(--wood,#80562F)}
+.club-schritt .nr{font-family:"Tenor Sans",sans-serif;font-size:.8125rem;letter-spacing:.2em;color:var(--wood,#80562F)}
 .club-schritt-titel{margin:0;font-style:italic;font-size:clamp(1.25rem,1rem + .6vw,1.5rem);line-height:1.2}
 .club-schritt p{margin:0}
 .club-stufen{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
-@media (min-width:760px){.club-stufen{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:760px){.club-stufen{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1100px){.club-stufen{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .club-stufe{display:grid;align-content:start;gap:.7rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:1px solid rgba(35,33,32,.22);background:var(--styx,#F4EFE6)}
 .club-stufe.ist-meine{border-color:var(--wood,#80562F);box-shadow:inset 0 0 0 1px var(--wood,#80562F)}
 .club-stufe-kopf{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
@@ -78,7 +79,7 @@
 .club-stufe ul{margin:0;padding:0;list-style:none;display:grid;gap:.4rem;border-top:1px solid rgba(35,33,32,.18);padding-top:.8rem}
 .club-stufe li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
 .club-stufe li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
-.club-marke{display:inline-block;padding:.1rem .55rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase}
+.club-marke{display:inline-block;padding:.1rem .55rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase}
 .club-boni{display:grid;gap:.8rem}
 .club-boni h3{font-size:1.5rem}
 .club-boni ul{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:1px solid rgba(35,33,32,.22)}
@@ -88,3 +89,127 @@
 .club-klein{margin:0;font-size:.875rem;color:rgba(35,33,32,.72);max-width:52rem}
 .club-aktion-knopf{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.4rem}
 .club-aktion-knopf .leise{color:rgba(35,33,32,.72)}
+
+/* ===== 1.4: Club auf der Startseite. Stufen als Metallkarten wie in der Club-App ===== */
+:root{
+  --t-bronze:linear-gradient(135deg,#5E3218 0%,#9C5A2F 34%,#D69B68 50%,#A3633A 66%,#5A2F16 100%);
+  --t-silber:linear-gradient(135deg,#737A84 0%,#BEC4CB 34%,#F3F5F7 50%,#AEB4BC 66%,#6A717A 100%);
+  --t-gold:linear-gradient(135deg,#7E5F26 0%,#C29B52 34%,#F0DCA4 50%,#B8914A 66%,#76571F 100%);
+  --t-platin:linear-gradient(135deg,#121316 0%,#26282D 42%,#3B3E44 52%,#1E2024 64%,#0E0F11 100%);
+  --t-platin-schrift:linear-gradient(180deg,#F4F3F1 0%,#C9CACD 55%,#9C9EA3 100%);
+  --t-eigen:linear-gradient(135deg,#B9A890 0%,#DDD3C5 50%,#B5A389 100%);
+}
+.club-start{position:relative;padding:clamp(4.5rem,9vw,8.5rem) var(--rand,1.25rem)}
+.club-start-innen{max-width:76rem;margin:0 auto;display:grid;gap:clamp(1.8rem,3.5vw,2.8rem)}
+.club-start b{font-weight:400}
+
+/* Metallkarte im Seitenverhältnis einer Bankkarte */
+.club-metall{position:relative;isolation:isolate;aspect-ratio:1.586;width:100%;max-width:22rem;border-radius:1rem;padding:1rem 1.1rem;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
+  background:var(--t-eigen);color:var(--titel,#232120);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 .7rem 1.6rem -1rem rgba(20,14,8,.6);transition:transform .5s var(--weich,ease)}
+.club-metall::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.26) 45%,transparent 58%);mix-blend-mode:soft-light;pointer-events:none}
+.club-metall .oben{display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase}
+.club-metall .name{font-family:"Tenor Sans",sans-serif;font-size:1.6rem;letter-spacing:.24em;text-transform:uppercase;line-height:1}
+.club-metall .unten{display:flex;justify-content:space-between;align-items:flex-end;gap:.8rem;font-size:.875rem;font-variant-numeric:tabular-nums}
+.k-bronze{background:var(--t-bronze);color:#FFF4E8}
+.k-silber{background:var(--t-silber);color:#1E2227}
+.k-gold{background:var(--t-gold);color:#2A1E08}
+.k-platin{background:var(--t-platin);color:#E7E6E3}
+.k-eigen{background:var(--t-eigen)}
+.club-metall.k-bronze{text-shadow:0 1px 1px rgba(60,28,10,.45)}
+.club-metall.k-platin{box-shadow:inset 0 0 0 1px rgba(231,230,227,.22),0 .8rem 1.8rem -1rem rgba(0,0,0,.75)}
+.club-metall.k-platin .name{background:var(--t-platin-schrift);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none}
+.club-metall.k-platin::before{content:"";position:absolute;inset:6px;border-radius:.65rem;border:1px solid rgba(231,230,227,.16);pointer-events:none}
+@media (prefers-reduced-transparency:reduce),(forced-colors:active){.club-metall::after{display:none}}
+
+/* Gäste: die vier Stufen. Auf dem Handy nebeneinander zum Wischen */
+.club-metalle{list-style:none;margin:0;padding:0;display:grid;gap:1.2rem}
+.club-metall-eintrag{display:grid;gap:1rem;align-content:start}
+.club-metall-text{display:grid;gap:.35rem}
+.club-metall-text p{margin:0}
+.club-metall-text b{font-style:italic;color:var(--titel,#232120)}
+.club-metall-ab{font-size:.875rem;color:rgba(35,33,32,.72)}
+.club-metall-text ul,.club-vorteile ul{margin:.35rem 0 0;padding:.75rem 0 0;list-style:none;display:grid;gap:.4rem;border-top:1px solid rgba(35,33,32,.18)}
+.club-metall-text li,.club-vorteile li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
+.club-metall-text li::before,.club-vorteile li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
+@media (hover:hover){.club-metall-eintrag:hover .club-metall{transform:translateY(-4px)}}
+@media (max-width:759px){
+  .club-metalle{grid-auto-flow:column;grid-auto-columns:min(78vw,19rem);overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:none;
+    margin-inline:calc(-1 * var(--rand,1.25rem));padding:.4rem var(--rand,1.25rem) 1rem;scroll-padding-inline:var(--rand,1.25rem)}
+  .club-metalle::-webkit-scrollbar{display:none}
+  .club-metall-eintrag{scroll-snap-align:start}
+}
+@media (min-width:760px){.club-metalle{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1100px){.club-metalle{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* Mitglieder: eigene Karte, Stand, gesperrte Punkte, Weg zur nächsten Stufe */
+.club-mein{display:grid;gap:clamp(1.4rem,3vw,2.6rem);align-items:center}
+@media (min-width:760px){.club-mein{grid-template-columns:minmax(0,22rem) minmax(0,1fr)}}
+.club-mein-text{display:grid;gap:1rem;justify-items:start}
+.club-mein-text>p{margin:0;max-width:34rem}
+.club-mein-text b{font-style:italic;color:var(--titel,#232120)}
+.club-stand{display:flex;align-items:baseline;gap:.55rem}
+.club-stand b{font-style:normal;font-size:clamp(3.2rem,2.2rem + 4vw,4.8rem);line-height:.9;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.club-stand span{font-size:1.25rem;font-style:italic}
+.club-gesperrt{display:flex;gap:.6rem;align-items:flex-start;padding:.75rem 1rem;border-radius:1rem;border:1px solid rgba(128,86,47,.35);background:rgba(128,86,47,.07);font-size:.9375rem;line-height:1.45}
+.club-gesperrt svg{width:1.05rem;height:1.05rem;flex:none;margin-top:.15rem;fill:none;stroke:var(--wood,#80562F);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.club-weg{display:grid;gap:.55rem;width:100%;max-width:30rem}
+.club-weg p{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.9375rem}
+.club-weg .leise{color:rgba(35,33,32,.66);font-variant-numeric:tabular-nums}
+.club-balken{display:block;height:.5rem;border-radius:999px;background:rgba(35,33,32,.1);box-shadow:inset 0 0 0 1px rgba(35,33,32,.06);overflow:hidden}
+.club-balken i{display:block;height:100%;width:var(--anteil,0%);min-width:.5rem;border-radius:inherit;animation:club-fuellen 1.4s var(--weich,ease) .2s both}
+@keyframes club-fuellen{from{width:0}}
+@media (prefers-reduced-motion:reduce){.club-balken i{animation:none}.club-metall{transition:none}}
+.club-weg-ende{font-style:italic}
+.club-vorteile{display:grid;gap:.2rem;width:100%;max-width:30rem}
+.club-textlink{color:var(--titel,#232120);text-decoration:underline;text-decoration-color:rgba(35,33,32,.35);text-underline-offset:.22em}
+.club-textlink:hover{text-decoration-color:var(--titel,#232120)}
+
+/* Rechenbeispiel */
+.club-beispiel{display:grid;gap:.8rem;max-width:44rem;width:100%}
+.club-tabelle{width:100%;border-collapse:collapse;font-size:.9375rem;font-variant-numeric:tabular-nums}
+.club-tabelle th,.club-tabelle td{padding:.65rem .5rem;border-bottom:1px solid rgba(35,33,32,.18);text-align:left;font-weight:400}
+.club-tabelle thead th{font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(46,42,39,.66)}
+.club-tabelle tbody th{font-style:italic}
+.club-tabelle .zahl{text-align:right;white-space:nowrap}
+.club-tabelle tbody tr:last-child>*{border-bottom:0}
+.club-tabelle tr.aktuell>*{background:rgba(255,255,255,.7)}
+.club-tabelle tr.aktuell>:first-child{border-radius:.7rem 0 0 .7rem;box-shadow:inset 2px 0 0 var(--wood,#80562F)}
+.club-tabelle tr.aktuell>:last-child{border-radius:0 .7rem .7rem 0}
+.club-tabelle .club-marke{margin-left:.35rem;vertical-align:.1em;font-style:normal}
+@media (max-width:380px){.club-tabelle{font-size:.875rem}.club-tabelle th,.club-tabelle td{padding:.55rem .3rem}}
+
+/* ===== 1.4: Punkte im Warenkorb einlösen ===== */
+.club-einloesen{display:grid;gap:.75rem;padding:1rem;border-radius:1.1rem;border:1px solid rgba(128,86,47,.35);background:rgba(255,255,255,.5)}
+.club-einloesen[hidden]{display:none}
+.club-einloesen[aria-busy] button{opacity:.55;cursor:progress}
+.club-einloesen-kopf{display:flex;justify-content:space-between;align-items:baseline;gap:.8rem;flex-wrap:wrap}
+.club-einloesen-stand{margin:0;font-size:.9375rem;font-variant-numeric:tabular-nums;color:var(--titel,#232120)}
+.club-einloesen-wahl{display:grid;gap:.7rem}
+.club-einloesen-wahl[hidden],.club-einloesen-aktiv[hidden],.club-einloesen-gesperrt[hidden],.club-einloesen-meldung[hidden]{display:none}
+.club-stepper{display:grid;grid-template-columns:2.75rem minmax(0,1fr) 2.75rem;align-items:center;gap:.4rem;border:1px solid rgba(35,33,32,.35);border-radius:999px;background:var(--styx,#F4EFE6);padding:.2rem}
+.club-stepper button{width:2.75rem;height:2.75rem;border:0;border-radius:999px;background:transparent;font:inherit;font-size:1.25rem;color:var(--titel,#232120);cursor:pointer;touch-action:manipulation}
+.club-stepper button:hover:not(:disabled){background:rgba(35,33,32,.08)}
+.club-stepper button:disabled{opacity:.3;cursor:default}
+.club-stepper p{margin:0;text-align:center;font-size:.9375rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.club-stepper output{font-size:1.125rem;color:var(--titel,#232120)}
+.club-stepper b{font-weight:400;font-style:italic;color:var(--titel,#232120)}
+.club-einloesen-knoepfe{display:flex;gap:.5rem;flex-wrap:wrap}
+.club-knopf{flex:1 1 auto;min-height:2.75rem;padding:0 1.1rem;border-radius:999px;border:1px solid rgba(35,33,32,.45);background:transparent;font:inherit;font-size:.9375rem;color:var(--titel,#232120);cursor:pointer;white-space:nowrap;touch-action:manipulation}
+.club-knopf[hidden]{display:none}
+.club-knopf:hover{background:rgba(35,33,32,.06)}
+.club-knopf-voll{background:var(--titel,#232120);border-color:var(--titel,#232120);color:var(--styx,#F4EFE6)}
+.club-knopf-voll:hover{background:#000}
+.club-einloesen-aktiv{display:grid;gap:.35rem}
+.club-einloesen-aktiv>p:first-child{display:flex;justify-content:space-between;gap:1rem;margin:0}
+.club-einloesen-aktiv b{font-weight:400;font-style:italic;color:var(--wood,#80562F)}
+.club-einloesen-aktiv.passt-nicht .club-einloesen-klein{color:#8A3B1E}
+.club-einloesen-klein{margin:0;font-size:.8125rem;line-height:1.45;color:rgba(35,33,32,.72)}
+.club-einloesen-links{display:flex;gap:1.2rem;margin:.1rem 0 0}
+.club-einloesen .club-textlink{padding:0;border:0;background:none;font:inherit;font-size:.875rem;cursor:pointer}
+.club-einloesen-gesperrt{list-style:none;margin:0;padding:.6rem 0 0;border-top:1px solid rgba(35,33,32,.14);display:flex;flex-wrap:wrap;gap:.35rem .5rem;font-size:.8125rem;color:rgba(35,33,32,.72)}
+.club-einloesen-gesperrt li:not(.club-label){padding:.1rem .55rem;border-radius:999px;border:1px solid rgba(35,33,32,.2);font-variant-numeric:tabular-nums}
+.club-einloesen-gesperrt .club-label{flex-basis:100%;font-size:.6875rem}
+.club-einloesen-meldung{margin:0;font-size:.875rem;line-height:1.45}
+.club-einloesen-meldung.ist-fehler{color:#8A3B1E}
+.club-einloesen-gast{margin:0;font-size:.9375rem}
+.warenkorb-rabatt.ist-club{font-style:italic}

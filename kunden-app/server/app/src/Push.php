@@ -27,7 +27,7 @@ final class Push
         'points_credited' => ['label' => 'Punkte gutgeschrieben', 'cat' => 'points', 'title' => '+{punkte} Punkte', 'body' => '{grund}. Dein Kontostand: {kontostand} Punkte.'],
         'points_deducted' => ['label' => 'Punkte abgezogen', 'cat' => 'points', 'title' => '−{punkte} Punkte', 'body' => '{grund}. Dein Kontostand: {kontostand} Punkte.'],
         'points_redeemed' => ['label' => 'Punkte eingelöst', 'cat' => 'points', 'title' => '−{punkte} Punkte eingelöst', 'body' => '{grund}. Dein Kontostand: {kontostand} Punkte.'],
-        'reward_ready' => ['label' => 'Prämie einlösbar', 'cat' => 'points', 'title' => 'Deine Prämie wartet', 'body' => 'Du hast {euro} Rabatt bereit. Löse ihn mit einem Tipp als Code ein.'],
+        'reward_ready' => ['label' => 'Prämie einlösbar', 'cat' => 'points', 'title' => 'Deine Prämie wartet', 'body' => 'Du hast {euro} Rabatt bereit. Löse ihn im Warenkorb mit einem Tipp ein.'],
         'points_expiring' => ['label' => 'Punkte verfallen bald (60 und 30 Tage vorher)', 'cat' => 'points', 'title' => '{punkte} Punkte verfallen am {datum}', 'body' => 'Das sind {euro}. Löse sie vorher im Warenkorb ein, dann gehen sie nicht verloren.'],
         'code_expiring' => ['label' => 'Code läuft bald ab', 'cat' => 'points', 'title' => 'Dein Code läuft bald ab', 'body' => '{code} über {euro} gilt noch bis {datum}.'],
         'code_lapsed' => ['label' => 'Code abgelaufen', 'cat' => 'points', 'title' => 'Dein Code ist abgelaufen', 'body' => '{code} über {euro} ist nicht mehr gültig.'],

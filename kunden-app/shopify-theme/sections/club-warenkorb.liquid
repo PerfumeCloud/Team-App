@@ -1,5 +1,5 @@
 {%- comment -%}
-  Warenkorb mit Club-Punkten („Mit dieser Bestellung sammelst du 59 Punkte“).
+  Warenkorb mit Club-Punkten: einlösen direkt in der Summe (ab Club 1.4) und „Mit dieser Bestellung sammelst du 59 Punkte“.
   Mengen ändern geht ohne Neuladen (club.js lädt den Abschnitt neu), ohne JavaScript über normale Links.
 {%- endcomment -%}
 <section class="seite warenkorb" aria-labelledby="seite-titel" data-warenkorb="{{ section.id }}">
@@ -42,8 +42,18 @@
 
         <div class="rand glas warenkorb-summe">
           <div class="warenkorb-summe-innen">
+            {% render 'club-einloesen' %}
             {%- for d in cart.cart_level_discount_applications -%}
-              <p class="warenkorb-rabatt"><span>{{ d.title }}</span><span>−{{ d.total_allocated_amount | money }}</span></p>
+              {%- liquid
+                assign d_titel = d.title
+                assign d_club = false
+                assign d_gross = d.title | upcase
+                if d_gross contains 'CLUB-PUNKTE-'
+                  assign d_titel = 'Club-Punkte'
+                  assign d_club = true
+                endif
+              -%}
+              <p class="warenkorb-rabatt{% if d_club %} ist-club{% endif %}"><span>{{ d_titel }}</span><span>−{{ d.total_allocated_amount | money }}</span></p>
             {%- endfor -%}
             <p class="warenkorb-betrag"><span>Zwischensumme</span><b>{{ cart.total_price | money }}</b></p>
             <p class="warenkorb-hinweis">{{ section.settings.hinweis }}</p>
@@ -61,7 +71,7 @@
   "name": "Warenkorb mit Punkten",
   "settings": [
     { "type": "text", "id": "leer", "label": "Text bei leerem Warenkorb", "default": "Dein Warenkorb ist noch leer." },
-    { "type": "text", "id": "hinweis", "label": "Hinweis unter der Summe", "default": "Inkl. MwSt., zzgl. Versand. Club-Codes löst du an der Kasse ein." }
+    { "type": "text", "id": "hinweis", "label": "Hinweis unter der Summe", "default": "Inkl. MwSt., zzgl. Versand." }
   ]
 }
 {% endschema %}

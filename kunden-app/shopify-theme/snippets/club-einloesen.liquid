@@ -1,0 +1,59 @@
+{%- comment -%}
+  Club-Punkte direkt im Warenkorb einlösen (ab Club 1.4), ohne Code abzutippen.
+  club.js fragt über den App-Proxy (/apps/club) den Stand ab, löst ein und setzt den Rabatt in den Warenkorb.
+  Ohne JavaScript oder ohne Verbindung zum Club bleibt der Stand aus dem Kunden-Metafeld stehen.
+  Im Warenkorb:  {% render 'club-einloesen' %}
+{%- endcomment -%}
+{%- liquid
+  assign prog = shop.metafields.club.programm.value
+  assign mitglied = false
+  if customer and customer.tags contains 'club'
+    assign mitglied = true
+  endif
+  assign app = prog.app_url | default: 'https://app.perfumecloud.de'
+-%}
+{%- if prog != blank and prog.cart -%}
+  {%- if mitglied -%}
+    {%- liquid
+      assign status = customer.metafields.club.status.value
+      assign punkte = status.punkte | default: customer.metafields.club.punkte.value | default: 0
+      assign schritt_pf = prog.redeem_points | default: 100 | times: 1.0
+      assign wert = punkte | times: prog.redeem_cents | divided_by: schritt_pf | floor
+      if status.wert_cents != nil
+        assign wert = status.wert_cents
+      endif
+    -%}
+    <div class="club-einloesen" data-club-einloesen data-proxy="{{ prog.cart.proxy | default: '/apps/club' }}" data-cents="{{ cart.items_subtotal_price }}" data-app="{{ app }}">
+      <div class="club-einloesen-kopf">
+        <p class="club-label">Club-Punkte einlösen</p>
+        <p class="club-einloesen-stand" data-club-e-stand>{% render 'club-zahl', n: punkte %} {% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}{% if wert > 0 %} · {{ wert | money_without_trailing_zeros }}{% endif %}</p>
+      </div>
+
+      <div class="club-einloesen-wahl" data-club-e-wahl hidden>
+        <div class="club-stepper">
+          <button type="button" data-club-e-schritt="-1" aria-label="Weniger Punkte">−</button>
+          <p aria-live="polite"><output data-club-e-punkte>0</output> Punkte = <b data-club-e-wert>0 €</b></p>
+          <button type="button" data-club-e-schritt="1" aria-label="Mehr Punkte">+</button>
+        </div>
+        <div class="club-einloesen-knoepfe">
+          <button type="button" class="club-knopf" data-club-e-alle hidden></button>
+          <button type="button" class="club-knopf club-knopf-voll" data-club-e-los>Einlösen</button>
+        </div>
+      </div>
+
+      <div class="club-einloesen-aktiv" data-club-e-aktiv hidden>
+        <p><span>Eingelöst: <b data-club-e-aktiv-punkte></b></span><b data-club-e-aktiv-wert></b></p>
+        <p class="club-einloesen-klein" data-club-e-aktiv-bis></p>
+        <p class="club-einloesen-links"><button type="button" class="club-textlink" data-club-e-zurueck>Zurücknehmen</button><button type="button" class="club-textlink" data-club-e-aendern>Andere Menge</button></p>
+      </div>
+
+      <ul class="club-einloesen-gesperrt" data-club-e-gesperrt hidden></ul>
+      <p class="club-einloesen-meldung" data-club-e-meldung role="status" aria-live="polite" hidden></p>
+    </div>
+  {%- elsif customer == nil -%}
+    {%- capture ziel -%}{{ routes.cart_url }}{%- endcapture -%}
+    <p class="club-einloesen-gast">
+      Club-Mitglied? <a class="club-textlink" href="{{ routes.account_login_url }}?return_url={{ ziel | url_encode }}&amp;return_to={{ ziel | url_encode }}">Anmelden und Punkte einlösen</a>
+    </p>
+  {%- endif -%}
+{%- endif -%}

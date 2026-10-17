@@ -302,7 +302,7 @@ export function PunkteKarte({ points, program, children, marke }: { points: Poin
         <p className="wert">
           {points.value_cents > 0 ? (
             <>
-              Das sind <strong>{euro(points.value_cents)}</strong> Rabatt für deinen nächsten Einkauf.
+              Das sind <strong>{euro(points.value_cents)}</strong> Rabatt, einzulösen im Warenkorb.
             </>
           ) : (
             <>
@@ -316,7 +316,7 @@ export function PunkteKarte({ points, program, children, marke }: { points: Poin
           <i style={vars({ '--w': `${breite}%` })} />
         </div>
         <p className="klein">
-          {maxErreicht ? `Du kannst den höchsten Code über ${euro(program.max_cents)} einlösen.` : `Noch ${punkteWort(points.to_next)} bis ${euro(points.next_cents)} Rabatt`}
+          {maxErreicht ? `Du kannst bis zu ${euro(program.max_cents)} je Bestellung im Warenkorb einlösen.` : `Noch ${punkteWort(points.to_next)} bis ${euro(points.next_cents)} Rabatt`}
         </p>
       </div>
       {(points.held > 0 || points.waiting > 0 || points.expiring || points.balance < 0) && (

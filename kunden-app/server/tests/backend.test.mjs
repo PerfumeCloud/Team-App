@@ -4,7 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
-import { createECDH, randomBytes, hkdfSync, createDecipheriv, createPublicKey, verify as verifySig } from 'node:crypto';
+import { createECDH, randomBytes, hkdfSync, createDecipheriv, createPublicKey, verify as verifySig, createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -145,6 +145,22 @@ async function waitMail(pred, timeout = 4000) {
   }
 }
 const daily = () => sql("DELETE FROM club_settings WHERE k = 'daily_last'");
+
+// ----- Shop → Club über den Shopify App-Proxy (perfumecloud.de/apps/club/* → /api/proxy/*), signiert wie bei Shopify -----
+const PROXY_SECRET = 'admin-secret';
+async function proxy(method, path, { customer = '', body, query = {}, secret = PROXY_SECRET, ts = Math.floor(Date.now() / 1000), type = 'application/json', shopDomain = 'ks8yin-mg.myshopify.com', sign = true } = {}) {
+  const params = { ...query, shop: shopDomain, logged_in_customer_id: customer, path_prefix: '/apps/club', timestamp: String(ts) };
+  const pairs = Object.entries(params).map(([k, v]) => `${k}=${v}`).sort();
+  const signature = createHmac('sha256', secret).update(pairs.join('')).digest('hex');
+  const qs = new URLSearchParams(sign ? { ...params, signature } : params).toString();
+  const res = await fetch(`${app}/api/proxy${path}?${qs}`, {
+    method,
+    headers: body !== undefined ? { 'Content-Type': type } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return { status: res.status, data: await res.json().catch(() => null) };
+}
+const ANNA_NR = '1';
 const setting = (k) => JSON.parse(sql('SELECT v FROM club_settings WHERE k = ?', [k])[0]?.v ?? 'null');
 
 // ----- Web Push wie im Browser: Schlüssel erzeugen, Nachricht entschlüsseln (RFC 8291), VAPID prüfen (RFC 8292) -----
@@ -327,6 +343,7 @@ test('Anmeldung mit dem Shopify-Kundenkonto und Beitritt', async () => {
   assert.equal(status.punkte, 109);
   assert.equal(status.gesperrt, 114);
   assert.equal(status.nutzbar_ab_punkte, 89);
+  assert.equal(status.nutzbar_zahlung, false);
   assert.match(status.nutzbar_ab, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(status.stufe, 'bronze');
   assert.equal(status.naechste_stufe, 'Silber');
@@ -359,48 +376,118 @@ test('Bestellungen mit Status, Sendungsverfolgung und Punkten', async () => {
   assert.equal(byName['#1001'].total_cents, 6480);
 });
 
-let codeId, code;
+let cartCode;
 
-test('Punkte einlösen: persönlicher Rabattcode in Shopify', async () => {
-  let r = await anna.req('POST', '/codes', { steps: 2 });
-  assert.equal(r.status, 422, '200 Punkte reichen nicht');
-  r = await anna.req('POST', '/codes', { steps: 1 });
+test('Shop-Verbindung (App-Proxy): Signatur, Alter, Shop und JSON werden geprüft', async () => {
+  assert.equal((await proxy('GET', '/punkte', { customer: ANNA_NR, sign: false })).status, 401);
+  assert.equal((await proxy('GET', '/punkte', { customer: ANNA_NR, secret: 'falsch' })).status, 401);
+  assert.equal((await proxy('GET', '/punkte', { customer: ANNA_NR, ts: Math.floor(Date.now() / 1000) - 600 })).status, 401, 'zu alt');
+  assert.equal((await proxy('GET', '/punkte', { customer: ANNA_NR, shopDomain: 'fremd.myshopify.com' })).status, 401);
+  // Ein Formular einer fremden Seite (ohne JSON) kann nichts einlösen
+  assert.equal((await proxy('POST', '/einloesen', { customer: ANNA_NR, body: { alle: true, cents: 8900 }, type: 'application/x-www-form-urlencoded' })).status, 415);
+  // Mehrfache Parameter verbindet Shopify mit Komma – die Signatur muss trotzdem passen
+  const params = { extra: ['1', '2'], shop: 'ks8yin-mg.myshopify.com', logged_in_customer_id: ANNA_NR, path_prefix: '/apps/club', timestamp: String(Math.floor(Date.now() / 1000)) };
+  const sig = createHmac('sha256', PROXY_SECRET).update(Object.entries(params).map(([k, v]) => `${k}=${[].concat(v).join(',')}`).sort().join('')).digest('hex');
+  const res = await fetch(`${app}/api/proxy/punkte?extra=1&extra=2&shop=${params.shop}&logged_in_customer_id=1&path_prefix=%2Fapps%2Fclub&timestamp=${params.timestamp}&signature=${sig}`);
+  assert.equal(res.status, 200);
+
+  let r = await proxy('GET', '/punkte');
+  assert.equal(r.data.zustand, 'gast');
+  r = await proxy('GET', '/punkte', { customer: '2' });
+  assert.equal(r.data.zustand, 'kein_mitglied', 'Ben hat ein Kundenkonto, ist aber nicht im Club');
+  assert.equal((await proxy('POST', '/einloesen', { customer: '2', body: { alle: true, cents: 8900 } })).status, 409);
+  assert.equal((await proxy('POST', '/einloesen', { body: { alle: true, cents: 8900 } })).status, 401);
+});
+
+test('Punkte im Warenkorb einlösen: einmaliger Rabatt nur für das eigene Kundenkonto', async () => {
+  // Der Code-Umtausch in der App ist weg
+  assert.equal((await anna.req('POST', '/codes', { steps: 1 })).status, 410);
+
+  let r = await proxy('GET', '/punkte', { customer: ANNA_NR, query: { cents: '8900' } });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  ({ id: codeId, code } = r.data.code);
-  assert.match(code, /^PC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
-  assert.equal(r.data.code.value_cents, 500);
-  assert.equal(r.data.code.url, `https://www.perfumecloud.de/discount/${code}`);
-  assert.equal(r.data.points.balance, 9);
+  assert.equal(r.data.zustand, 'mitglied');
+  assert.equal(r.data.punkte, 109);
+  assert.equal(r.data.wert_cents, 545, '109 Punkte = 5,45 €');
+  assert.equal(r.data.schritt_punkte, 100);
+  assert.equal(r.data.max_punkte, 109);
+  assert.equal(r.data.gesperrt, 114);
+  assert.equal(r.data.freigaben[0].punkte, 89);
+  assert.match(r.data.freigaben[0].ab, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(r.data.freigaben[1].zahlung, true);
+  assert.equal(r.data.einloesung, null);
+  assert.equal(r.data.stunden, 24);
 
-  const m = await getMock();
-  const d = Object.values(m.discounts).find((x) => x.code === code);
-  assert.ok(d, 'Rabattcode in Shopify angelegt');
+  const redeem = (body) => proxy('POST', '/einloesen', { customer: ANNA_NR, body });
+  assert.equal((await redeem({ punkte: 200, cents: 8900 })).status, 422, '200 Punkte reichen nicht');
+  assert.equal((await redeem({ punkte: 150, cents: 8900 })).status, 422, 'nur 100er-Schritte');
+  r = await redeem({ punkte: 100, cents: 300 });
+  assert.equal(r.status, 422);
+  assert.match(r.data.error, /Warenkorb/);
+
+  // „Alle“: 109 Punkte = 5,45 €
+  r = await redeem({ alle: true, cents: 8900 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.code, /^CLUB-PUNKTE-[A-HJ-NP-Z2-9]{6}$/);
+  assert.equal(r.data.punkte, 0);
+  assert.deepEqual({ ...r.data.einloesung, bis: 0 }, { code: r.data.code, punkte: 109, wert_cents: 545, bis: 0 });
+  assert.ok(Math.abs(r.data.einloesung.bis - (Date.now() + DAY)) < 120000, 'gilt 24 Stunden');
+  assert.equal(r.data.max_punkte, 109, 'die aktive Einlösung zählt zum Spielraum');
+  const first = r.data.code;
+  let m = await getMock();
+  let d = Object.values(m.discounts).find((x) => x.code === first);
+  assert.ok(d, 'Rabatt in Shopify angelegt');
   assert.deepEqual(d.input.context, { customers: { add: [ANNA] } });
-  assert.equal(d.input.customerGets.value.discountAmount.amount, '5.00');
-  assert.equal(d.input.minimumRequirement.subtotal.greaterThanOrEqualToSubtotal, '5.00');
+  assert.equal(d.input.customerGets.value.discountAmount.amount, '5.45');
+  assert.equal(d.input.minimumRequirement.subtotal.greaterThanOrEqualToSubtotal, '5.45');
   assert.equal(d.input.usageLimit, 1);
-  assert.deepEqual(d.input.combinesWith, { shippingDiscounts: true, orderDiscounts: false, productDiscounts: false });
+  assert.match(d.input.title, /^Club-Punkte 5,45 € · Anna B\. · CLUB-PUNKTE-/);
+
+  // Neu wählen ersetzt die Einlösung: alter Rabatt gelöscht, Punkte ohne Mitteilung zurück
+  r = await redeem({ punkte: 100, cents: 8900 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.notEqual(r.data.code, first);
+  assert.equal(r.data.punkte, 9);
+  assert.equal(r.data.einloesung.wert_cents, 500);
+  cartCode = r.data.code;
+  m = await getMock();
+  assert.equal(Object.values(m.discounts).some((x) => x.code === first), false);
+  assert.ok(Object.values(m.discounts).some((x) => x.code === cartCode));
   assert.equal(m.metafields[`${ANNA}|club.punkte`], '9');
 
   r = await anna.req('GET', '/points');
   assert.equal(r.data.history[0].kind, 'redeem');
   assert.equal(r.data.history[0].points, -100);
+  assert.equal(r.data.codes[0].source, 'cart');
   assert.equal(r.data.codes[0].status, 'active');
+  assert.equal(r.data.codes[0].url, `https://www.perfumecloud.de/discount/${cartCode}?redirect=/cart`);
+  assert.equal(r.data.codes.filter((c) => c.status === 'active').length, 1, 'höchstens eine Einlösung im Warenkorb');
+  assert.equal(r.data.program.cart_hours, 24);
 });
 
-test('Code zurückgeben bucht die Punkte zurück', async () => {
-  const r = await anna.req('DELETE', `/codes/${codeId}`);
+test('Zurücknehmen im Warenkorb oder in der App bucht die Punkte zurück', async () => {
+  let r = await proxy('POST', '/zuruecknehmen', { customer: ANNA_NR, body: { cents: 8900 } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.zurueck, cartCode);
+  assert.equal(r.data.punkte, 109);
+  assert.equal(r.data.einloesung, null);
+  assert.equal(Object.values((await getMock()).discounts).some((x) => x.code === cartCode), false, 'in Shopify gelöscht');
+  r = await proxy('POST', '/zuruecknehmen', { customer: ANNA_NR, body: {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.zurueck, null, 'zweimal tippen schadet nicht');
+
+  // In der App: „Zurückgeben“ für eine offene Einlösung
+  r = await proxy('POST', '/einloesen', { customer: ANNA_NR, body: { punkte: 100, cents: 8900 } });
+  const id = (await anna.req('GET', '/points')).data.codes.find((c) => c.code === r.data.code).id;
+  r = await anna.req('DELETE', `/codes/${id}`);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.code.status, 'cancelled');
   assert.equal(r.data.points.balance, 109);
-  const m = await getMock();
-  assert.equal(Object.values(m.discounts).some((x) => x.code === code), false, 'in Shopify gelöscht');
-  assert.equal((await anna.req('DELETE', `/codes/${codeId}`)).status, 404);
+  assert.equal((await anna.req('DELETE', `/codes/${id}`)).status, 404);
 });
 
 test('Fehler bei Shopify: Punkte bleiben unverändert', async () => {
   await setMock({ failDiscount: true });
-  const r = await anna.req('POST', '/codes', { steps: 1 });
+  const r = await proxy('POST', '/einloesen', { customer: ANNA_NR, body: { punkte: 100, cents: 8900 } });
   assert.equal(r.status, 502);
   await setMock({ failDiscount: false });
   const p = await anna.req('GET', '/points');
@@ -408,12 +495,12 @@ test('Fehler bei Shopify: Punkte bleiben unverändert', async () => {
   assert.equal(p.data.codes.some((c) => c.status === 'failed'), false);
 });
 
-test('Cronjob: Code benutzt, Wartezeit vorbei, Code abgelaufen', async () => {
-  // Code erstellen und in einer neuen Bestellung benutzen
-  let r = await anna.req('POST', '/codes', { steps: 1 });
+test('Cronjob: Rabatt bestellt, Wartezeit vorbei, im Warenkorb nicht bestellt', async () => {
+  // Einlösen und in einer neuen Bestellung benutzen
+  let r = await proxy('POST', '/einloesen', { customer: ANNA_NR, body: { punkte: 100, cents: 6000 } });
   const used = r.data.code;
   const m = await getMock();
-  m.orders.push(order(1006, { ago: 1000, amount: 60, codes: [used.code] }));
+  m.orders.push(order(1006, { ago: 1000, amount: 60, codes: [used] }));
   // #1002 ist jetzt 20 Tage alt: die Sperrfrist (14 Tage ab der Bestellung) ist vorbei
   const o2 = m.orders.find((o) => o.name === '#1002');
   o2.processedAt = o2.createdAt = iso(20 * DAY);
@@ -424,26 +511,30 @@ test('Cronjob: Code benutzt, Wartezeit vorbei, Code abgelaufen', async () => {
   let c = await cron();
   assert.match(c.orders, /geändert/);
   r = await anna.req('GET', '/points');
-  const usedNow = r.data.codes.find((x) => x.id === used.id);
+  const usedNow = r.data.codes.find((x) => x.code === used);
   assert.equal(usedNow.status, 'used');
   assert.equal(usedNow.order_name, '#1006');
   // 109 - 100 + 89 (#1002 jetzt verfügbar)
   assert.equal(r.data.points.balance, 98);
 
-  // Neuer Code, der abläuft
-  sql("UPDATE club_ledger SET points = points + 100 WHERE kind = 'welcome'"); // genug Punkte für einen zweiten Code
-  r = await anna.req('POST', '/codes', { steps: 1 });
+  // Im Warenkorb eingelöst, aber nicht bestellt: nach 24 Stunden sind die Punkte wieder da – auch wenn abgelaufene
+  // Codes aus der App sonst verfallen würden
+  await admin.req('PUT', '/admin/settings', { program: { code_expiry_refund: false } });
+  sql("UPDATE club_ledger SET points = points + 100 WHERE kind = 'welcome'"); // genug Punkte für eine zweite Einlösung
+  r = await proxy('POST', '/einloesen', { customer: ANNA_NR, body: { punkte: 100, cents: 6000 } });
   const exp = r.data.code;
-  sql('UPDATE club_codes SET expires_at = ? WHERE id = ?', [Date.now() - 1000, exp.id]);
+  sql('UPDATE club_codes SET expires_at = ? WHERE code = ?', [Date.now() - 1000, exp]);
   c = await cron();
   assert.match(c.codes, /1 abgelaufen/);
   r = await anna.req('GET', '/points');
-  assert.equal(r.data.codes.find((x) => x.id === exp.id).status, 'expired');
+  assert.equal(r.data.codes.find((x) => x.code === exp).status, 'expired');
   assert.equal(r.data.points.balance, 198);
   assert.equal(r.data.history[0].kind, 'refund');
+  assert.match(r.data.history[0].note, /nicht bestellt/);
   const after = await getMock();
-  assert.equal(Object.values(after.discounts).some((x) => x.code === exp.code), false);
+  assert.equal(Object.values(after.discounts).some((x) => x.code === exp), false);
   assert.equal(after.metafields[`${ANNA}|club.punkte`], '198');
+  await admin.req('PUT', '/admin/settings', { program: { code_expiry_refund: true } });
 });
 
 test('Admin: Übersicht, Mitglieder und Korrektur', async () => {
@@ -686,7 +777,11 @@ test('Aktion: doppelte Punkte mit Push zum Start und Regeln im Shop', async () =
   });
   assert.deepEqual(prog.tiers.map((t) => [t.key, t.rate, t.min_cents]), [['bronze', 1, 0], ['silber', 1.5, 20000], ['gold', 2, 50000], ['platin', 3, 100000]]);
   assert.equal(prog.tier_basis, 'lifetime');
-  assert.deepEqual(prog.waitlist, { full: false, text: 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!' });
+  assert.deepEqual(prog.waitlist, { full: false, text: 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!', limited: false });
+  assert.deepEqual(prog.cart, { proxy: '/apps/club', hours: 24 });
+  // Bewertungsbonus einmalig, Empfehlungsbonus nur sichtbar, wenn Empfehlungen an sind (Standard: aus)
+  assert.equal(prog.review_once, true);
+  assert.equal(prog.referral, false);
   assert.equal(prog.promos[0].factor, 2);
   // Segment „Club: Prämie einlösbar“ wird angelegt und folgt der Einlöse-Schwelle
   const segment = async (q) => waitFor2(async () => Object.values((await getMock()).segments || {}).find((s) => s.name === 'Club: Prämie einlösbar' && s.query === q));
@@ -1603,9 +1698,9 @@ test('1.4: Empfehlung erst mit der Bestellung, Storno, Rückgabe, Verfall-Erinne
   assert.equal(r.data.bonus.referral.rewarded, annaMe.bonus.referral.rewarded + 1);
 
   // Eingelöst und danach zurückgeschickt: Kontostand darf ins Minus, der Empfehlungsbonus wird abgezogen
-  r = await emil.req('POST', '/codes', { steps: 2 });
+  r = await proxy('POST', '/einloesen', { customer: '70', body: { punkte: 200, cents: 9000 } });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.points.balance, 100);
+  assert.equal(r.data.punkte, 100);
   const refunded = order(7002, { ago: 15 * DAY, amount: 150, customer: EMIL });
   refunded.currentSubtotalPriceSet.shopMoney.amount = '0.00';
   refunded.totalRefundedSet.shopMoney.amount = '154.90';
@@ -1689,9 +1784,14 @@ test('1.4: Empfehlung erst mit der Bestellung, Storno, Rückgabe, Verfall-Erinne
     const w = v && JSON.parse(v).waitlist;
     return w && w.full === full ? w : null;
   });
-  assert.deepEqual(await shopWaitlist(true), { full: true, text: 'Gerade voll – bald gibt es neue Plätze.' });
+  assert.deepEqual(await shopWaitlist(true), { full: true, text: 'Gerade voll – bald gibt es neue Plätze.', limited: true });
   assert.equal(JSON.stringify(await getMock()).includes('"remaining"'), false);
+  // Vor dem Eintragen fragt das Theme beim Club nach (zählt frisch, verrät keine Restplätze)
+  assert.deepEqual((await proxy('GET', '/warteliste')).data, { voll: true, text: 'Gerade voll – bald gibt es neue Plätze.' });
+  await admin.req('PUT', '/admin/settings', { program: { waitlist_max: 5 } });
+  assert.deepEqual((await proxy('GET', '/warteliste')).data, { voll: false, text: null });
   await admin.req('PUT', '/admin/settings', { program: { waitlist_max: 0, waitlist_full_text: 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!' } });
+  assert.deepEqual((await proxy('GET', '/warteliste')).data, { voll: false, text: null });
   await shopWaitlist(false);
   assert.equal((await admin.req('GET', '/admin/invites')).data.limit.full, false);
 

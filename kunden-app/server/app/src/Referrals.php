@@ -91,6 +91,8 @@ final class Referrals
         }
         Settings::set('referral', $c);
         self::$config = null;
+        // Das Theme zeigt den Empfehlungsbonus nur, wenn Empfehlungen an sind
+        ShopSync::markDirty();
         return self::config();
     }
 

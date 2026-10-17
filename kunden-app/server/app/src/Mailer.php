@@ -200,11 +200,13 @@ final class Mailer
         $rate = Tiers::rateText((float) $tier['rate']);
         $lines = [
             'Für jeden Euro bekommst du ' . $rate . '.',
-            'Je ' . $p['redeem_points'] . ' Punkte gibt es ' . Util::euro((int) $p['redeem_cents']) . ' Rabatt – als Code für deinen nächsten Einkauf.',
+            'Je ' . $p['redeem_points'] . ' Punkte gibt es ' . Util::euro((int) $p['redeem_cents']) . ' Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code. Einlösbar sind sie ' . (int) $p['wait_days'] . ' Tage nach der Bestellung.',
         ];
-        if ($p['tiers_enabled']) {
+        if ($p['tiers_enabled'] && count($p['tiers']) > 1) {
             $up = array_slice($p['tiers'], 1);
-            $lines[] = 'Mit mehr Einkäufen steigst du auf: ' . implode(' und ', array_map(static fn ($t) => $t['name'] . ' ab ' . Util::euro((int) $t['min_cents']) . ' (' . Tiers::rateText((float) $t['rate']) . ')', $up)) . '.';
+            $teile = array_map(static fn ($t) => $t['name'] . ' ab ' . Util::euro((int) $t['min_cents']) . ' (' . Tiers::rateText((float) $t['rate']) . ')', $up);
+            $letzte = array_pop($teile);
+            $lines[] = 'Mit mehr Einkäufen seit deinem Beitritt steigst du auf: ' . ($teile ? implode(', ', $teile) . ' und ' . $letzte : $letzte) . '.';
         }
         $intro = $balance > 0
             ? "<b>$balance Punkte</b> liegen schon auf deinem Konto."

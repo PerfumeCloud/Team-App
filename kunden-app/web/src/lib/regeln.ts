@@ -69,7 +69,7 @@ export function erinnerungText(p: Program): string | null {
 }
 
 export function einloesenText(p: Program): string {
-  return `Je ${punkteWort(p.redeem_points)} gibt es ${euro(p.redeem_cents)} Rabatt, als Code für deinen nächsten Einkauf.`;
+  return `Im Warenkorb wählst du, wie viele Punkte du einlöst (ab ${punkteWort(p.redeem_points)}, höchstens ${euro(p.max_cents)} je Bestellung). Der Rabatt steht sofort drin, ohne Code.`;
 }
 
 /** „Punkte verfallen 24 Monate nach der Gutschrift.“ oder null */
@@ -81,8 +81,9 @@ export function verfallText(p: Program): string | null {
   return `Nicht eingelöste Punkte verfallen ${dauer} nach der Gutschrift.${erinnerung ? ` ${erinnerung}` : ''}`;
 }
 
-export function codeText(p: Program): string {
-  return `Codes gelten ${p.code_days} Tage${p.code_expiry_refund ? '; läuft einer ungenutzt ab, bekommst du die Punkte zurück' : ' und verfallen danach mit ihren Punkten'}.`;
+/** „Eingelöste Punkte bleiben 24 Stunden im Warenkorb …“ */
+export function warenkorbText(p: Program): string {
+  return `Eingelöste Punkte bleiben ${p.cart_hours ?? 24} Stunden im Warenkorb. Bestellst du nicht oder nimmst du sie zurück, sind sie wieder auf deinem Konto.`;
 }
 
 export function aktionText(a: Promo): string {

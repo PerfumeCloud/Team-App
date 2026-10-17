@@ -1,0 +1,360 @@
+{%- comment -%}
+  Perfume Cloud Club auf der Startseite (ab Club 1.4).
+  Gäste sehen die vier Stufen als Metallkarten, wie es funktioniert und was ein Einkauf bringt.
+  Angemeldete Mitglieder sehen ihre eigene Karte mit Punktestand, gesperrten Punkten und dem Weg zur nächsten Stufe.
+  Regeln aus dem Shop-Metafeld club.programm, Stand aus dem Kunden-Metafeld club.status. Beides pflegt die Club-App,
+  im Theme muss nichts von Hand angepasst werden. Eine eigene Anmeldung braucht es nicht, die Shop-Anmeldung reicht.
+{%- endcomment -%}
+{%- liquid
+  assign prog = shop.metafields.club.programm.value
+  assign mitglied = false
+  if customer and customer.tags contains 'club'
+    assign mitglied = true
+  endif
+  assign app = prog.app_url | default: 'https://app.perfumecloud.de'
+  assign club_name = prog.name | default: 'Perfume Cloud Club'
+  assign schritt_p = prog.redeem_points | default: 100
+  assign schritt_c = prog.redeem_cents | default: 500
+  assign schritt_pf = schritt_p | times: 1.0
+  assign beispiel = section.settings.beispiel | default: 80
+  assign monate = 'Jan.,Feb.,März,Apr.,Mai,Juni,Juli,Aug.,Sep.,Okt.,Nov.,Dez.' | split: ','
+
+  assign stufen_an = false
+  if prog.tiers_enabled and prog.tiers.size > 0
+    assign stufen_an = true
+  endif
+  assign grund = prog.rate | default: 1
+  if stufen_an
+    assign grund = prog.tiers.first.rate
+  endif
+  assign seit = 'seit deinem Beitritt'
+  unless prog.tier_basis == 'lifetime'
+    assign seit = 'in ' | append: prog.tier_months | append: ' Monaten'
+  endunless
+
+  comment
+    Laufende oder nächste Aktion (wie in den Club-Regeln)
+  endcomment
+  assign jetzt = 'now' | date: '%s' | plus: 0
+  assign aktion = nil
+  assign aktion_faktor = 1
+  assign naechste = nil
+  assign naechste_beginn = 0
+  for a in prog.promos
+    assign beginn = a.start | date: '%s' | plus: 0
+    assign ende = a.end | date: '%s' | plus: 0
+    if beginn <= jetzt and jetzt < ende and a.factor > aktion_faktor
+      assign aktion = a
+      assign aktion_faktor = a.factor
+    elsif beginn > jetzt
+      if naechste == nil or beginn < naechste_beginn
+        assign naechste = a
+        assign naechste_beginn = beginn
+      endif
+    endif
+  endfor
+
+  comment
+    Stand des Mitglieds: club.status (ab 1.4), sonst die älteren Felder club.punkte und club.stufe
+  endcomment
+  if mitglied
+    assign status = customer.metafields.club.status.value
+    assign punkte = status.punkte | default: customer.metafields.club.punkte.value | default: 0
+    assign stufe_key = status.stufe | default: customer.metafields.club.stufe.value | default: ''
+    assign wert = punkte | times: schritt_c | divided_by: schritt_pf | floor
+    if status.wert_cents != nil
+      assign wert = status.wert_cents
+    endif
+    assign gesperrt = status.gesperrt | default: 0
+    assign meine = nil
+    assign meine_nr = 1
+    if stufen_an
+      assign meine = prog.tiers.first
+      for t in prog.tiers
+        if t.key == stufe_key
+          assign meine = t
+          assign meine_nr = forloop.index
+        endif
+      endfor
+    endif
+  endif
+-%}
+{%- if prog != blank -%}
+<section class="club-start{% if mitglied %} ist-mitglied{% endif %}" id="club" aria-labelledby="h-club-{{ section.id }}">
+  <div class="club-start-innen">
+    <div class="club-kopfzeile">
+      <p class="club-label">{{ club_name | escape }}</p>
+      {%- if mitglied -%}
+        {%- assign vorname = customer.first_name | strip | escape -%}
+        {%- if vorname != blank -%}
+          <h2 id="h-club-{{ section.id }}">{{ section.settings.titel_mitglied | replace: '[name]', vorname }}</h2>
+        {%- else -%}
+          <h2 id="h-club-{{ section.id }}">Schön, dass du <em>da bist</em></h2>
+        {%- endif -%}
+      {%- else -%}
+        <h2 id="h-club-{{ section.id }}">{{ section.settings.titel }}</h2>
+        {%- if section.settings.text != blank -%}<p>{{ section.settings.text }}</p>{%- endif -%}
+      {%- endif -%}
+    </div>
+
+    {%- liquid
+      assign band = aktion | default: naechste
+      if band
+        assign f_ganz = band.factor | floor
+        capture f_text
+          render 'club-komma', x: band.factor
+        endcapture
+        case f_ganz
+          when 2
+            assign f_wort = 'Doppelte'
+          when 3
+            assign f_wort = 'Dreifache'
+          when 4
+            assign f_wort = 'Vierfache'
+          else
+            assign f_wort = f_text | append: '-fache'
+        endcase
+        if f_ganz != band.factor
+          assign f_wort = f_text | append: '-fache'
+        endif
+      endif
+    -%}
+    {%- if aktion -%}
+      <p class="club-aktion-band"><span class="club-punkte-aktion">{{ f_text }}×</span><span><b>{{ f_wort }} Punkte</b> zur Aktion „{{ aktion.name | escape }}“, noch bis {{ aktion.end | date: '%d.%m.%Y, %H:%M' }} Uhr</span></p>
+    {%- elsif naechste -%}
+      <p class="club-aktion-band"><span>Bald: <b>{{ f_text }}× Punkte</b> zur Aktion „{{ naechste.name | escape }}“ ab {{ naechste.start | date: '%d.%m.%Y' }}</span></p>
+    {%- endif -%}
+
+    {%- if mitglied -%}
+      {%- comment -%} ===== Mitglied: eigene Karte, Stand, gesperrte Punkte, Weg zur nächsten Stufe ===== {%- endcomment -%}
+      <div class="club-mein">
+        <div class="club-mein-karte">
+          {%- capture links -%}{% render 'club-zahl', n: punkte %} {% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}{%- endcapture -%}
+          {%- if meine -%}
+            {%- assign rechts = wert | money_without_trailing_zeros -%}
+            {%- render 'club-karte', t: meine, nr: meine_nr, club: club_name, links: links, rechts: rechts -%}
+          {%- endif -%}
+        </div>
+        <div class="club-mein-text">
+          <p class="club-stand"><b>{% render 'club-zahl', n: punkte %}</b> <span>{% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}</span></p>
+          {%- if punkte >= schritt_p -%}
+            <p>Das sind <b>{{ wert | money_without_trailing_zeros }}</b> Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code.</p>
+          {%- elsif punkte >= 0 -%}
+            {%- assign fehlen = schritt_p | minus: punkte -%}
+            <p>Ab {% render 'club-zahl', n: schritt_p %} Punkten löst du sie im Warenkorb ein. Dir fehlen noch {% render 'club-zahl', n: fehlen %}.</p>
+          {%- else -%}
+            <p>Nach einer Rückgabe ist dein Konto im Minus. Die nächsten Punkte gleichen es aus.</p>
+          {%- endif -%}
+
+          {%- if gesperrt > 0 -%}
+            {%- liquid
+              assign ab_punkte = status.nutzbar_ab_punkte | default: gesperrt
+              assign ab_text = ''
+              if status.nutzbar_ab != blank
+                assign ab_monat = status.nutzbar_ab | date: '%m' | plus: 0 | minus: 1
+                assign ab_text = status.nutzbar_ab | date: '%-d. ' | append: monate[ab_monat]
+              endif
+            -%}
+            <p class="club-gesperrt">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+              <span>
+                {%- if status.nutzbar_zahlung -%}
+                  Dazu {% render 'club-zahl', n: gesperrt %} Punkte, einlösbar nach der Zahlung.
+                {%- elsif ab_text == blank -%}
+                  Dazu {% render 'club-zahl', n: gesperrt %} Punkte, bald nutzbar.
+                {%- elsif ab_punkte < gesperrt -%}
+                  Dazu {% render 'club-zahl', n: gesperrt %} Punkte, die ersten {% render 'club-zahl', n: ab_punkte %} ab {{ ab_text }} nutzbar.
+                {%- else -%}
+                  Dazu {% render 'club-zahl', n: gesperrt %} {% if gesperrt == 1 %}Punkt{% else %}Punkte{% endif %}, ab {{ ab_text }} nutzbar.
+                {%- endif -%}
+              </span>
+            </p>
+          {%- endif -%}
+
+          {%- if stufen_an and status.naechste_stufe != blank -%}
+            {%- liquid
+              assign naechste_t = nil
+              for t in prog.tiers
+                if t.name == status.naechste_stufe
+                  assign naechste_t = t
+                endif
+              endfor
+              assign anteil = status.fortschritt | default: 0
+              assign n_metall = 'eigen'
+              case naechste_t.key
+                when 'bronze', 'silber', 'gold', 'platin'
+                  assign n_metall = naechste_t.key
+              endcase
+            -%}
+            <div class="club-weg">
+              <p><span>Noch <b>{{ status.fehlt_cents | money_without_trailing_zeros }}</b> Einkauf bis {{ status.naechste_stufe | escape }}</span><span class="leise">{{ anteil }} %</span></p>
+              <span class="club-balken" style="--anteil:{{ anteil }}%" role="progressbar" aria-label="Weg bis {{ status.naechste_stufe | escape }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ anteil }}"><i class="k-{{ n_metall }}"></i></span>
+            </div>
+          {%- elsif stufen_an and status != blank and meine_nr == prog.tiers.size -%}
+            <p class="club-weg-ende">Du bist in der höchsten Stufe. Danke, dass du so oft bei uns bist.</p>
+          {%- endif -%}
+
+          {%- if meine and meine.benefits.size > 0 -%}
+            <div class="club-vorteile">
+              <p class="club-label">Deine Vorteile als {{ meine.name | escape }}</p>
+              <ul>{% for b in meine.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
+            </div>
+          {%- endif -%}
+
+          <div class="club-aktion-knopf">
+            <a class="hb hb-klein" href="{{ routes.cart_url }}"><span class="hb-text">Im Warenkorb einlösen</span><span class="hb-hover" aria-hidden="true"><span>Im Warenkorb einlösen</span><svg aria-hidden="true"><use href="#i-wagen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
+            <a class="club-textlink" href="{{ app }}">Club-App öffnen</a>
+          </div>
+        </div>
+      </div>
+
+    {%- else -%}
+      {%- comment -%} ===== Gäste: vier Metallkarten, drei Schritte ===== {%- endcomment -%}
+      {%- if stufen_an -%}
+        <ul class="club-metalle" aria-label="Die Stufen im Club">
+          {%- for t in prog.tiers -%}
+            {%- liquid
+              capture t_satz
+                render 'club-komma', x: t.rate
+              endcapture
+              assign t_pct = t.rate | times: schritt_c | divided_by: schritt_pf
+              capture t_pct_text
+                render 'club-komma', x: t_pct
+              endcapture
+              capture links
+                echo t_satz | append: ' P je 1 €'
+              endcapture
+              assign rechts = t_pct_text | append: ' % zurück'
+            -%}
+            <li class="club-metall-eintrag">
+              {%- render 'club-karte', t: t, nr: forloop.index, club: club_name, links: links, rechts: rechts -%}
+              <div class="club-metall-text">
+                <p class="sr">{{ t.name | escape }}</p>
+                <p class="club-metall-ab">{% if t.min_cents > 0 %}ab {{ t.min_cents | money_without_trailing_zeros }} Einkauf {{ seit | replace: 'deinem', 'dem' }}{% else %}für alle Mitglieder{% endif %}</p>
+                <p><b>{{ t_satz }} {% if t.rate == 1 %}Punkt{% else %}Punkte{% endif %}</b> je 1 €, also {{ t_pct_text }} % zurück</p>
+                {%- if t.benefits.size > 0 -%}
+                  <ul>{% for b in t.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
+                {%- endif -%}
+              </div>
+            </li>
+          {%- endfor -%}
+        </ul>
+      {%- endif -%}
+
+      {%- liquid
+        capture grund_text
+          render 'club-komma', x: grund
+        endcapture
+        assign top = grund
+        if stufen_an
+          assign top = prog.tiers.last.rate
+        endif
+        capture top_text
+          render 'club-komma', x: top
+        endcapture
+      -%}
+      <ol class="club-schritte">
+        <li class="club-schritt">
+          <span class="nr" aria-hidden="true">01</span>
+          <p class="club-schritt-titel">Bestellen</p>
+          <p>Für jeden Euro Einkauf bekommst du {% if top != grund %}{{ grund_text }} bis {{ top_text }} Punkte, je nach Stufe{% else %}{{ grund_text }} {% if grund == 1 %}Punkt{% else %}Punkte{% endif %}{% endif %}.</p>
+        </li>
+        <li class="club-schritt">
+          <span class="nr" aria-hidden="true">02</span>
+          <p class="club-schritt-titel">Punkte sofort im Konto</p>
+          <p>Sie stehen direkt nach der Bestellung in deinem Konto{% if prog.wait_days > 0 %} und sind nach {{ prog.wait_days }} Tagen einlösbar{% endif %}.</p>
+        </li>
+        <li class="club-schritt">
+          <span class="nr" aria-hidden="true">03</span>
+          <p class="club-schritt-titel">Im Warenkorb einlösen</p>
+          <p>{% render 'club-zahl', n: schritt_p %} Punkte sind {{ schritt_c | money_without_trailing_zeros }} Rabatt. Du wählst im Warenkorb, wie viele du nutzt, ohne Code{% if prog.max_cents > 0 %}, bis {{ prog.max_cents | money_without_trailing_zeros }} je Bestellung{% endif %}.</p>
+        </li>
+      </ol>
+    {%- endif -%}
+
+    {%- comment -%} ===== Rechenbeispiel: was ein Einkauf je Stufe bringt ===== {%- endcomment -%}
+    {%- if section.settings.beispiel_zeigen and beispiel > 0 -%}
+      {%- assign beispiel_c = beispiel | times: 100 -%}
+      <div class="club-beispiel">
+        <p class="club-label">So viel bringen {{ beispiel_c | money_without_trailing_zeros }} Einkauf</p>
+        <table class="club-tabelle">
+          <thead><tr><th scope="col">Stufe</th><th scope="col" class="zahl">Punkte</th><th scope="col" class="zahl">Wert</th><th scope="col" class="zahl">Zurück</th></tr></thead>
+          <tbody>
+            {%- if stufen_an -%}
+              {%- for t in prog.tiers -%}
+                {%- liquid
+                  assign b_p = beispiel | times: t.rate | floor
+                  assign b_c = b_p | times: schritt_c | divided_by: schritt_pf | floor
+                  assign t_pct = t.rate | times: schritt_c | divided_by: schritt_pf
+                -%}
+                <tr{% if meine and t.key == meine.key %} class="aktuell"{% endif %}>
+                  <th scope="row">{{ t.name | escape }}{% if meine and t.key == meine.key %} <span class="club-marke">Du</span>{% endif %}</th>
+                  <td class="zahl">{% render 'club-zahl', n: b_p %} P</td>
+                  <td class="zahl">{{ b_c | money_without_trailing_zeros }}</td>
+                  <td class="zahl">{% render 'club-komma', x: t_pct %} %</td>
+                </tr>
+              {%- endfor -%}
+            {%- else -%}
+              {%- liquid
+                assign b_p = beispiel | times: grund | floor
+                assign b_c = b_p | times: schritt_c | divided_by: schritt_pf | floor
+                assign t_pct = grund | times: schritt_c | divided_by: schritt_pf
+              -%}
+              <tr><th scope="row">Alle Mitglieder</th><td class="zahl">{% render 'club-zahl', n: b_p %} P</td><td class="zahl">{{ b_c | money_without_trailing_zeros }}</td><td class="zahl">{% render 'club-komma', x: t_pct %} %</td></tr>
+            {%- endif -%}
+          </tbody>
+        </table>
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.boni and mitglied == false -%}
+      <div class="club-boni">
+        <p class="club-label">Bonuspunkte</p>
+        <ul>
+          {%- if prog.welcome_points > 0 -%}<li><span>Beitritt zum Club</span><b>{% render 'club-zahl', n: prog.welcome_points %} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.birthday > 0 -%}<li><span>Zum Geburtstag</span><b>{% render 'club-zahl', n: prog.bonus.birthday %} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.newsletter > 0 -%}<li><span>Newsletter-Anmeldung</span><b>{% render 'club-zahl', n: prog.bonus.newsletter %} Punkte</b></li>{%- endif -%}
+          {%- if prog.bonus.review > 0 -%}<li><span>{% if prog.review_once %}Deine erste Bewertung{% else %}Bewertung eines Dufts{% endif %}</span><b>{% render 'club-zahl', n: prog.bonus.review %} Punkte</b></li>{%- endif -%}
+          {%- if prog.referral and prog.bonus.referrer > 0 -%}<li><span>Freund bestellt über deinen Link</span><b>{% render 'club-zahl', n: prog.bonus.referrer %} Punkte</b></li>{%- endif -%}
+        </ul>
+      </div>
+    {%- endif -%}
+
+    <p class="club-klein">
+      Punkte gibt es auf den Warenwert nach Rabatten, ohne Versand. Sie stehen sofort nach der Bestellung im Konto
+      {%- if prog.wait_days > 0 %} und sind nach {{ prog.wait_days }} Tagen einlösbar{% endif %}. Bei Storno oder Rückgabe werden sie wieder abgezogen.
+      {%- if prog.expiry_months > 0 %} Nicht eingelöste Punkte verfallen {{ prog.expiry_months }} Monate nach der Gutschrift
+        {%- if prog.expiry_warn.size > 0 -%}
+          , wir erinnern dich {% for d in prog.expiry_warn %}{% if forloop.last and forloop.length > 1 %} und {% elsif forloop.first == false %}, {% endif %}{{ d }}{% endfor %} Tage vorher
+        {%- endif -%}.
+      {%- endif -%}
+      {%- if section.settings.bedingungen != blank %} <a href="{{ section.settings.bedingungen }}">Teilnahmebedingungen</a>{% endif -%}
+    </p>
+
+    {%- unless mitglied -%}
+      <div class="club-aktion-knopf">
+        <a class="hb hb-klein" href="{{ app }}"><span class="hb-text">Club beitreten</span><span class="hb-hover" aria-hidden="true"><span>Club beitreten</span><svg aria-hidden="true"><use href="#i-person"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
+        <span class="leise">Kostenlos, mit deinem Kundenkonto{% if prog.welcome_points > 0 %}, {% render 'club-zahl', n: prog.welcome_points %} Punkte zum Start{% endif %}.</span>
+      </div>
+    {%- endunless -%}
+  </div>
+</section>
+{%- elsif request.design_mode -%}
+<section class="club-start"><div class="club-start-innen"><p class="club-klein">Der Club erscheint hier, sobald die Club-App mit dem Shop verbunden ist (Shop-Metafeld club.programm).</p></div></section>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Club auf der Startseite",
+  "settings": [
+    { "type": "inline_richtext", "id": "titel", "label": "Überschrift für Gäste", "default": "Sammeln, einlösen, <em>aufsteigen</em>" },
+    { "type": "textarea", "id": "text", "label": "Text für Gäste", "default": "Für jede Bestellung bekommst du Punkte. Du löst sie direkt im Warenkorb ein, ohne Code. Je mehr du bei uns einkaufst, desto höher deine Stufe." },
+    { "type": "inline_richtext", "id": "titel_mitglied", "label": "Überschrift für Mitglieder", "info": "[name] wird durch den Vornamen ersetzt.", "default": "Schön, dass du da bist, <em>[name]</em>" },
+    { "type": "checkbox", "id": "beispiel_zeigen", "label": "Rechenbeispiel zeigen", "default": true },
+    { "type": "number", "id": "beispiel", "label": "Einkaufswert im Beispiel (€)", "default": 80 },
+    { "type": "checkbox", "id": "boni", "label": "Bonuspunkte zeigen (für Gäste)", "default": true },
+    { "type": "url", "id": "bedingungen", "label": "Link zu den Teilnahmebedingungen" }
+  ],
+  "presets": [{ "name": "Club auf der Startseite" }]
+}
+{% endschema %}

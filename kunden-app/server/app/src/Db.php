@@ -638,6 +638,10 @@ final class Db
                 'unlock_at' => 'BIGINT NULL',
                 'unlock_order' => 'VARCHAR(64) NULL',
             ],
+            // Version 1.4: app = Code aus der App (bis 1.3), cart = im Warenkorb eingelöst
+            'club_codes' => [
+                'source' => "VARCHAR(8) NOT NULL DEFAULT 'app'",
+            ],
         ];
         foreach ($columns as $table => $cols) {
             foreach ($cols as $col => $def) {

@@ -1,4 +1,4 @@
-import { datum, euro, punkte } from '../lib/format';
+import { datum, datumZeit, euro, punkte } from '../lib/format';
 import type { Code, HistoryItem } from '../lib/types';
 
 function faktorText(f: number): string {
@@ -59,15 +59,16 @@ export function Verlauf({ items }: { items: HistoryItem[] }) {
 }
 
 export function codeStatus(c: Code, zurueck = true): string {
+  const korb = c.source === 'cart';
   switch (c.status) {
     case 'active':
-      return `gültig bis ${datum(c.expires_at, true)}`;
+      return korb ? `im Warenkorb bis ${datumZeit(c.expires_at)}` : `gültig bis ${datum(c.expires_at, true)}`;
     case 'used':
       return c.order_name ? `eingelöst bei Bestellung ${c.order_name}` : `eingelöst am ${datum(c.used_at, true)}`;
     case 'expired':
-      return zurueck ? 'abgelaufen, Punkte zurückgebucht' : 'abgelaufen';
+      return korb ? 'nicht bestellt, Punkte zurückgebucht' : zurueck ? 'abgelaufen, Punkte zurückgebucht' : 'abgelaufen';
     case 'cancelled':
-      return 'zurückgegeben';
+      return korb ? 'aus dem Warenkorb zurückgenommen' : 'zurückgegeben';
     default:
       return 'wird erstellt';
   }
@@ -77,7 +78,7 @@ export function FruehereCodes({ codes, zurueck = true }: { codes: Code[]; zuruec
   if (codes.length === 0) return null;
   return (
     <details className="mehr">
-      <summary>Frühere Codes ({codes.length})</summary>
+      <summary>Frühere Einlösungen ({codes.length})</summary>
       <ul className="verlauf">
         {codes.map((c) => (
           <li key={c.id}>

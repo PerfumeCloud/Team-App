@@ -67,6 +67,29 @@ final class Waitlist
         return $c;
     }
 
+    /**
+     * Vor dem Eintragen (Theme über den App-Proxy): Ist noch Platz? Nahe an der Grenze wird höchstens alle 15 Sekunden
+     * neu gezählt, sonst reicht der Stand der letzten 10 Minuten. Restplätze werden nicht verraten.
+     * @return array{voll:bool, text:?string}
+     */
+    public static function check(): array
+    {
+        $p = Points::program();
+        $max = (int) $p['waitlist_max'];
+        if ($max <= 0) {
+            return ['voll' => false, 'text' => null];
+        }
+        $c = Settings::get('waitlist_count');
+        $c = is_array($c) ? $c : null;
+        $age = $c ? Util::now() - (int) $c['at'] : PHP_INT_MAX;
+        $near = !$c || (int) $c['n'] >= $max - 25;
+        if ($age > self::FRESH_MS || ($near && $age > 15000)) {
+            $c = self::count() ?? $c;
+        }
+        $full = $c !== null && (int) $c['n'] >= $max;
+        return ['voll' => $full, 'text' => $full ? (string) $p['waitlist_full_text'] : null];
+    }
+
     /** Stündlich (Cronjob): Zahl aktualisieren, solange eine Höchstzahl eingestellt ist. */
     public static function run(): string
     {
