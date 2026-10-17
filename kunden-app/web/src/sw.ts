@@ -13,6 +13,25 @@ precacheAndRoute(self.__WB_MANIFEST);
 // Alle Seiten der App kommen aus dem Cache – die API (Punkte, Bestellungen, Anmeldung) nie.
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//] }));
 
+// Hintergrundbilder: nur die Größe, die das Gerät braucht, nach dem ersten Abruf aus dem Cache.
+// Die Dateinamen tragen einen Hash, ein neuer Stand lädt also neue Dateien; alte fallen nach 12 Einträgen raus.
+const BILDER = 'pc-bilder-1';
+registerRoute(
+  ({ request, url }) => request.destination === 'image' && url.origin === self.location.origin && url.pathname.startsWith('/assets/'),
+  async ({ request }) => {
+    const cache = await caches.open(BILDER);
+    const da = await cache.match(request);
+    if (da) return da;
+    const antwort = await fetch(request);
+    if (antwort.ok) {
+      await cache.put(request, antwort.clone());
+      const alle = await cache.keys();
+      for (const alt of alle.slice(0, Math.max(0, alle.length - 12))) await cache.delete(alt);
+    }
+    return antwort;
+  },
+);
+
 /* ---------- Push-Mitteilungen ---------- */
 
 interface Nachricht {

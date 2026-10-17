@@ -2,16 +2,31 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Link } from 'react-router';
 import { ArrowRight, CircleAlert, Copy, Gift, Hourglass, Info, Lock, Undo2 } from 'lucide-react';
 import zeichen from '../assets/zeichen.svg';
-import karteBild from '../assets/wueste-karte.jpg';
-import duenenBreit from '../assets/wueste-hell.jpg';
-import duenenMobil from '../assets/wueste-hell-mobil.jpg';
+import karte1200a from '../assets/wueste-karte-1200.avif';
+import karte1200w from '../assets/wueste-karte-1200.webp';
+import karte1800a from '../assets/wueste-karte-1800.avif';
+import karte1800w from '../assets/wueste-karte-1800.webp';
+import karte2400a from '../assets/wueste-karte-2400.avif';
+import karte2400w from '../assets/wueste-karte-2400.webp';
+import duenenMobilA from '../assets/wueste-hell-mobil-1290.avif';
+import duenenMobilW from '../assets/wueste-hell-mobil-1290.webp';
+import duenenIpadA from '../assets/wueste-hell-mobil-1640.avif';
+import duenenIpadW from '../assets/wueste-hell-mobil-1640.webp';
+import duenen2560a from '../assets/wueste-hell-2560.avif';
+import duenen2560w from '../assets/wueste-hell-2560.webp';
+import duenen3840a from '../assets/wueste-hell-3840.avif';
+import duenen3840w from '../assets/wueste-hell-3840.webp';
 import flakon from '../assets/sunset-dune-360.webp';
+import flakonGross from '../assets/sunset-dune.webp';
 import { onToast, toast } from '../lib/toast';
 import { kopieren } from '../lib/hooks';
 import { datum, euro, punkte, punkteWort } from '../lib/format';
 import type { Points, Program, Tone } from '../lib/types';
 
 export { zeichen, flakon };
+
+/** Flakon in 1× und für Retina in voller Größe (631 px) */
+export const flakonSrcSet = `${flakon} 1x, ${flakonGross} 2x`;
 
 /** CSS-Variablen im style-Attribut */
 export function vars(v: Record<string, string>): CSSProperties {
@@ -118,8 +133,28 @@ export function Seitenkopf({ label, titel, children, zurueck }: { label?: string
 
 /* ---------- Hintergrund ---------- */
 
+/* Hochkant fürs Handy (1290 × 2796, iPhone 3×) und iPad (1640 breit), quer ab 900 px in 2560 und 3840 Breite. Der Browser nimmt die passende Datei. */
 export function Duenen() {
-  return <div className="duenen" aria-hidden="true" style={vars({ '--bild-mobil': `url(${duenenMobil})`, '--bild-breit': `url(${duenenBreit})` })} />;
+  return (
+    <div className="duenen" aria-hidden="true">
+      <picture>
+        <source media="(min-width: 900px)" type="image/avif" srcSet={`${duenen2560a} 2560w, ${duenen3840a} 3840w`} sizes="100vw" />
+        <source media="(min-width: 900px)" type="image/webp" srcSet={`${duenen2560w} 2560w, ${duenen3840w} 3840w`} sizes="100vw" />
+        <source type="image/avif" srcSet={`${duenenMobilA} 1290w, ${duenenIpadA} 1640w`} sizes="100vw" />
+        <img src={duenenMobilW} srcSet={`${duenenMobilW} 1290w, ${duenenIpadW} 1640w`} sizes="100vw" alt="" decoding="async" />
+      </picture>
+    </div>
+  );
+}
+
+/* Dünen im Abendlicht für die Punktekarte: 1200, 1800 und 2400 breit */
+function KartenGrund({ sizes }: { sizes: string }) {
+  return (
+    <picture className="karte-grund">
+      <source type="image/avif" srcSet={`${karte1200a} 1200w, ${karte1800a} 1800w, ${karte2400a} 2400w`} sizes={sizes} />
+      <img src={karte1200w} srcSet={`${karte1200w} 1200w, ${karte1800w} 1800w, ${karte2400w} 2400w`} sizes={sizes} alt="" decoding="async" />
+    </picture>
+  );
 }
 
 /* ---------- Toast ---------- */
@@ -213,7 +248,7 @@ export function ProduktBild({ src, alt = '' }: { src: string | null; alt?: strin
       {src && !kaputt ? (
         <img src={src} alt={alt} loading="lazy" onError={() => setKaputt(true)} />
       ) : (
-        <img className="flakon" src={flakon} alt={alt} />
+        <img className="flakon" src={flakon} srcSet={flakonSrcSet} alt={alt} />
       )}
     </span>
   );
@@ -277,7 +312,7 @@ function useHochzaehlen(ziel: number): number {
 
 /* ---------- Die Punktekarte ---------- */
 
-export function PunkteKarte({ points, program, children, marke }: { points: Points; program: Program; children?: ReactNode; marke?: string }) {
+export function PunkteKarte({ points, program, children, marke, klein }: { points: Points; program: Program; children?: ReactNode; marke?: string; klein?: boolean }) {
   const stand = useHochzaehlen(points.balance);
   const maxErreicht = points.to_next === 0;
   const anteil = maxErreicht ? 100 : Math.max(0, Math.round(((program.redeem_points - points.to_next) / program.redeem_points) * 100));
@@ -288,7 +323,8 @@ export function PunkteKarte({ points, program, children, marke }: { points: Poin
   }, [anteil]);
 
   return (
-    <section className="punktekarte" style={vars({ '--karte-bild': `url(${karteBild})` })} aria-label="Dein Punktestand">
+    <section className="punktekarte" aria-label="Dein Punktestand">
+      <KartenGrund sizes={klein ? '(min-width: 600px) 26rem, 21rem' : '(min-width: 1000px) 58rem, 100vw'} />
       <span className="sonne" aria-hidden="true" />
       <div className="punktekarte-kopf">
         <span className="marke">{marke ?? program.name}</span>

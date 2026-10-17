@@ -72,11 +72,24 @@ final class MailFolders
         $mb = self::box($me, $address);
         $cached = Settings::get('mail_folders_' . $mb['id']);
         if (!$fresh && is_array($cached) && ($cached['at'] ?? 0) > Util::now() - self::CACHE_MS) {
-            return $cached;
+            $out = $cached;
+        } else {
+            $out = self::with($mb, static fn (Imap $imap) => self::read($imap)) + ['box' => $mb['email'], 'at' => Util::now()];
+            Settings::set('mail_folders_' . $mb['id'], $out);
         }
-        $out = self::with($mb, static fn (Imap $imap) => self::read($imap)) + ['box' => $mb['email'], 'at' => Util::now()];
-        Settings::set('mail_folders_' . $mb['id'], $out);
+        $out['folders'] = self::tree($out['folders'], self::order($mb));
         return $out;
+    }
+
+    /**
+     * Eigene Reihenfolge je Ebene (Schlüssel = Pfad des Elternordners, '' = oberste Ebene). Der Mailserver kennt
+     * keine Reihenfolge – sie gilt in der App für alle, die das Postfach sehen.
+     * @return array<string, string[]>
+     */
+    private static function order(array $mb): array
+    {
+        $o = Settings::get('mail_folder_order_' . $mb['id']);
+        return is_array($o) ? $o : [];
     }
 
     private static function forget(array $mb): void
@@ -153,27 +166,34 @@ final class MailFolders
                 $p = $byPath[$p]['parent'];
             }
         }
-        // Baum aufbauen: Posteingang, Gesendet, … zuerst, dann alphabetisch; Kinder direkt unter ihren Eltern
+        return ['delimiter' => $delim, 'prefix' => $prefix, 'folders' => self::tree(array_values($byPath), []), 'sent' => $seen['sent'] ?? null];
+    }
+
+    /**
+     * Baum aufbauen: Posteingang, Gesendet, … zuerst, dann in der eigenen Reihenfolge, sonst alphabetisch;
+     * Kinder direkt unter ihren Eltern.
+     */
+    private static function tree(array $folders, array $order): array
+    {
         $children = [];
-        foreach ($byPath as $f) {
+        foreach ($folders as $f) {
+            unset($f['depth'], $f['children']);
             $children[$f['parent'] ?? ''][] = $f;
         }
-        $sort = static function (array $a, array $b): int {
-            $oa = self::ORDER[$a['special'] ?? ''] ?? 9;
-            $ob = self::ORDER[$b['special'] ?? ''] ?? 9;
-            return $oa <=> $ob ?: strnatcasecmp($a['name'], $b['name']);
-        };
         $list = [];
-        $walk = static function (string $parent, int $depth) use (&$walk, &$list, $children, $sort): void {
+        $walk = static function (string $parent, int $depth) use (&$walk, &$list, $children, $order): void {
             $kids = $children[$parent] ?? [];
-            usort($kids, $sort);
+            $pos = array_flip($order[$parent] ?? []);
+            usort($kids, static fn (array $a, array $b): int => (self::ORDER[$a['special'] ?? ''] ?? 9) <=> (self::ORDER[$b['special'] ?? ''] ?? 9)
+                ?: ($pos[$a['path']] ?? PHP_INT_MAX) <=> ($pos[$b['path']] ?? PHP_INT_MAX)
+                ?: strnatcasecmp($a['name'], $b['name']));
             foreach ($kids as $k) {
                 $list[] = $k + ['depth' => $depth, 'children' => count($children[$k['path']] ?? [])];
                 $walk($k['path'], $depth + 1);
             }
         };
         $walk('', 0);
-        return ['delimiter' => $delim, 'prefix' => $prefix, 'folders' => $list, 'sent' => $seen['sent'] ?? null];
+        return $list;
     }
 
     /** Ordner muss es geben (schützt vor beliebigen Pfaden). */
@@ -348,27 +368,125 @@ final class MailFolders
         return ['created' => $path] + self::folders($me, $address, true);
     }
 
-    public static function rename(array $me, string $address, string $path, mixed $name): array
+    /**
+     * Umbenennen und/oder in einen anderen Ordner verschieben – Unterordner und Mails wandern mit.
+     * $parent: null = bleibt, wo er ist; '' = oberste Ebene; sonst Pfad des neuen Elternordners.
+     */
+    public static function rename(array $me, string $address, string $path, mixed $name, ?string $parent = null): array
     {
         $mb = self::box($me, $address);
         $f = self::folder($me, $mb, $path);
         if ($f['special']) {
-            throw new HttpError(422, '„' . $f['name'] . '“ lässt sich nicht umbenennen.');
+            throw new HttpError(422, '„' . $f['name'] . '“ lässt sich nicht umbenennen oder verschieben.');
         }
         $list = self::folders($me, $address);
-        $n = self::cleanName($name, $list['delimiter']);
-        $to = ($f['parent'] !== null ? $f['parent'] . $list['delimiter'] : $list['prefix']) . Imap::encodeFolder($n);
+        $delim = $list['delimiter'];
+        $n = self::cleanName($name, $delim);
+        $base = $f['parent'] !== null ? $f['parent'] . $delim : $list['prefix'];
+        $target = null;
+        if ($parent === '') {
+            $base = $list['prefix'];
+        } elseif ($parent !== null) {
+            if ($delim === '') {
+                throw new HttpError(422, 'Dieser Mailserver kennt keine Unterordner.');
+            }
+            $target = self::folder($me, $mb, $parent);
+            if ($target['path'] === $path || str_starts_with($target['path'], $path . $delim)) {
+                throw new HttpError(422, 'Ein Ordner kann nicht in sich selbst oder einen seiner Unterordner.');
+            }
+            if ($target['special'] && !in_array($target['special'], ['inbox', 'archive'], true)) {
+                throw new HttpError(422, 'In „' . $target['name'] . '“ lassen sich keine Ordner ablegen.');
+            }
+            $base = $target['path'] . $delim;
+        }
+        $to = $base . Imap::encodeFolder($n);
         if ($to === $path) {
             return self::folders($me, $address);
         }
         foreach ($list['folders'] as $x) {
             if (strcasecmp($x['path'], $to) === 0) {
-                throw new HttpError(409, 'Einen Ordner „' . $n . '“ gibt es hier schon.');
+                throw new HttpError(409, 'Einen Ordner „' . $n . '“ gibt es ' . ($target ? 'in „' . $target['name'] . '“' : 'hier') . ' schon.');
             }
         }
-        self::with($mb, static fn (Imap $imap) => $imap->renameFolder($path, $to));
+        $inner = [];
+        foreach ($list['folders'] as $x) {
+            if ($delim !== '' && str_starts_with($x['path'], $path . $delim)) {
+                $inner[] = $to . substr($x['path'], strlen($path));
+            }
+        }
+        self::with($mb, static function (Imap $imap) use ($path, $to, $inner) {
+            $imap->renameFolder($path, $to);
+            // Unterordner benennt der Server mit um; abonniert (sichtbar in Outlook/iPhone) bleiben sie so
+            foreach ($inner as $p) {
+                $imap->subscribe($p);
+            }
+        });
         self::forget($mb);
+        self::moveOrder($mb, $delim, $path, $to);
+        if (self::parentOf($to, $delim) !== self::parentOf($path, $delim)) {
+            self::log($me, $mb, 'hat in ' . $mb['email'] . ' den Ordner „' . $f['name'] . '“ nach „' . ($target['name'] ?? 'oberste Ebene') . '“ verschoben');
+        }
         return ['renamed' => $to] + self::folders($me, $address, true);
+    }
+
+    /** Reihenfolge der Ordner auf einer Ebene festlegen ($parent wie oben, '' = oberste Ebene). */
+    public static function sort(array $me, string $address, string $parent, array $paths): array
+    {
+        $mb = self::box($me, $address);
+        $paths = array_values(array_unique(array_filter($paths, 'is_string')));
+        foreach ([false, true] as $fresh) {
+            $kids = [];
+            foreach (self::folders($me, $address, $fresh)['folders'] as $f) {
+                if (($f['parent'] ?? '') === $parent && !$f['special']) {
+                    $kids[] = $f['path'];
+                }
+            }
+            if (count($kids) === count($paths) && !array_diff($paths, $kids)) {
+                $order = self::order($mb);
+                $order[$parent] = $paths;
+                Settings::set('mail_folder_order_' . $mb['id'], $order);
+                return self::folders($me, $address);
+            }
+        }
+        throw new HttpError(422, 'Die Ordnerliste hat sich geändert – bitte neu laden.');
+    }
+
+    /** Elternpfad wie in der Reihenfolge ('' = oberste Ebene). */
+    private static function parentOf(string $path, string $delim): string
+    {
+        $i = $delim !== '' ? strrpos($path, $delim) : false;
+        return $i === false ? '' : substr($path, 0, $i);
+    }
+
+    /** Eigene Reihenfolge nachziehen, wenn ein Ordner samt Unterordnern umzieht ($to = null: gelöscht). */
+    private static function moveOrder(array $mb, string $delim, string $from, ?string $to): void
+    {
+        $order = self::order($mb);
+        if (!$order) {
+            return;
+        }
+        $map = static function (string $p) use ($delim, $from, $to): ?string {
+            if ($p === $from) {
+                return $to;
+            }
+            if ($delim !== '' && str_starts_with($p, $from . $delim)) {
+                return $to === null ? null : $to . substr($p, strlen($from));
+            }
+            return $p;
+        };
+        $out = [];
+        foreach ($order as $parent => $paths) {
+            $key = $map((string) $parent);
+            if ($key === null || !is_array($paths)) {
+                continue;
+            }
+            // Nur behalten, was noch auf dieser Ebene liegt (ein verschobener Ordner kommt im Ziel ans Ende)
+            $keep = array_values(array_filter(array_map(static fn ($p) => is_string($p) ? $map($p) : null, $paths), static fn ($p) => $p !== null && self::parentOf($p, $delim) === $key));
+            if ($keep) {
+                $out[$key] = $keep;
+            }
+        }
+        Settings::set('mail_folder_order_' . $mb['id'], $out);
     }
 
     /** Nur leere Ordner ohne Unterordner – damit nie versehentlich Mails verschwinden. */
@@ -382,6 +500,7 @@ final class MailFolders
         if ($f['children'] > 0) {
             throw new HttpError(409, 'Der Ordner hat noch Unterordner – bitte erst diese löschen oder verschieben.');
         }
+        $delim = self::folders($me, $address)['delimiter'];
         self::with($mb, static function (Imap $imap) use ($path, $f) {
             if ($f['selectable']) {
                 $imap->examine($path);
@@ -392,6 +511,7 @@ final class MailFolders
             $imap->deleteFolder($path);
         });
         self::forget($mb);
+        self::moveOrder($mb, $delim, $path, null);
         self::log($me, $mb, 'hat in ' . $mb['email'] . ' den Ordner „' . $f['name'] . '“ gelöscht');
         return self::folders($me, $address, true);
     }

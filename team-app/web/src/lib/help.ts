@@ -316,12 +316,12 @@ export const HELP: HelpArticle[] = [
     category: 'postfach',
     title: 'Ordner anlegen und Mails einsortieren',
     intro: 'Wie in Outlook: eigene Ordner und Unterordner. Sie gelten auch in Outlook, Apple Mail und am iPhone.',
-    keywords: 'ordner unterordner verschieben sortieren outlook archiv',
+    keywords: 'ordner unterordner verschieben sortieren outlook archiv umbenennen liegt in',
     steps: [
       '**Postfach** öffnen. Am Computer stehen die Ordner links, am Handy oben über **Ordner**.',
       'Beim Postfach auf **Neuer Ordner** tippen, Namen eingeben, bei **Liegt in** ggf. einen übergeordneten Ordner wählen → **Anlegen**.',
       'Eine Mail einsortieren: bei der Mail auf **Verschieben** tippen und den Ordner wählen. Gibt es ihn noch nicht: Namen eingeben → **Anlegen & verschieben**.',
-      'Umbenennen oder löschen: beim Ordner auf den **Stift**. Löschen geht nur, wenn der Ordner leer ist.',
+      'Umbenennen, in einen anderen Ordner verschieben oder löschen: beim Ordner auf den **Stift**. Unter **Liegt in** den neuen Ort wählen (oder **Oberste Ebene**) → **Speichern**. Unterordner und Mails wandern mit, auch auf dem Mailserver. Löschen geht nur, wenn der Ordner leer ist.',
       'Einen Ordner öffnen: antippen. Mit der Suche findest du Absender, Empfänger und Betreff.',
     ],
     problems: [
@@ -330,6 +330,33 @@ export const HELP: HelpArticle[] = [
         a: 'Richtig so: Sie liegt jetzt im Ordner (auch in Outlook). Zurück geht es über **Verschieben → Posteingang**.',
       },
       { q: 'Ein Ordner fehlt', a: 'Beim Postfach auf das Neu-laden-Symbol tippen. Ordner aus Outlook erscheinen nach bis zu 5 Minuten.' },
+      {
+        q: '„In … lassen sich keine Ordner ablegen“',
+        a: 'In Gesendet, Entwürfe, Spam und Papierkorb legt die App keine Ordner ab. Posteingang, Archiv und eigene Ordner gehen.',
+      },
+    ],
+    open: { to: '/postfach', label: 'Postfach' },
+  },
+  {
+    id: 'reihenfolge',
+    category: 'postfach',
+    title: 'Postfächer und Ordner anordnen',
+    intro: 'Eigene Reihenfolge für eure Postfächer (z. B. support@ vor info@) und für die Ordner darin.',
+    keywords: 'reihenfolge anordnen sortieren ziehen pfeile postfächer ordner oben unten',
+    steps: [
+      '**Postfach** öffnen, links ganz unten (am Handy unter **Ordner**) auf **Reihenfolge ändern** tippen.',
+      'Am Computer die Zeile am Griff ⠿ an die neue Stelle ziehen. Am Handy mit den Pfeilen ↑ ↓ verschieben.',
+      'Oben stehen die **Postfächer**. Ihre Reihenfolge gilt nur für dich, auf all deinen Geräten: im Postfach, in der Übersicht und in den Einstellungen.',
+      'Darunter die **Ordner** jedes Postfachs. Posteingang, Gesendet & Co. bleiben fest oben, eigene Ordner sortierst du je Ebene. Diese Reihenfolge sieht das ganze Team.',
+      '**Fertig** tippen. Gespeichert wird sofort bei jeder Änderung.',
+      'Die Reihenfolge der Postfächer geht auch unter **Einstellungen → Reihenfolge der Postfächer**.',
+    ],
+    problems: [
+      {
+        q: 'In Outlook oder am iPhone stehen die Ordner anders',
+        a: 'Der Mailserver kennt keine Reihenfolge. Outlook und Apple Mail sortieren selbst (meist alphabetisch). Die Reihenfolge gilt in der Team-App.',
+      },
+      { q: 'Am Computer lässt sich nichts ziehen', a: 'Die Pfeile funktionieren überall. Ziehen geht mit der Maus oder dem Trackpad.' },
     ],
     open: { to: '/postfach', label: 'Postfach' },
   },
@@ -472,6 +499,7 @@ export const HELP: HelpArticle[] = [
       '`app.perfumecloud.de` einmal öffnen. Der Club ergänzt die Datenbank selbst.',
       'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.4.0“.',
       'Mit 1.4 gelten die neuen Punkte-Regeln: vier Stufen nach dem Einkaufswert seit dem Beitritt, Punkte sofort gutgeschrieben und 14 Tage nach der Bestellung einlösbar, Erinnerungen 60 und 30 Tage vor dem Verfall. Bisherige Stufen bleiben erhalten, die Umstellung verschickt keine Mitteilungen.',
+      'Punkte im Warenkorb einlösen: einmal den **App-Proxy** in der Shopify-App einrichten und das neue Theme unveröffentlicht hochladen, prüfen und dann veröffentlichen (Anleitung `docs/KUNDEN-APP.md`, **Update 1.3.2 → 1.4**).',
     ],
     problems: [
       {

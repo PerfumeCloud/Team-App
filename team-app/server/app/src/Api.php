@@ -159,7 +159,13 @@ final class Api
             }],
             ['PATCH', '/mail/folders', static function () {
                 $b = Http::body();
-                return MailFolders::rename(Auth::require(), (string) ($b['box'] ?? ''), (string) ($b['path'] ?? ''), $b['name'] ?? '');
+                // parent fehlt = bleibt, wo er ist; '' oder null = oberste Ebene; sonst Pfad des neuen Elternordners
+                $parent = array_key_exists('parent', $b) ? (is_string($b['parent']) ? $b['parent'] : '') : null;
+                return MailFolders::rename(Auth::require(), (string) ($b['box'] ?? ''), (string) ($b['path'] ?? ''), $b['name'] ?? '', $parent);
+            }],
+            ['PUT', '/mail/folders/order', static function () {
+                $b = Http::body();
+                return MailFolders::sort(Auth::require(), (string) ($b['box'] ?? ''), is_string($b['parent'] ?? null) ? $b['parent'] : '', is_array($b['paths'] ?? null) ? $b['paths'] : []);
             }],
             ['POST', '/mail/folders/delete', static function () {
                 $b = Http::body();
@@ -684,6 +690,9 @@ final class Api
             if (isset($b['prefs']['weeklyMail'])) {
                 $prefs['weeklyMail'] = (bool) $b['prefs']['weeklyMail'];
             }
+            if (isset($b['prefs']['mailboxOrder'])) {
+                $prefs['mailboxOrder'] = Auth::mailboxOrder($b['prefs']['mailboxOrder']);
+            }
             $row['prefs'] = Util::json($prefs);
         }
         if (!empty($b['newPassword'])) {
@@ -693,6 +702,7 @@ final class Api
             $row['password_hash'] = Auth::hashPassword((string) $b['newPassword']);
         }
         Db::update('users', $row, ['id' => $me['id']]);
+        MailJob::forgetOrder($me['id']);
         $u = Db::one('SELECT * FROM users WHERE id = ?', [$me['id']]);
         return ['user' => Auth::publicUser($u), 'prefs' => Auth::prefs($u)];
     }

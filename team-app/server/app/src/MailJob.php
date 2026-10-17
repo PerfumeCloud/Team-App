@@ -50,10 +50,39 @@ final class MailJob
         return $out;
     }
 
-    /** Postfächer, die diese Person sehen darf. */
+    /** @var array<string, string[]> Reihenfolge je Person, einmal pro Aufruf gelesen */
+    private static array $order = [];
+
+    /** Postfächer, die diese Person sehen darf – in ihrer eigenen Reihenfolge (ab 1.9). */
     public static function visibleMailboxes(string $userId): array
     {
-        return array_values(array_filter(self::mailboxes(), static fn ($m) => !$m['visible_to'] || in_array($userId, $m['visible_to'], true)));
+        $list = array_values(array_filter(self::mailboxes(), static fn ($m) => !$m['visible_to'] || in_array($userId, $m['visible_to'], true)));
+        if (!isset(self::$order[$userId])) {
+            $u = Db::one('SELECT prefs FROM users WHERE id = ?', [$userId]);
+            self::$order[$userId] = $u ? Auth::prefs($u)['mailboxOrder'] : [];
+        }
+        return self::sortBy($list, self::$order[$userId]);
+    }
+
+    /** Nach der gespeicherten Reihenfolge (Adressen); was dort fehlt, folgt dahinter wie eingerichtet. */
+    public static function sortBy(array $list, array $order): array
+    {
+        if (!$order) {
+            return $list;
+        }
+        $pos = array_flip($order);
+        $keyed = [];
+        foreach ($list as $i => $m) {
+            $keyed[] = [$pos[$m['email']] ?? 1000 + $i, $m];
+        }
+        usort($keyed, static fn ($a, $b) => $a[0] <=> $b[0]);
+        return array_column($keyed, 1);
+    }
+
+    /** Nach dem Speichern einer neuen Reihenfolge im selben Aufruf nicht die alte nehmen. */
+    public static function forgetOrder(string $userId): void
+    {
+        unset(self::$order[$userId]);
     }
 
     /** @return string[] Adressen der Postfächer, die diese Person sehen darf. */

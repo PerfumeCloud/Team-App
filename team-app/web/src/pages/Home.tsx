@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { ArrowRight, ArrowUp, BellRing, CalendarDays, CircleCheck, Download, Inbox, Lightbulb, ListChecks, Mail, PlugZap, ShoppingBag, Truck, UserPlus, X } from 'lucide-react';
 import { Sparkline, StatTile, Trend } from '../components/charts';
 import { TaskCard } from '../components/tasks';
+import { boxLabel } from '../components/mail-folders';
 import { EventRow, SpecialRow } from '../components/events';
 import { addDaysIso, agenda, dayLabel, specialsBetween } from '../lib/calendar';
 import { Avatar, Button, Chip, cx, IconButton, SectionHeader } from '../components/ui';
@@ -165,7 +166,7 @@ export default function Home() {
           label="Wichtige Mails"
           icon={<Inbox className="h-4 w-4" />}
           value={meta?.mailConfigured ? openImportantCount(emailsMap) : '–'}
-          sub={meta?.mailConfigured ? (meta.myMailbox ? 'offen · Team & dein Postfach' : 'offen in info@ & support@') : 'Postfächer nicht verbunden'}
+          sub={meta?.mailConfigured ? `offen in ${meta.mailboxes.map((b) => boxLabel(b, meta.myMailbox)).join(', ')}` : 'Postfächer nicht verbunden'}
           onClick={() => navigate('/postfach')}
         />
         <StatTile

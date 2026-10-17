@@ -178,6 +178,8 @@ final class Auth
             'signature' => null,
             // Wochenrückblick zusätzlich an die eigene Adresse
             'weeklyMail' => false,
+            // Eigene Reihenfolge der Postfächer (Adressen), gilt in Postfach, Übersicht und Einstellungen (ab 1.9)
+            'mailboxOrder' => [],
         ];
         $p = json_decode((string) ($u['prefs'] ?? ''), true);
         if (!is_array($p)) {
@@ -187,6 +189,19 @@ final class Auth
         $p['mailScope'] = in_array($p['mailScope'] ?? null, ['all', 'everything', 'important'], true) ? $p['mailScope'] : $defaults['mailScope'];
         $p['signature'] = is_string($p['signature'] ?? null) ? $p['signature'] : null;
         $p['weeklyMail'] = (bool) ($p['weeklyMail'] ?? false);
+        $p['mailboxOrder'] = self::mailboxOrder($p['mailboxOrder'] ?? []);
         return $p;
+    }
+
+    /** @return string[] Adressen in Kleinschreibung, ohne Doppelte, höchstens 50 */
+    public static function mailboxOrder(mixed $list): array
+    {
+        $out = [];
+        foreach (is_array($list) ? $list : [] as $a) {
+            if (is_string($a) && ($a = mb_strtolower(trim($a))) !== '' && strlen($a) <= 190 && !in_array($a, $out, true)) {
+                $out[] = $a;
+            }
+        }
+        return array_slice($out, 0, 50);
     }
 }

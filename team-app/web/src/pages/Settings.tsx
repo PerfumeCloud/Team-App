@@ -33,6 +33,7 @@ import { PageHeader } from '../components/AppShell';
 import { Section } from '../components/section';
 import { InstagramIcon } from '../components/instagram-icon';
 import { InstagramSection } from '../components/instagram-settings';
+import { MailboxOrderList } from '../components/mail-folders';
 import { CustomerTest, ReportsPanel, SignatureSection, TemplatesPanel } from './SettingsMore';
 import { Avatar, Button, Chip, cx, IconButton, LinkButton, Segmented, Spinner, Toggle } from '../components/ui';
 import { api, ApiError } from '../lib/api';
@@ -164,6 +165,7 @@ function General() {
       </Section>
 
       <MyMailboxSection />
+      <MailboxOrderSection />
       <PushSection prefs={prefs} onPrefs={(p) => saveProfile({ prefs: p })} />
       <SignatureSection prefs={prefs} onPrefs={(p) => saveProfile({ prefs: p })} />
       <InstallSection />
@@ -1435,6 +1437,20 @@ function MyMailboxSection() {
           <p className="text-[12px] text-ink-3">Server und Passwort stehen bei netcup unter E-Mail → deine Adresse. Die App liest nur – sie markiert nichts als gelesen und löscht nichts.</p>
         </form>
       )}
+    </Section>
+  );
+}
+
+/** Eigene Reihenfolge der Postfächer (ab 1.9) – dieselbe wie unter „Anordnen“ im Postfach. */
+function MailboxOrderSection() {
+  const meta = useStore((s) => s.meta);
+  if (!meta || meta.mailboxes.length < 2) return null;
+  return (
+    <Section
+      title="Reihenfolge der Postfächer"
+      description="Am Computer ziehen, am Handy mit den Pfeilen. Gilt nur für dich – im Postfach, in der Übersicht und auf all deinen Geräten."
+    >
+      <MailboxOrderList boxes={meta.mailboxes} myMailbox={meta.myMailbox} full />
     </Section>
   );
 }

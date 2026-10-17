@@ -13,7 +13,8 @@ export default defineConfig({
       injectRegister: false,
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,woff2,png,svg,jpg,webp}'],
-        globIgnores: ['**/*cyrillic*', '**/*greek*', '**/*vietnamese*', '**/*.woff', '**/icon-maskable-512.png'],
+        // Dünen-Hintergründe gibt es in mehreren Größen: nicht alle vorab laden, sondern nur die passende (siehe sw.ts)
+        globIgnores: ['**/*cyrillic*', '**/*greek*', '**/*vietnamese*', '**/*.woff', '**/icon-maskable-512.png', '**/wueste-*'],
       },
       manifest: {
         name: 'Perfume Cloud Club',

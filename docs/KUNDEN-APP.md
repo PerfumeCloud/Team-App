@@ -5,9 +5,9 @@ Die Club-App ist eine **Web-App** für eure Kundinnen und Kunden unter `https://
 **Was Kundinnen und Kunden damit machen:**
 - mit dem **Perfume-Cloud-Kundenkonto** anmelden (dasselbe Konto wie im Shop, Code per E-Mail statt Passwort; neue Konten entstehen dabei automatisch)
 - dem **Club beitreten** und **Treuepunkte** sammeln: 1 Punkt je Euro Warenwert, 50 Punkte Willkommensbonus
-- in den **Stufen Bronze, Silber und Gold** aufsteigen: mehr Punkte je Euro und eigene Vorteile je Stufe
+- in den **Stufen Bronze, Silber, Gold und Platin** aufsteigen (ab 1.4 nach dem Einkaufswert seit dem Beitritt): mehr Punkte je Euro und eigene Vorteile je Stufe
 - **Bonuspunkte** bekommen: Geburtstag, Newsletter, Bewertung, Freunde einladen (beide bekommen Punkte), Startbonus für die Warteliste, doppelte Punkte in Aktionszeiträumen
-- Punkte als **Rabattcode** einlösen (100 Punkte = 5 €), Code mit einem Tipp im Shop hinterlegen
+- Punkte **direkt im Warenkorb** des Shops einlösen (100 Punkte = 5 €, ab 1.4, Teil N; bis 1.3 als Rabattcode aus der App)
 - **Bestellungen verfolgen**: Status, Zeitleiste, Sendungsnummer mit Link, Artikel, Punkte je Bestellung
 - **Push-Mitteilungen** bekommen: Paket unterwegs, Punkte gutgeschrieben oder abgezogen (mit Grund), Prämie bereit, Punkte verfallen bald, neue Düfte
 - **Feedback** geben (Gut / Neutral / Schlecht, optional mit Text), es geht an info@
@@ -79,6 +79,28 @@ Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungsl
 3. **Shopify-Rechte prüfen** (Teil B, Schritt 2): Für Befragung und Empfehlungslinks braucht die App **Name und E-Mail** zu Bestellungen (geschützte Kundendaten). Fehlt die Freigabe, laufen Punkte und alles andere weiter, nur steht auf der **Übersicht** ein roter Hinweis.
 4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort die **Testbestellung**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
+
+## Update 1.3.2 → 1.4 (vier Stufen, Punkte im Warenkorb, Club auf der Startseite)
+
+Alle Punkte, Mitglieder und Codes bleiben erhalten. Die Umstellung schickt **keine** Mitteilungen. Wer nach den alten Regeln schon Silber oder Gold hatte, behält die Stufe.
+
+1. Neue **`perfumecloud-club-upload.zip`** nach `app.perfumecloud.de/httpdocs` hochladen, „Vorhandene Dateien ersetzen“, dann `https://app.perfumecloud.de/admin` einmal öffnen. Die App ergänzt die Datenbank und rechnet Stufen und Punkte nach den neuen Regeln neu.
+2. Die Team-App auf **1.9** bringen (ANLEITUNG.md, „Update auf Version 1.9“). Unter **Einstellungen → Integrationen → Members Club** → **Speichern & testen** steht dann „Version 1.4.0“.
+3. Club-Admin → **Einstellungen** durchsehen, vor allem **Mitgliedschaftsstufen**: Bronze, Silber ab 200 €, Gold ab 500 €, Platin ab 1.000 € (3 Punkte je Euro) mit den Vorteilen, dazu 14 Tage bis zum Einlösen und die Erinnerungen 60 und 30 Tage vor dem Verfall. Einmal **Speichern**, damit die Zahlen im Shop-Metafeld landen.
+4. Optional: Club-Admin → **Einstellungen → Warteliste und Startbonus** → **Höchstzahl** eintragen (0 = unbegrenzt). Ist die Liste voll, zeigt der Shop einen Hinweis statt des Formulars, Restplätze werden nicht angezeigt.
+5. **App-Proxy** einrichten, damit Punkte im Warenkorb eingelöst werden können: **Teil N**, Schritte 1–6.
+6. **Theme:** Shopify-Admin → **Onlineshop → Themes** → **Theme hinzufügen → ZIP-Datei hochladen** → `perfume-cloud-theme-club-1.4.zip`. Das Theme bleibt **unveröffentlicht**. In der **Vorschau** prüfen: Startseite mit „Club auf der Startseite“ (als Gast und angemeldet), Warenkorb mit **Club-Punkte einlösen**, `/pages/club`, Handy und Computer. Veröffentlichen erst, wenn alles passt. Habt ihr seit dem Hochladen der Vorlage im Live-Theme etwas im Editor geändert, vorher abgleichen.
+7. **Teilnahmebedingungen:** Der Entwurf mit den neuen Regeln liegt in [TEILNAHMEBEDINGUNGEN-ENTWURF-1.4.md](TEILNAHMEBEDINGUNGEN-ENTWURF-1.4.md). Erst nach eurer Freigabe ersetzt er die gültige Fassung und kommt auf die Shopify-Seite (Teil E).
+8. Team-App → **Members Club → Testbestellung** einmal durchspielen. Der Push-Check soll grün sein.
+
+**Was sich für Mitglieder ändert:**
+- **Vier Stufen** mit eigenen Metallfarben (Bronze, Silber, Gold, Platin). Die Stufe richtet sich nach dem Einkaufswert seit dem Beitritt und bleibt, nur Storno oder Rückgabe kann sie wieder senken.
+- **Punkte sofort:** Gutgeschrieben mit der Bestellung, einlösbar 14 Tage danach. Die App zeigt gesperrte Punkte mit Datum. Storno und Rückgabe ziehen sie wieder ab.
+- **„Was sind meine Punkte wert?“** erklärt in der App Punkte je Stufe und Gegenwert.
+- **Einlösen im Warenkorb** statt Rabattcode. Offene Codes bleiben gültig, bis sie ablaufen.
+- **Erinnerungen** 60 und 30 Tage vor dem Verfall, per Push und in der App (keine E-Mail).
+- **Bewertungsbonus** nur noch einmal je Mitglied. Der **Einladungsbonus** für das werbende Mitglied kommt erst mit der ersten Bestellung der neuen Person.
+- Club-App und Club-Bereiche im Shop in **hoher Auflösung** (schärfere Dünen- und Kartenbilder, feinere Linien auf Retina-Bildschirmen).
 
 ## Update 1.3.1 → 1.3.2 (kein Admin-Knopf für Kunden, Grund bei der Admin-Anmeldung, Push bei der Testbestellung)
 

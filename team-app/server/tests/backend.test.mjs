@@ -608,6 +608,13 @@ test('Persönliche Postfächer: nur wer darf, sieht Mails und bekommt Push', asy
   assert.equal(ks.data.emails.filter((e) => e.mailbox === 'marius.heub@perfumecloud.de').length, 0);
   assert.deepEqual(ks.data.meta.mailboxes, ['support@perfumecloud.de', 'kim@perfumecloud.de']);
   assert.equal(ks.data.meta.myMailbox, 'kim@perfumecloud.de');
+  // Eigene Reihenfolge der Postfächer: nur für Kim, Doppeltes und Unsinn fällt weg
+  const order = await kim.req('PUT', '/me', { prefs: { mailboxOrder: ['Kim@PerfumeCloud.de', 'kim@perfumecloud.de', 7, 'support@perfumecloud.de'] } });
+  assert.deepEqual(order.data.prefs.mailboxOrder, ['kim@perfumecloud.de', 'support@perfumecloud.de']);
+  assert.deepEqual((await kim.req('GET', '/sync?since=0')).data.meta.mailboxes, ['kim@perfumecloud.de', 'support@perfumecloud.de']);
+  assert.equal((await kim.req('GET', '/sync?since=0')).data.meta.mailboxes.length, 2);
+  assert.equal((await admin.req('GET', '/sync?since=0')).data.meta.mailboxes[0], 'support@perfumecloud.de', 'die anderen behalten ihre');
+  assert.deepEqual((await kim.req('PUT', '/me', { prefs: { mailboxOrder: [] } })).data.prefs.mailboxOrder, []);
   const ms = await admin.req('GET', '/sync?since=0');
   assert.equal(ms.data.emails.filter((e) => e.mailbox === 'kim@perfumecloud.de').length, 0);
 
@@ -1569,6 +1576,41 @@ test('Postfach-Ordner wie in Outlook: Gesendet, eigene Ordner, einsortieren, zur
   r = await kim.req('POST', '/mail/folders/delete', { box, path: 'Kunden.Retouren' });
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.ok(!r.data.folders.some((f) => f.path.startsWith('Kunden.Re')));
+
+  // Reihenfolge wie in Apple Mail: Posteingang, Gesendet … bleiben oben, eigene Ordner in der gewählten Folge
+  const names = (d) => d.folders.map((f) => `${'  '.repeat(f.depth)}${f.name}`);
+  r = await kim.req('PUT', '/mail/folders/order', { box, parent: '', paths: ['R&APw-ckfragen', 'Lieferanten', 'Kunden'] });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(names(r.data), ['Posteingang', 'Gesendet', 'Papierkorb', 'Rückfragen', 'Lieferanten', 'Kunden', '  Stammkunden']);
+  assert.equal((await kim.req('PUT', '/mail/folders/order', { box, parent: '', paths: ['Kunden', 'Lieferanten'] })).status, 422, 'Liste unvollständig');
+  assert.equal((await kim.req('PUT', '/mail/folders/order', { box, parent: '', paths: ['Sent', 'R&APw-ckfragen', 'Lieferanten', 'Kunden'] })).status, 422);
+  r = await admin.req('GET', `/mail/folders?box=${encodeURIComponent(box)}`);
+  assert.deepEqual(names(r.data).slice(3, 6), ['Rückfragen', 'Lieferanten', 'Kunden'], 'gilt fürs ganze Team');
+
+  // In einen anderen Ordner verschieben – auf dem Mailserver, mit allen Mails
+  r = await kim.req('PATCH', '/mail/folders', { box, path: 'Lieferanten', name: 'Lieferanten', parent: 'Kunden' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.renamed, 'Kunden.Lieferanten');
+  assert.deepEqual(names(r.data).slice(3), ['Rückfragen', 'Kunden', '  Lieferanten', '  Stammkunden']);
+  assert.equal((await kim.req('PATCH', '/mail/folders', { box, path: 'Kunden', name: 'Kunden', parent: 'Kunden.Lieferanten' })).status, 422, 'nicht in den eigenen Unterordner');
+  assert.match((await kim.req('PATCH', '/mail/folders', { box, path: 'Kunden', name: 'Kunden', parent: 'Sent' })).data.error, /keine Ordner ablegen/);
+  assert.equal((await kim.req('PATCH', '/mail/folders', { box, path: 'Kunden', name: 'Kunden', parent: 'Gibts.Nicht' })).status, 404);
+  assert.equal((await kim.req('PATCH', '/mail/folders', { box, path: 'Kunden.Lieferanten', name: 'Stammkunden' })).status, 409);
+
+  // Umbenennen mit Unterordnern: die wandern mit (samt Mails, weiter abonniert), der Platz bleibt
+  r = await kim.req('PATCH', '/mail/folders', { box, path: 'Kunden', name: 'Kundschaft' });
+  assert.equal(r.data.renamed, 'Kundschaft');
+  assert.deepEqual(names(r.data).slice(3), ['Rückfragen', 'Kundschaft', '  Lieferanten', '  Stammkunden']);
+  assert.ok(imapEvents.some((e) => e.kind === 'FOLDER' && e.cmd === 'SUBSCRIBE' && e.names[0] === 'Kundschaft.Stammkunden'));
+  assert.equal((await kim.req('GET', `/mail/folder?${q('Kundschaft.Stammkunden')}`)).data.total, 1);
+
+  // Zurück auf die oberste Ebene: hinten angestellt
+  r = await kim.req('PATCH', '/mail/folders', { box, path: 'Kundschaft.Lieferanten', name: 'Lieferanten', parent: '' });
+  assert.equal(r.data.renamed, 'Lieferanten');
+  assert.deepEqual(names(r.data).slice(3), ['Rückfragen', 'Kundschaft', '  Stammkunden', 'Lieferanten']);
+  r = await kim.req('PATCH', '/mail/folders', { box, path: 'Kundschaft', name: 'Kunden' });
+  assert.deepEqual(names(r.data).slice(3), ['Rückfragen', 'Kunden', '  Stammkunden', 'Lieferanten']);
+  assert.ok(helper('sql', "SELECT COUNT(*) AS n FROM activity WHERE type = 'mail_folder' AND text LIKE '%verschoben%'")[0].n >= 2);
   assert.ok(helper('sql', "SELECT COUNT(*) AS n FROM activity WHERE type = 'mail_folder'")[0].n >= 2, 'im Verlauf des Teams');
 });
 

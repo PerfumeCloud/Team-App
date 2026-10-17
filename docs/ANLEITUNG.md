@@ -19,6 +19,7 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 | **O – Postfach: Ordner, Gesendet, Erledigt** | alle | zum Nachlesen |
 | **P – Hilfe in der App** | alle | – |
 | **Update auf 1.8** | Marius, wenn die App schon läuft | ca. 10 Min. |
+| **Update auf 1.9** | Marius, zusammen mit Members Club 1.4 | ca. 10 Min. |
 
 **Bereitlegen:**
 - Zugang zum netcup **Customer Control Panel (CCP)**: <https://www.customercontrolpanel.de>
@@ -489,8 +490,9 @@ Aufbau der Datei (für Claude oder zum Selbermachen):
 
 ## Teil O – Postfach: Ordner, Gesendet, Erledigt
 
-- **Ordner wie in Outlook:** Im **Postfach** stehen am Computer links alle Postfächer mit ihren Ordnern, am Handy oben über **Ordner**. **Neuer Ordner** legt einen Ordner an (bei **Liegt in** auch als Unterordner), der **Stift** benennt um oder löscht (nur leere Ordner). Die Ordner liegen auf dem Mailserver: Sie erscheinen genauso in Outlook, Apple Mail und am iPhone, und Ordner von dort erscheinen in der App (nach spätestens 5 Minuten oder mit dem Neu-laden-Symbol).
+- **Ordner wie in Outlook:** Im **Postfach** stehen am Computer links alle Postfächer mit ihren Ordnern, am Handy oben über **Ordner**. **Neuer Ordner** legt einen Ordner an (bei **Liegt in** auch als Unterordner). Der **Stift** benennt um, verschiebt den Ordner in einen anderen (**Liegt in** → **Speichern**, Unterordner und Mails wandern mit) oder löscht ihn (nur leere Ordner). Die Ordner liegen auf dem Mailserver: Sie erscheinen genauso in Outlook, Apple Mail und am iPhone, und Ordner von dort erscheinen in der App (nach spätestens 5 Minuten oder mit dem Neu-laden-Symbol).
 - **Einsortieren:** Bei jeder Mail **Verschieben** (Ordner-Symbol) → Ordner wählen. Gibt es ihn noch nicht: Namen eingeben → **Anlegen & verschieben**. Die Mail verschwindet aus dem Posteingang und liegt im Ordner, auch in Outlook.
+- **Reihenfolge (ab 1.9):** Links ganz unten (am Handy unter **Ordner**) **Reihenfolge ändern**. Am Computer ziehen, am Handy mit den Pfeilen. Die Reihenfolge der **Postfächer** gilt nur für dich, auf allen deinen Geräten: im Postfach, in der Übersicht und unter **Einstellungen → Reihenfolge der Postfächer**. Die Reihenfolge der **Ordner** gilt fürs ganze Team. Posteingang, Gesendet & Co. bleiben oben. Outlook und Apple Mail sortieren weiter selbst, weil der Mailserver keine Reihenfolge kennt.
 - **Gesendet:** beim jeweiligen Postfach **Gesendet** antippen. Dort stehen alle verschickten Mails, auch Antworten aus Outlook oder vom iPhone.
 - **Erledigt:** oben im Posteingang **Erledigt**. Die App zeigt alle abgehakten Mails der letzten **6 Monate** (vorher 30 Tage), mit **Ältere anzeigen** weiter zurück. **Wieder öffnen** holt eine Mail zurück.
 - Persönliche Postfächer sieht auch hier nur die Person, der sie gehören. Ordner-Aktionen in Team-Postfächern stehen im Verlauf.
@@ -500,6 +502,19 @@ Aufbau der Datei (für Claude oder zum Selbermachen):
 Unter **Hilfe** (am Computer links im Menü, am Handy oben das **Rettungsring-Symbol**) steht zu jeder Funktion eine Schritt-für-Schritt-Anleitung: Installation auf iPhone und Computer, Push, Widget, Shopify verbinden und Berechtigungen bestätigen, Postfächer, Cronjob, Members Club verbinden und aktualisieren, Testbestellung, Instagram, Signatur, Ordner, Versand, Sicherung und Wartung. Oben suchen (z. B. „read_inventory“, „Ordner“, „Push“) oder einen Bereich wählen. Jede Anleitung hat „Wenn es nicht klappt“ mit den häufigsten Fehlern und einen Knopf direkt zur passenden Einstellung. Fehlermeldungen in der App verlinken die passende Anleitung.
 
 **Links bleiben in der App:** Links zu Shop, Shopify, Instagram oder zur Sendungsverfolgung öffnen in einem **neuen Tab**. Die installierte App bleibt dabei offen, auf dem Handy wie am Computer.
+
+## Update auf Version 1.9 (Members Club 1.4, Postfächer und Ordner anordnen)
+
+Gehört zum Members Club **1.4**: Die Team-App 1.9 erwartet den Club in Version 1.4.0. Am besten beides nacheinander aufspielen. Alle Daten bleiben erhalten.
+
+1. Neue **`perfumecloud-team-app-upload.zip`** hochladen und mit „Vorhandene Dateien ersetzen“ entpacken. Unter **Einstellungen** steht ganz unten „Version 1.9.0“.
+2. Members Club auf **1.4** bringen: [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.3.2 → 1.4** (mit App-Proxy und neuem Theme).
+3. **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: „Version 1.4.0“.
+4. Auf iPhones die App einmal ganz schließen und neu öffnen, damit die neue Version lädt.
+
+**Neu im Postfach:**
+- **Reihenfolge ändern:** eigene Reihenfolge der Postfächer (nur für dich) und der Ordner (fürs Team), am Computer ziehen, am Handy mit Pfeilen (Teil O).
+- **Ordner verschieben** wie in Apple Mail: Stift → **Liegt in** → **Speichern**. Das ändert die Ordner auch auf dem Mailserver, also in Outlook und am iPhone.
 
 ## Update auf Version 1.8.2 (Push-Check bei der Testbestellung)
 

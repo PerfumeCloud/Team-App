@@ -323,6 +323,15 @@ final class Imap
         }
     }
 
+    /** Ordner abonnieren (Outlook und iPhone zeigen oft nur abonnierte); Fehler sind egal. */
+    public function subscribe(string $folder): void
+    {
+        try {
+            $this->command('SUBSCRIBE ' . self::quote($folder));
+        } catch (\RuntimeException) {
+        }
+    }
+
     public function deleteFolder(string $folder): void
     {
         try {

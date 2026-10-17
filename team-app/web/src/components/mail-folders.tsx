@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent, type HTMLAttributes, type ReactNode } from 'react';
 import {
   Archive,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Folder,
   FolderInput,
   FolderPlus,
+  GripVertical,
   Inbox as InboxIcon,
   Lock,
   Paperclip,
@@ -22,7 +26,9 @@ import { Button, cx, EmptyState, IconButton, Sheet, Spinner } from './ui';
 import { api } from '../lib/api';
 import { relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
+import { useStore } from '../lib/store';
 import { toast } from '../lib/toast';
+import type { Prefs, User } from '../lib/types';
 
 // ---------------- Typen ----------------
 
@@ -124,6 +130,170 @@ export function useFolders(box: string | null) {
   return { list: box ? (cache.get(box) ?? null) : null, error, reload: () => box && loadFolders(box, true).catch((e) => toast((e as Error).message, 'error')) };
 }
 
+// ---------------- Anordnen: am Computer ziehen, am Handy Pfeile ----------------
+
+export function moved<T>(list: T[], from: number, to: number): T[] {
+  const out = [...list];
+  const [x] = out.splice(from, 1);
+  out.splice(to, 0, x);
+  return out;
+}
+
+// Was gerade gezogen wird – dataTransfer lässt sich beim Drüberziehen nicht lesen
+let dragging: { group: string; from: number } | null = null;
+const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+
+/** Ziehen mit der Maus innerhalb einer Gruppe (ein Postfach-Stapel oder eine Ordnerebene). */
+function useDragSort() {
+  const [over, setOver] = useState<{ group: string; at: number } | null>(null);
+  const can = finePointer();
+  const at = (e: DragEvent<HTMLElement>, i: number) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientY < r.top + r.height / 2 ? i : i + 1;
+  };
+  const props = (group: string, i: number, onMove: (from: number, to: number) => void): HTMLAttributes<HTMLElement> =>
+    can
+      ? {
+          draggable: true,
+          onDragStart: (e: DragEvent<HTMLElement>) => {
+            dragging = { group, from: i };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', group);
+          },
+          onDragEnd: () => {
+            dragging = null;
+            setOver(null);
+          },
+          onDragOver: (e: DragEvent<HTMLElement>) => {
+            if (dragging?.group !== group) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const a = at(e, i);
+            setOver((o) => (o?.group === group && o.at === a ? o : { group, at: a }));
+          },
+          onDrop: (e: DragEvent<HTMLElement>) => {
+            if (dragging?.group !== group) return;
+            e.preventDefault();
+            const from = dragging.from;
+            const a = at(e, i);
+            const to = a > from ? a - 1 : a;
+            dragging = null;
+            setOver(null);
+            if (to !== from) onMove(from, to);
+          },
+        }
+      : {};
+  const line = (group: string, i: number, count: number): 'before' | 'after' | null =>
+    over?.group !== group ? null : over.at === i ? 'before' : over.at === count && i === count - 1 ? 'after' : null;
+  return { props, line, can };
+}
+
+function SortRow({
+  label,
+  hint,
+  icon,
+  depth = 0,
+  index,
+  count,
+  line,
+  drag,
+  disabled,
+  onMove,
+}: {
+  label: string;
+  hint?: string;
+  icon: ReactNode;
+  depth?: number;
+  index: number;
+  count: number;
+  line: 'before' | 'after' | null;
+  drag: HTMLAttributes<HTMLElement>;
+  disabled?: boolean;
+  onMove: (from: number, to: number) => void;
+}) {
+  return (
+    <div
+      {...drag}
+      style={{ paddingLeft: 4 + depth * 16 }}
+      className={cx(
+        'relative flex min-h-[44px] items-center gap-2 rounded-xl pr-0.5 text-[14px] text-ink hover:bg-surface-2/70 md:min-h-[40px]',
+        !!drag.draggable && 'cursor-grab active:cursor-grabbing',
+      )}
+    >
+      {line && <span className={cx('pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-accent', line === 'before' ? '-top-px' : '-bottom-px')} />}
+      {drag.draggable ? <GripVertical className="h-4 w-4 shrink-0 text-ink-3" /> : <span className="w-0.5" />}
+      <span className="shrink-0 text-ink-2">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {label}
+        {hint && <span className="ml-1.5 text-[12px] text-ink-3">{hint}</span>}
+      </span>
+      <IconButton
+        label={`„${label}“ nach oben`}
+        className="h-10 w-10 disabled:opacity-30 md:h-8 md:w-8"
+        disabled={disabled || index === 0}
+        onClick={() => onMove(index, index - 1)}
+      >
+        <ArrowUp className="h-4 w-4" />
+      </IconButton>
+      <IconButton
+        label={`„${label}“ nach unten`}
+        className="h-10 w-10 disabled:opacity-30 md:h-8 md:w-8"
+        disabled={disabled || index === count - 1}
+        onClick={() => onMove(index, index + 1)}
+      >
+        <ArrowDown className="h-4 w-4" />
+      </IconButton>
+    </div>
+  );
+}
+
+/** Eigene Reihenfolge der Postfächer speichern – sofort sichtbar, gilt auf allen Geräten dieser Person. */
+export async function saveMailboxOrder(order: string[]) {
+  const before = useStore.getState().meta;
+  if (before) useStore.setState({ meta: { ...before, mailboxes: order } });
+  try {
+    const r = await api<{ user: User; prefs: Prefs }>('PUT', '/me', { prefs: { mailboxOrder: order } });
+    useStore.getState().setMe(r.user, r.prefs);
+  } catch (e) {
+    const now = useStore.getState().meta;
+    if (before && now) useStore.setState({ meta: { ...now, mailboxes: before.mailboxes } });
+    toast((e as Error).message, 'error');
+  }
+}
+
+/** Postfächer sortieren – im Postfach („Anordnen“) und in den Einstellungen. */
+export function MailboxOrderList({ boxes, myMailbox, full }: { boxes: string[]; myMailbox?: string | null; full?: boolean }) {
+  const drag = useDragSort();
+  const move = (from: number, to: number) => void saveMailboxOrder(moved(boxes, from, to));
+  return (
+    <div className="space-y-0.5">
+      {boxes.map((box, i) => (
+        <SortRow
+          key={box}
+          label={full ? box : boxLabel(box, myMailbox)}
+          hint={full && box === myMailbox ? 'Mein Postfach' : undefined}
+          icon={box === myMailbox ? <Lock className="h-4 w-4" /> : <InboxIcon className="h-4 w-4" />}
+          index={i}
+          count={boxes.length}
+          line={drag.line('boxes', i, boxes.length)}
+          drag={drag.props('boxes', i, move)}
+          onMove={move}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Geschwister sofort neu ordnen (Unterordner wandern mit), bis die Antwort vom Server kommt. */
+function reorderTree(folders: MailFolder[], paths: string[], delim: string): MailFolder[] {
+  const inBlock = (p: string, f: MailFolder) => f.path === p || (delim !== '' && f.path.startsWith(p + delim));
+  const start = folders.findIndex((f) => paths.includes(f.path));
+  if (start < 0) return folders;
+  const blocks = paths.map((p) => folders.filter((f) => inBlock(p, f)));
+  const size = blocks.reduce((n, b) => n + b.length, 0);
+  return [...folders.slice(0, start), ...blocks.flat(), ...folders.slice(start + size)];
+}
+
 // ---------------- Navigation ----------------
 
 export function FolderNav({
@@ -140,9 +310,54 @@ export function FolderNav({
   onPlace: (p: Place) => void;
 }) {
   const [editing, setEditing] = useState<{ box: string; parent: string | null; folder?: MailFolder } | null>(null);
+  const [sorting, setSorting] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const shown = useRef(false);
+  // Beim Wechsel an den Anfang der Liste (am Handy steht der Knopf ganz unten im Blatt)
+  useEffect(() => {
+    if (!shown.current) return void (shown.current = true);
+    let el = navRef.current?.parentElement ?? null;
+    while (el && !(el.scrollHeight > el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+    el?.scrollTo({ top: 0 });
+  }, [sorting]);
   const isInbox = (box: string) => place.kind === 'inbox' && place.box === box;
+  if (sorting) {
+    return (
+      <nav ref={navRef} aria-label="Postfächer und Ordner anordnen" className="space-y-4">
+        <div className="flex items-center gap-2 rounded-xl bg-surface-2 py-2 pl-3 pr-2">
+          <p className="min-w-0 flex-1 text-[12px] leading-snug text-ink-2">{finePointer() ? 'Ziehen oder Pfeile nutzen.' : 'Mit den Pfeilen sortieren.'}</p>
+          <Button size="sm" onClick={() => setSorting(false)}>
+            Fertig
+          </Button>
+        </div>
+        {boxes.length > 1 && (
+          <div>
+            <p className="px-1 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">Postfächer</p>
+            <div className="mt-1">
+              <MailboxOrderList boxes={boxes} myMailbox={myMailbox} />
+            </div>
+            <p className="mt-1 px-1 text-[12px] leading-snug text-ink-3">Nur für dich – gilt auch in der Übersicht und in den Einstellungen.</p>
+          </div>
+        )}
+        {boxes.map((box) => (
+          <BoxFolders
+            key={box}
+            box={box}
+            label={boxLabel(box, myMailbox)}
+            personal={box === myMailbox}
+            place={place}
+            count={0}
+            sorting
+            onPlace={onPlace}
+            onNew={() => undefined}
+            onEdit={() => undefined}
+          />
+        ))}
+      </nav>
+    );
+  }
   return (
-    <nav aria-label="Postfächer und Ordner" className="space-y-4">
+    <nav ref={navRef} aria-label="Postfächer und Ordner" className="space-y-4">
       {boxes.length > 1 && (
         <NavItem
           active={isInbox('all')}
@@ -166,6 +381,14 @@ export function FolderNav({
           onEdit={(folder) => setEditing({ box, parent: folder.parent, folder })}
         />
       ))}
+      <button
+        type="button"
+        onClick={() => setSorting(true)}
+        title={boxes.length > 1 ? 'Postfächer und Ordner anordnen' : 'Ordner anordnen'}
+        className="flex min-h-[36px] w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-[13px] text-ink-3 hover:bg-surface-2 hover:text-ink"
+      >
+        <ArrowUpDown className="h-4 w-4 shrink-0" /> Reihenfolge ändern
+      </button>
       <FolderEditSheet edit={editing} onClose={() => setEditing(null)} onPlace={onPlace} place={place} />
     </nav>
   );
@@ -215,6 +438,7 @@ function BoxFolders({
   personal,
   place,
   count,
+  sorting,
   onPlace,
   onNew,
   onEdit,
@@ -224,13 +448,84 @@ function BoxFolders({
   personal: boolean;
   place: Place;
   count: number;
+  sorting?: boolean;
   onPlace: (p: Place) => void;
   onNew: (parent: string | null) => void;
   onEdit: (f: MailFolder) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [busy, setBusy] = useState(false);
   const { list, error, reload } = useFolders(open ? box : null);
+  const drag = useDragSort();
   const active = (f: MailFolder) => place.kind === 'folder' && place.box === box && place.path === f.path;
+  // Eigene Ordner einer Ebene; Posteingang, Gesendet & Co. stehen fest oben
+  const siblings = (parent: string) => (list?.folders ?? []).filter((f) => (f.parent ?? '') === parent && !f.special);
+
+  async function reorder(parent: string, paths: string[]) {
+    if (!list) return;
+    putFolders({ ...list, folders: reorderTree(list.folders, paths, list.delimiter) });
+    setBusy(true);
+    try {
+      putFolders(await api<FolderList>('PUT', '/mail/folders/order', { box, parent, paths }));
+    } catch (e) {
+      toast((e as Error).message, 'error');
+      void reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sorting) {
+    return (
+      <div>
+        <p className="flex items-center gap-1.5 px-1 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+          {personal && <Lock className="h-3 w-3 shrink-0" />}
+          <span className="truncate">{label}</span>
+        </p>
+        <div className="mt-1 space-y-0.5">
+          {!list && !error && (
+            <div className="px-3 py-2">
+              <Spinner />
+            </div>
+          )}
+          {error && <p className="px-3 py-1 text-[12px] text-bad">{error}</p>}
+          {list?.folders.map((f) => {
+            const parent = f.parent ?? '';
+            const sibs = f.special ? [] : siblings(parent);
+            // Fest oben (Posteingang & Co.) oder allein auf seiner Ebene: nichts zu sortieren
+            if (sibs.length < 2)
+              return (
+                <div
+                  key={f.path}
+                  style={{ paddingLeft: 10 + f.depth * 16 }}
+                  className={cx('flex min-h-[40px] items-center gap-2.5 text-[14px]', f.special ? 'text-ink-3' : 'text-ink-2')}
+                >
+                  {folderIcon(f)} <span className="truncate">{f.special === 'inbox' ? 'Posteingang' : f.name}</span>
+                </div>
+              );
+            const i = sibs.findIndex((x) => x.path === f.path);
+            const group = `${box}|${parent}`;
+            const paths = sibs.map((x) => x.path);
+            const move = (from: number, to: number) => void reorder(parent, moved(paths, from, to));
+            return (
+              <SortRow
+                key={f.path}
+                label={f.name}
+                icon={folderIcon(f)}
+                depth={f.depth}
+                index={i}
+                count={sibs.length}
+                line={drag.line(group, i, sibs.length)}
+                drag={drag.props(group, i, move)}
+                disabled={busy}
+                onMove={move}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="flex items-center gap-1 px-1">
@@ -331,8 +626,13 @@ function FolderEditSheet({
   }, [edit]);
   if (!edit) return null;
   const folder = edit.folder;
-  // Als Elternordner taugt jeder Ordner außer Gesendet & Co. (und nicht der Ordner selbst)
-  const parents = (list?.folders ?? []).filter((f) => (!f.special || f.special === 'inbox') && f.path !== folder?.path);
+  const delim = list?.delimiter ?? '';
+  const from = folder?.parent ?? '';
+  const inside = (path: string, p: string) => path === p || (delim !== '' && path.startsWith(p + delim));
+  // Als Elternordner taugt jeder Ordner außer Gesendet & Co. – und nicht der Ordner selbst oder einer seiner Unterordner
+  const parents = (list?.folders ?? []).filter(
+    (f) => (!f.special || f.special === 'inbox' || f.special === 'archive') && !(folder && inside(f.path, folder.path)),
+  );
 
   async function run(key: string, fn: () => Promise<FolderList & { created?: string; renamed?: string }>) {
     setBusy(key);
@@ -342,10 +642,13 @@ function FolderEditSheet({
       if (key === 'create' && r.created) {
         toast(`Ordner „${name.trim()}“ angelegt`, 'success');
         onPlace({ kind: 'folder', box: edit!.box, path: r.created, name: name.trim(), special: null });
-      } else if (key === 'rename' && r.renamed) {
-        toast('Umbenannt', 'success');
-        if (place.kind === 'folder' && place.path === folder?.path)
-          onPlace({ kind: 'folder', box: edit!.box, path: r.renamed, name: name.trim(), special: null });
+      } else if (key === 'rename' && r.renamed && folder) {
+        toast(parent !== from ? 'Verschoben' : 'Gespeichert', 'success');
+        // War man im Ordner (oder einem Unterordner), bleibt man dort – unter dem neuen Pfad
+        if (place.kind === 'folder' && place.box === edit!.box && inside(place.path, folder.path)) {
+          const path = r.renamed + place.path.slice(folder.path.length);
+          onPlace({ kind: 'folder', box: edit!.box, path, name: r.folders.find((x) => x.path === path)?.name ?? name.trim(), special: null });
+        }
       } else if (key === 'delete') {
         toast('Ordner gelöscht', 'success');
         if (place.kind === 'folder' && place.path === folder?.path) onPlace({ kind: 'inbox', box: edit!.box });
@@ -364,7 +667,8 @@ function FolderEditSheet({
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (folder) void run('rename', () => api('PATCH', '/mail/folders', { box: edit.box, path: folder.path, name }));
+          if (folder)
+            void run('rename', () => api('PATCH', '/mail/folders', { box: edit.box, path: folder.path, name, ...(parent !== from ? { parent } : {}) }));
           else void run('create', () => api('POST', '/mail/folders', { box: edit.box, parent: parent || null, name }));
         }}
       >
@@ -383,7 +687,7 @@ function FolderEditSheet({
             required
           />
         </label>
-        {!folder && (
+        {(!folder || delim !== '') && (
           <label className="block">
             <span className="label">Liegt in</span>
             <select className="field mt-1" value={parent} onChange={(e) => setParent(e.target.value)}>
@@ -399,7 +703,7 @@ function FolderEditSheet({
         )}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" loading={busy === 'create' || busy === 'rename'} disabled={!name.trim()}>
-            {folder ? 'Umbenennen' : 'Anlegen'}
+            {folder ? 'Speichern' : 'Anlegen'}
           </Button>
           {folder && (
             <Button
@@ -417,7 +721,10 @@ function FolderEditSheet({
           )}
         </div>
         {folder && (
-          <p className="text-[12px] text-ink-3">Löschen geht nur bei leeren Ordnern ohne Unterordner – so verschwindet nie versehentlich eine Mail.</p>
+          <p className="text-[12px] leading-relaxed text-ink-3">
+            Beim Verschieben wandern Unterordner und Mails mit. Löschen geht nur bei leeren Ordnern ohne Unterordner – so verschwindet nie versehentlich eine
+            Mail.
+          </p>
         )}
       </form>
     </Sheet>

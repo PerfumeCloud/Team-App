@@ -9,7 +9,7 @@ import { boni, einloesenText, sammelText, verfallText, warenkorbText, wartenText
 import { einladung } from '../lib/einladung';
 import { AktionBanner, BoniListe, StufenListe } from '../components/Club';
 import type { Me, Points, Program } from '../lib/types';
-import { Duenen, flakon, Hb, Hinweis, PunkteKarte, Toaster } from '../components/ui';
+import { Duenen, flakon, flakonSrcSet, Hb, Hinweis, PunkteKarte, Toaster } from '../components/ui';
 import { Logo } from '../components/Shell';
 
 const STANDARD: Program = {
@@ -148,8 +148,8 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
               </div>
             </div>
             <div className="vorschau" aria-hidden="true">
-              <PunkteKarte points={beispiel(program)} program={program} />
-              <img className="schwebe" src={flakon} alt="" />
+              <PunkteKarte points={beispiel(program)} program={program} klein />
+              <img className="schwebe" src={flakon} srcSet={flakonSrcSet} alt="" />
             </div>
           </section>
 

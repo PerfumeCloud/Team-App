@@ -176,6 +176,8 @@ export interface Prefs {
   weeklyMail?: boolean;
   /** Push für Mails: jede neue, wirklich alle (auch Newsletter) oder nur wichtige. */
   mailScope?: 'all' | 'everything' | 'important';
+  /** Eigene Reihenfolge der Postfächer (Adressen) – ab 1.9 */
+  mailboxOrder?: string[];
 }
 
 export interface MyMailbox {

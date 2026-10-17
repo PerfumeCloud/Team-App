@@ -2,7 +2,7 @@
    Nur Farben aus der Theme-Palette (Elfenbein, Holz, Amber), feste 1px-Linien statt Schatten für scharfe Kanten. */
 
 /* ===== Zeile „Mit dieser Bestellung sammelst du 59 Punkte“ ===== */
-.club-punkte{display:flex;align-items:flex-start;gap:.75rem;width:100%;padding:.9rem 1rem;border:1px solid rgba(128,86,47,.35);border-radius:1rem;background:rgba(255,255,255,.45);color:var(--amber,#232120)}
+.club-punkte{display:flex;align-items:flex-start;gap:.75rem;width:100%;padding:.9rem 1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);border-radius:1rem;background:rgba(255,255,255,.45);color:var(--amber,#232120)}
 .club-punkte[hidden]{display:none}
 .club-punkte-zeichen{width:1.25rem;height:1.25rem;flex:none;margin-top:.15rem;fill:var(--wood,#80562F)}
 .club-punkte-text{display:grid;gap:.15rem;min-width:0}
@@ -27,9 +27,9 @@
 .warenkorb[aria-busy="true"] .warenkorb-raster{opacity:.55;pointer-events:none;transition:opacity .2s}
 .warenkorb-raster{display:grid;gap:clamp(1.5rem,4vw,2.5rem);width:100%}
 @media (min-width:900px){.warenkorb-raster{grid-template-columns:minmax(0,1fr) 21rem;align-items:start}}
-.warenkorb-liste{list-style:none;margin:0;padding:0;display:grid;border-top:1px solid rgba(35,33,32,.22)}
-.warenkorb-zeile{display:grid;grid-template-columns:4.5rem minmax(0,1fr) auto;gap:.6rem 1rem;align-items:center;padding:1rem 0;border-bottom:1px solid rgba(35,33,32,.22)}
-.warenkorb-bild{width:4.5rem;height:4.5rem;border-radius:.9rem;overflow:hidden;background:var(--carbon,#DDD3C5);border:1px solid rgba(35,33,32,.14)}
+.warenkorb-liste{list-style:none;margin:0;padding:0;display:grid;border-top:var(--haar,1px) solid rgba(35,33,32,.22)}
+.warenkorb-zeile{display:grid;grid-template-columns:4.5rem minmax(0,1fr) auto;gap:.6rem 1rem;align-items:center;padding:1rem 0;border-bottom:var(--haar,1px) solid rgba(35,33,32,.22)}
+.warenkorb-bild{width:4.5rem;height:4.5rem;border-radius:.9rem;overflow:hidden;background:var(--carbon,#DDD3C5);border:var(--haar,1px) solid rgba(35,33,32,.14)}
 .warenkorb-bild img{width:100%;height:100%;object-fit:cover}
 .warenkorb-name{display:grid;gap:.1rem;min-width:0}
 .warenkorb-name a{text-decoration:none;font-style:italic;font-size:1.1875rem;line-height:1.2}
@@ -58,33 +58,33 @@
 .club-kopfzeile{display:grid;gap:.9rem;max-width:44rem}
 .club-kopfzeile h2{font-size:clamp(2.5rem,1.5rem + 3.6vw,4.4rem);line-height:1}
 .club-kopfzeile p{font-size:1.1875rem}
-.club-aktion-band{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.8rem 1.1rem;border-radius:1rem;border:1px solid var(--wood,#80562F);background:rgba(128,86,47,.08)}
+.club-aktion-band{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.8rem 1.1rem;border-radius:1rem;border:var(--haar,1px) solid var(--wood,#80562F);background:rgba(128,86,47,.08)}
 .club-aktion-band b{font-weight:400;font-style:italic}
 .club-schritte{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
 @media (min-width:760px){.club-schritte{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.club-schritt{display:grid;align-content:start;gap:.5rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:1px solid rgba(35,33,32,.22);background:rgba(255,255,255,.35)}
+.club-schritt{display:grid;align-content:start;gap:.5rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:var(--haar,1px) solid rgba(35,33,32,.22);background:rgba(255,255,255,.35)}
 .club-schritt .nr{font-family:"Tenor Sans",sans-serif;font-size:.8125rem;letter-spacing:.2em;color:var(--wood,#80562F)}
 .club-schritt-titel{margin:0;font-style:italic;font-size:clamp(1.25rem,1rem + .6vw,1.5rem);line-height:1.2}
 .club-schritt p{margin:0}
 .club-stufen{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
 @media (min-width:760px){.club-stufen{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1100px){.club-stufen{grid-template-columns:repeat(4,minmax(0,1fr))}}
-.club-stufe{display:grid;align-content:start;gap:.7rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:1px solid rgba(35,33,32,.22);background:var(--styx,#F4EFE6)}
+.club-stufe{display:grid;align-content:start;gap:.7rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:var(--haar,1px) solid rgba(35,33,32,.22);background:var(--styx,#F4EFE6)}
 .club-stufe.ist-meine{border-color:var(--wood,#80562F);box-shadow:inset 0 0 0 1px var(--wood,#80562F)}
 .club-stufe-kopf{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
 .club-stufe-name{margin:0;font-size:1.625rem;line-height:1.1}
 .club-stufe-satz{margin:0;font-size:1.0625rem}
 .club-stufe-satz b{font-size:1.5rem;font-weight:400;color:var(--wood,#80562F)}
 .club-stufe-ab{margin:0;font-size:.875rem;color:rgba(35,33,32,.72)}
-.club-stufe ul{margin:0;padding:0;list-style:none;display:grid;gap:.4rem;border-top:1px solid rgba(35,33,32,.18);padding-top:.8rem}
+.club-stufe ul{margin:0;padding:0;list-style:none;display:grid;gap:.4rem;border-top:var(--haar,1px) solid rgba(35,33,32,.18);padding-top:.8rem}
 .club-stufe li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
 .club-stufe li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
 .club-marke{display:inline-block;padding:.1rem .55rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase}
 .club-boni{display:grid;gap:.8rem}
 .club-boni h3{font-size:1.5rem}
-.club-boni ul{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:1px solid rgba(35,33,32,.22)}
+.club-boni ul{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:var(--haar,1px) solid rgba(35,33,32,.22)}
 @media (min-width:760px){.club-boni ul{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:2.5rem}}
-.club-boni li{display:flex;justify-content:space-between;gap:1rem;padding:.75rem 0;border-bottom:1px solid rgba(35,33,32,.22)}
+.club-boni li{display:flex;justify-content:space-between;gap:1rem;padding:.75rem 0;border-bottom:var(--haar,1px) solid rgba(35,33,32,.22)}
 .club-boni li b{font-weight:400;color:var(--wood,#80562F);white-space:nowrap}
 .club-klein{margin:0;font-size:.875rem;color:rgba(35,33,32,.72);max-width:52rem}
 .club-aktion-knopf{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.4rem}
@@ -128,13 +128,14 @@
 .club-metall-text p{margin:0}
 .club-metall-text b{font-style:italic;color:var(--titel,#232120)}
 .club-metall-ab{font-size:.875rem;color:rgba(35,33,32,.72)}
-.club-metall-text ul,.club-vorteile ul{margin:.35rem 0 0;padding:.75rem 0 0;list-style:none;display:grid;gap:.4rem;border-top:1px solid rgba(35,33,32,.18)}
+.club-metall-text ul,.club-vorteile ul{margin:.35rem 0 0;padding:.75rem 0 0;list-style:none;display:grid;gap:.4rem;border-top:var(--haar,1px) solid rgba(35,33,32,.18)}
 .club-metall-text li,.club-vorteile li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
 .club-metall-text li::before,.club-vorteile li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
 @media (hover:hover){.club-metall-eintrag:hover .club-metall{transform:translateY(-4px)}}
 @media (max-width:759px){
   .club-metalle{grid-auto-flow:column;grid-auto-columns:min(78vw,19rem);overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:none;
-    margin-inline:calc(-1 * var(--rand,1.25rem));padding:.4rem var(--rand,1.25rem) 1rem;scroll-padding-inline:var(--rand,1.25rem)}
+    margin-inline:calc(-1 * var(--rand,1.25rem));padding:.4rem var(--rand,1.25rem) 1rem;scroll-padding-inline:var(--rand,1.25rem);
+    contain:paint}  /* sonst zählt Chrome die Karten rechts zur Seitenbreite (Seite wird seitlich verschiebbar) */
   .club-metalle::-webkit-scrollbar{display:none}
   .club-metall-eintrag{scroll-snap-align:start}
 }
@@ -150,7 +151,7 @@
 .club-stand{display:flex;align-items:baseline;gap:.55rem}
 .club-stand b{font-style:normal;font-size:clamp(3.2rem,2.2rem + 4vw,4.8rem);line-height:.9;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .club-stand span{font-size:1.25rem;font-style:italic}
-.club-gesperrt{display:flex;gap:.6rem;align-items:flex-start;padding:.75rem 1rem;border-radius:1rem;border:1px solid rgba(128,86,47,.35);background:rgba(128,86,47,.07);font-size:.9375rem;line-height:1.45}
+.club-gesperrt{display:flex;gap:.6rem;align-items:flex-start;padding:.75rem 1rem;border-radius:1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);background:rgba(128,86,47,.07);font-size:.9375rem;line-height:1.45}
 .club-gesperrt svg{width:1.05rem;height:1.05rem;flex:none;margin-top:.15rem;fill:none;stroke:var(--wood,#80562F);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .club-weg{display:grid;gap:.55rem;width:100%;max-width:30rem}
 .club-weg p{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.9375rem}
@@ -167,7 +168,7 @@
 /* Rechenbeispiel */
 .club-beispiel{display:grid;gap:.8rem;max-width:44rem;width:100%}
 .club-tabelle{width:100%;border-collapse:collapse;font-size:.9375rem;font-variant-numeric:tabular-nums}
-.club-tabelle th,.club-tabelle td{padding:.65rem .5rem;border-bottom:1px solid rgba(35,33,32,.18);text-align:left;font-weight:400}
+.club-tabelle th,.club-tabelle td{padding:.65rem .5rem;border-bottom:var(--haar,1px) solid rgba(35,33,32,.18);text-align:left;font-weight:400}
 .club-tabelle thead th{font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(46,42,39,.66)}
 .club-tabelle tbody th{font-style:italic}
 .club-tabelle .zahl{text-align:right;white-space:nowrap}
@@ -179,7 +180,7 @@
 @media (max-width:380px){.club-tabelle{font-size:.875rem}.club-tabelle th,.club-tabelle td{padding:.55rem .3rem}}
 
 /* ===== 1.4: Punkte im Warenkorb einlösen ===== */
-.club-einloesen{display:grid;gap:.75rem;padding:1rem;border-radius:1.1rem;border:1px solid rgba(128,86,47,.35);background:rgba(255,255,255,.5)}
+.club-einloesen{display:grid;gap:.75rem;padding:1rem;border-radius:1.1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);background:rgba(255,255,255,.5)}
 .club-einloesen[hidden]{display:none}
 .club-einloesen[aria-busy] button{opacity:.55;cursor:progress}
 .club-einloesen-kopf{display:flex;justify-content:space-between;align-items:baseline;gap:.8rem;flex-wrap:wrap}
@@ -206,7 +207,7 @@
 .club-einloesen-klein{margin:0;font-size:.8125rem;line-height:1.45;color:rgba(35,33,32,.72)}
 .club-einloesen-links{display:flex;gap:1.2rem;margin:.1rem 0 0}
 .club-einloesen .club-textlink{padding:0;border:0;background:none;font:inherit;font-size:.875rem;cursor:pointer}
-.club-einloesen-gesperrt{list-style:none;margin:0;padding:.6rem 0 0;border-top:1px solid rgba(35,33,32,.14);display:flex;flex-wrap:wrap;gap:.35rem .5rem;font-size:.8125rem;color:rgba(35,33,32,.72)}
+.club-einloesen-gesperrt{list-style:none;margin:0;padding:.6rem 0 0;border-top:var(--haar,1px) solid rgba(35,33,32,.14);display:flex;flex-wrap:wrap;gap:.35rem .5rem;font-size:.8125rem;color:rgba(35,33,32,.72)}
 .club-einloesen-gesperrt li:not(.club-label){padding:.1rem .55rem;border-radius:999px;border:1px solid rgba(35,33,32,.2);font-variant-numeric:tabular-nums}
 .club-einloesen-gesperrt .club-label{flex-basis:100%;font-size:.6875rem}
 .club-einloesen-meldung{margin:0;font-size:.875rem;line-height:1.45}

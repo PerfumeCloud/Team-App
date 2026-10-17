@@ -193,7 +193,9 @@ def handle(conn):
                         continue
                     del FOLDERS[names[0]]
                 elif cmd == 'RENAME':
-                    FOLDERS[names[1]] = FOLDERS.pop(names[0])
+                    # Wie echte Server: Unterordner wandern mit
+                    for n in [n for n in FOLDERS if n == names[0] or n.startswith(names[0] + '.')]:
+                        FOLDERS[names[1] + n[len(names[0]):]] = FOLDERS.pop(n)
             print('FOLDER ' + json.dumps({'cmd': cmd, 'names': names}), flush=True)
             send(f'{tag} OK {cmd} completed\r\n')
         elif cmd == 'CAPABILITY':
