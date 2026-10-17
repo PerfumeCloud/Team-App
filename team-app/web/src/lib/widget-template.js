@@ -37,6 +37,7 @@ const TIER = {
   bronze: Color.dynamic(new Color('#9A6B3F'), new Color('#D9A877')),
   silber: Color.dynamic(new Color('#7D838C'), new Color('#C3C8CF')),
   gold: Color.dynamic(new Color('#B08A1E'), new Color('#E8C766')),
+  platin: Color.dynamic(new Color('#2B2D31'), new Color('#D9DADD')),
 };
 // Eingetragene Termine – Feiertage und Aktionstage nur, wo eine Liste Platz hat
 const own = (d) => (d.events || []).filter((e) => !SPECIAL[e.kind]);

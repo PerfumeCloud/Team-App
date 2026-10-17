@@ -53,6 +53,14 @@ final class ShopSync
                 'benefits' => $t['benefits'],
             ], $p['tiers']),
             'tier_months' => (int) $p['tier_months'],
+            // 1.4: Stufe nach dem Einkaufswert seit dem Beitritt, Punkte sofort gutgeschrieben, einlösbar nach wait_days
+            'tier_basis' => 'lifetime',
+            'wait_from' => 'order',
+            'expiry_warn' => Points::warnDays($p),
+            'waitlist' => (static function (): array {
+                $w = Waitlist::status();
+                return ['full' => $w['full'], 'text' => $w['text']];
+            })(),
             'redeem_points' => (int) $p['redeem_points'],
             'redeem_cents' => (int) $p['redeem_cents'],
             'max_cents' => (int) $p['max_cents'],

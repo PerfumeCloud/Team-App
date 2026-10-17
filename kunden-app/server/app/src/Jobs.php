@@ -33,6 +33,7 @@ final class Jobs
                 $summary['survey_track'] = self::safe(static fn () => Surveys::track(), $errors);
             }
             $summary['released'] = self::safe(static fn () => Points::release() . ' freigegeben', $errors);
+            $summary['bonus_released'] = self::safe(static fn () => Bonus::releaseDue() . ' Boni freigegeben', $errors);
             $summary['referrals'] = self::safe(static fn () => Referrals::release(), $errors);
             $summary['surveys'] = self::safe(static fn () => Surveys::run(), $errors);
             if ($shop) {
@@ -47,6 +48,7 @@ final class Jobs
             }
             if ($shop && self::due('hourly_last', 'Y-m-d H')) {
                 $summary['newsletter'] = self::safe(static fn () => Bonus::runNewsletter(), $errors);
+                $summary['waitlist'] = self::safe(static fn () => Waitlist::run(), $errors);
             }
             $summary['promotions'] = self::safe(static fn () => Promotions::runStarts(), $errors);
             $summary['broadcasts'] = self::safe(static fn () => Broadcasts::run(), $errors);

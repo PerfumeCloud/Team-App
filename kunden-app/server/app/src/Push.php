@@ -22,45 +22,52 @@ final class Push
     public const TEMPLATES = [
         'order_shipped' => ['label' => 'Bestellung versendet', 'cat' => 'orders', 'title' => 'Dein Paket ist unterwegs', 'body' => '{bestellung} hat unser Lager verlassen. Tippe hier, um die Sendung zu verfolgen.'],
         'order_delivered' => ['label' => 'Bestellung zugestellt', 'cat' => 'orders', 'title' => 'Dein Duft ist angekommen', 'body' => '{bestellung} wurde zugestellt. Viel Freude damit, {vorname}!'],
+        'points_pending' => ['label' => 'Punkte gutgeschrieben (noch gesperrt)', 'cat' => 'points', 'title' => '+{punkte} Punkte gutgeschrieben', 'body' => '{grund}. Ab {datum} kannst du sie einlösen.'],
+        'points_unlocked' => ['label' => 'Punkte jetzt einlösbar', 'cat' => 'points', 'title' => 'Deine {punkte} Punkte sind jetzt einlösbar', 'body' => '{grund}. Einlösbar: {kontostand} Punkte, direkt im Warenkorb.'],
         'points_credited' => ['label' => 'Punkte gutgeschrieben', 'cat' => 'points', 'title' => '+{punkte} Punkte', 'body' => '{grund}. Dein Kontostand: {kontostand} Punkte.'],
         'points_deducted' => ['label' => 'Punkte abgezogen', 'cat' => 'points', 'title' => '−{punkte} Punkte', 'body' => '{grund}. Dein Kontostand: {kontostand} Punkte.'],
         'points_redeemed' => ['label' => 'Punkte eingelöst', 'cat' => 'points', 'title' => '−{punkte} Punkte eingelöst', 'body' => '{grund}. Dein Kontostand: {kontostand} Punkte.'],
         'reward_ready' => ['label' => 'Prämie einlösbar', 'cat' => 'points', 'title' => 'Deine Prämie wartet', 'body' => 'Du hast {euro} Rabatt bereit. Löse ihn mit einem Tipp als Code ein.'],
-        'points_expiring' => ['label' => 'Punkte verfallen bald', 'cat' => 'points', 'title' => '{punkte} Punkte verfallen bald', 'body' => 'Löse sie bis {datum} ein, dann gehen sie nicht verloren.'],
+        'points_expiring' => ['label' => 'Punkte verfallen bald (60 und 30 Tage vorher)', 'cat' => 'points', 'title' => '{punkte} Punkte verfallen am {datum}', 'body' => 'Das sind {euro}. Löse sie vorher im Warenkorb ein, dann gehen sie nicht verloren.'],
         'code_expiring' => ['label' => 'Code läuft bald ab', 'cat' => 'points', 'title' => 'Dein Code läuft bald ab', 'body' => '{code} über {euro} gilt noch bis {datum}.'],
         'code_lapsed' => ['label' => 'Code abgelaufen', 'cat' => 'points', 'title' => 'Dein Code ist abgelaufen', 'body' => '{code} über {euro} ist nicht mehr gültig.'],
         'tier_up' => ['label' => 'Neue Stufe erreicht', 'cat' => 'points', 'title' => 'Willkommen in {stufe}', 'body' => 'Ab jetzt sammelst du {satz}. Danke, dass du dabei bist!'],
         'birthday' => ['label' => 'Geburtstag', 'cat' => 'points', 'title' => 'Alles Gute, {vorname}!', 'body' => 'Zum Geburtstag schenken wir dir {punkte} Punkte.'],
-        'referral' => ['label' => 'Empfehlung belohnt', 'cat' => 'points', 'title' => 'Danke fürs Weitersagen', 'body' => '{freund} hat zum ersten Mal bestellt. Dafür bekommst du {punkte} Punkte.'],
+        'referral' => ['label' => 'Empfehlung belohnt', 'cat' => 'points', 'title' => 'Danke fürs Weitersagen', 'body' => '{freund} hat zum ersten Mal bestellt. Dafür sind dir {punkte} Punkte gutgeschrieben, einlösbar ab {datum}.'],
         'promo_start' => ['label' => 'Aktion startet', 'cat' => 'news', 'title' => '{aktion}: {faktor} Punkte', 'body' => 'Bis {datum} sammelst du {faktor} Punkte auf jede Bestellung.'],
         'survey' => ['label' => 'Bewertung nach der Zustellung', 'cat' => 'orders', 'title' => 'Wie gefällt dir {duft}?', 'body' => 'Ein Tipp auf die Sterne genügt. Danke, {vorname}!'],
         'reorder' => ['label' => 'Nachkauf-Erinnerung', 'cat' => 'news', 'title' => 'Zeit für Nachschub?', 'body' => 'Falls {duft} langsam leer wird: Hier kannst du ihn mit einem Tipp nachbestellen.'],
-        'referral_pending' => ['label' => 'Bestellung über den Empfehlungslink', 'cat' => 'points', 'title' => 'Über deinen Link wurde bestellt', 'body' => '{punkte} Punkte sind für dich vorgemerkt. Sie kommen, sobald die Bestellung angekommen ist.'],
-        'referral_order' => ['label' => 'Empfehlung über den Link belohnt', 'cat' => 'points', 'title' => 'Danke fürs Weitersagen', 'body' => 'Für eine Bestellung über deinen Link bekommst du {punkte} Punkte.'],
+        'referral_pending' => ['label' => 'Bestellung über den Empfehlungslink', 'cat' => 'points', 'title' => 'Über deinen Link wurde bestellt', 'body' => 'Dir sind {punkte} Punkte gutgeschrieben. Ab {datum} kannst du sie einlösen.'],
+        'referral_order' => ['label' => 'Empfehlung über den Link einlösbar', 'cat' => 'points', 'title' => 'Danke fürs Weitersagen', 'body' => 'Deine {punkte} Punkte für die Bestellung über deinen Link sind jetzt einlösbar.'],
     ];
 
     /** Platzhalter je Vorlage (für die Hilfe im Admin-Bereich). */
     public const VARS = [
         'order_shipped' => ['vorname', 'bestellung'],
         'order_delivered' => ['vorname', 'bestellung'],
+        'points_pending' => ['vorname', 'punkte', 'grund', 'datum', 'kontostand'],
+        'points_unlocked' => ['vorname', 'punkte', 'grund', 'kontostand'],
         'points_credited' => ['vorname', 'punkte', 'grund', 'kontostand'],
         'points_deducted' => ['vorname', 'punkte', 'grund', 'kontostand'],
         'points_redeemed' => ['vorname', 'punkte', 'grund', 'kontostand'],
         'reward_ready' => ['vorname', 'euro', 'kontostand'],
-        'points_expiring' => ['vorname', 'punkte', 'datum', 'kontostand'],
+        'points_expiring' => ['vorname', 'punkte', 'euro', 'datum', 'tage', 'kontostand'],
         'code_expiring' => ['vorname', 'code', 'euro', 'datum'],
         'code_lapsed' => ['vorname', 'code', 'euro'],
         'tier_up' => ['vorname', 'stufe', 'satz'],
         'birthday' => ['vorname', 'punkte', 'kontostand'],
-        'referral' => ['vorname', 'freund', 'punkte'],
+        'referral' => ['vorname', 'freund', 'punkte', 'datum'],
         'promo_start' => ['vorname', 'aktion', 'faktor', 'datum'],
         'survey' => ['vorname', 'duft', 'bestellung', 'punkte'],
         'reorder' => ['vorname', 'duft'],
-        'referral_pending' => ['vorname', 'punkte'],
+        'referral_pending' => ['vorname', 'punkte', 'datum'],
         'referral_order' => ['vorname', 'punkte', 'kontostand'],
     ];
 
     private static bool $flushDeferred = false;
+
+    /** Beim Datenbank-Update: Umstellungen ohne Push-Nachrichten an Mitglieder. */
+    public static bool $mute = false;
 
     // ---------- Vorlagen ----------
 
@@ -191,6 +198,9 @@ final class Push
      */
     public static function queue(array|string $member, string $key, array $vars = [], ?string $dedupe = null, ?string $url = null, ?array $custom = null): bool
     {
+        if (self::$mute) {
+            return false;
+        }
         $m = is_array($member) ? $member : Db::one('SELECT * FROM club_members WHERE id = ?', [$member]);
         if (!$m || !$m['joined_at']) {
             return false;
@@ -216,7 +226,7 @@ final class Push
         // „Prämie bereit“ direkt nach einer Gutschrift: an die Gutschrift anhängen statt zwei Nachrichten
         if ($key === 'reward_ready') {
             $prev = Db::one(
-                "SELECT * FROM club_push_queue WHERE member_id = ? AND kind = 'points_credited' AND status = 'queued' AND created_at > ? ORDER BY created_at DESC",
+                "SELECT * FROM club_push_queue WHERE member_id = ? AND kind IN ('points_credited', 'points_unlocked', 'referral') AND status = 'queued' AND created_at > ? ORDER BY created_at DESC",
                 [$m['id'], $now - 120000]
             );
             if ($prev) {

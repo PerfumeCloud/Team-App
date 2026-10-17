@@ -618,6 +618,8 @@ final class Db
                 // Version 1.2
                 'test' => 'SMALLINT NOT NULL DEFAULT 0',
                 'survey_mail' => 'SMALLINT NULL',
+                // Version 1.4: Mindeststufe (vor 1.4 erreicht oder vom Team gesetzt)
+                'tier_floor' => 'VARCHAR(20) NULL',
             ],
             'club_orders' => [
                 'rate' => 'DOUBLE PRECISION NULL',
@@ -632,6 +634,9 @@ final class Db
                 'expires_days' => 'INTEGER NULL',
                 'expires_at' => 'BIGINT NULL',
                 'credited_at' => 'BIGINT NULL',
+                // Version 1.4: gesperrt bis (unlock_rule time), gebunden an eine Bestellung
+                'unlock_at' => 'BIGINT NULL',
+                'unlock_order' => 'VARCHAR(64) NULL',
             ],
         ];
         foreach ($columns as $table => $cols) {
@@ -663,6 +668,7 @@ final class Db
             ['club_attempts_bucket', 'club_attempts', 'bucket', false],
             ['club_orders_member', 'club_orders', 'member_id', false],
             ['club_ledger_member', 'club_ledger', 'member_id', false],
+            ['club_ledger_unlock_order', 'club_ledger', 'unlock_order', false],
             ['club_codes_member', 'club_codes', 'member_id', false],
             ['club_codes_code', 'club_codes', 'code', true],
             ['club_codes_status', 'club_codes', 'status', false],
@@ -710,6 +716,61 @@ final class Db
             Settings::set('login_email', true);
             Settings::set('login_own_page', true);
         }
+        if (Settings::get('rules_14') === null) {
+            self::upgrade14();
+        }
         Settings::set('schema_version', APP_VERSION);
+    }
+
+    /**
+     * Einmalig beim Update auf 1.4: vier Stufen (Silber 200 €, Gold 500 €, Platin 1.000 €, Einkaufswert seit Beitritt),
+     * Punkte 14 Tage nach der Bestellung einlösbar, Erinnerungen 60 und 30 Tage vor dem Verfall, Bewertungsbonus einmal.
+     * Wer schon eine Stufe hat, behält sie mindestens. Dabei gehen keine Push-Nachrichten raus.
+     */
+    private static function upgrade14(): void
+    {
+        $saved = Settings::get('program', []);
+        $saved = is_array($saved) ? $saved : [];
+        $old = ['silber' => ['Früher Zugang zu neuen Düften', 'Exklusive Aktionen für Silber und Gold'], 'gold' => ['Neue Düfte vor allen anderen', 'Exklusive Rabatte und kleine Überraschungen']];
+        $defaults = array_column(Points::DEFAULTS['tiers'], null, 'key');
+        if (is_array($saved['tiers'] ?? null)) {
+            foreach ($saved['tiers'] as &$t) {
+                $key = is_array($t) ? (string) ($t['key'] ?? '') : '';
+                if (!isset($defaults[$key]) || $key === 'bronze') {
+                    continue;
+                }
+                $t['min_cents'] = $defaults[$key]['min_cents'];
+                if (isset($old[$key]) && ($t['benefits'] ?? null) === $old[$key]) {
+                    $t['benefits'] = $defaults[$key]['benefits'];
+                }
+            }
+            unset($t);
+            if (!in_array('platin', array_column(array_filter($saved['tiers'], 'is_array'), 'key'), true)) {
+                $saved['tiers'][] = $defaults['platin'];
+            }
+        }
+        $saved['expiry_warn_list'] = [60, 30];
+        $saved['review_once'] = true;
+        Settings::set('program', $saved);
+        Points::resetCache();
+
+        Push::$mute = true;
+        try {
+            // Bisherige Stufen bleiben mindestens erhalten
+            self::exec("UPDATE club_members SET tier_floor = tier WHERE joined_at IS NOT NULL AND tier <> 'bronze' AND tier_floor IS NULL");
+            // Sperrfrist zählt jetzt ab der Bestellung
+            $wait = (int) Points::program()['wait_days'] * Points::DAY_MS;
+            self::exec("UPDATE club_orders SET available_at = ordered_at + ?, reason = 'wait' WHERE status = 'pending' AND reason IN ('shipping', 'wait')", [$wait]);
+            self::exec("UPDATE club_referral_orders SET available_at = ordered_at + ?, reason = 'wait' WHERE status = 'pending' AND reason IN ('shipping', 'wait')", [$wait]);
+            Points::release();
+            foreach (self::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL') as $m) {
+                Tiers::evaluate($m, null, false);
+            }
+            self::exec('UPDATE club_members SET meta_dirty = 1 WHERE joined_at IS NOT NULL');
+        } finally {
+            Push::$mute = false;
+        }
+        Settings::set('rules_14', Util::now());
+        Util::log('Update 1.4: Stufen, Sperrfrist und Erinnerungen umgestellt');
     }
 }

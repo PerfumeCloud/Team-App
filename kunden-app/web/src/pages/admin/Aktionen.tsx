@@ -367,6 +367,14 @@ function Warteliste() {
   return (
     <>
       {!data.mail_ready && <Hinweis fehler>Für Einladungen muss zuerst der E-Mail-Versand eingerichtet sein (Einstellungen → Verbindungen).</Hinweis>}
+      {data.limit && data.limit.max > 0 && (
+        <Hinweis fehler={data.limit.full}>
+          {data.limit.full ? 'Die Warteliste ist voll' : 'Die Warteliste ist offen'}: {data.limit.count !== null ? punkte(data.limit.count) : '?'} von {punkte(data.limit.max)} Plätzen
+          {data.limit.counted_at ? ` (gezählt ${seit(data.limit.counted_at)})` : ''}.{' '}
+          {data.limit.full ? `Im Shop steht statt des Formulars: „${data.limit.text}“` : 'Restplätze zeigt der Shop nicht an.'} Höchstzahl unter{' '}
+          <Link to="/admin/einstellungen#startbonus">Einstellungen → Warteliste</Link>.
+        </Hinweis>
+      )}
       <div className="kennzahlen">
         <Kennzahl titel="Auf der Warteliste" wert={punkte(data.total)} unten={data.loaded_at ? `geladen ${seit(data.loaded_at)}` : 'noch nicht geladen'} />
         <Kennzahl titel="Eingeladen" wert={punkte(data.counts.sent)} unten={data.counts.queued > 0 ? `${data.counts.queued} in der Warteschlange` : undefined} />

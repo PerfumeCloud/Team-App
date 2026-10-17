@@ -134,6 +134,12 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
     tiers: data.program.tiers.map((t) => euroFeld(t.min_cents)),
   }));
   const [vorteilNeu, setVorteilNeu] = useState<Record<string, string>>({});
+  const [warn, setWarn] = useState(() => (data.program.expiry_warn_list ?? []).join(', '));
+  // „7,5 % zurück“ beim Bearbeiten der Stufen, aus dem Wert der Prämienstufe
+  const zurueck = (rate: number) => {
+    const pct = (Number(rate) * centsAus(geld.redeem)) / Math.max(1, Number(p.redeem_points) || 1);
+    return `${pct.toLocaleString('de-DE', { maximumFractionDigits: 1 })} % zurück`;
+  };
 
   const zahl = (k: keyof FullProgram, titel: string, hilfe?: ReactNode, step = '1') => (
     <Feld titel={titel} hilfe={hilfe}>
@@ -158,11 +164,13 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
           max_cents: centsAus(geld.max),
           referral_min_cents: centsAus(geld.referral_min),
           start_bonus_min_cents: centsAus(geld.start_min),
+          expiry_warn_list: warn,
         },
       },
       'Gespeichert. App, Startseite und Shop zeigen die neuen Regeln.',
     );
     setProg(s.program);
+    setWarn((s.program.expiry_warn_list ?? []).join(', '));
     setGeld({
       redeem: euroFeld(s.program.redeem_cents),
       max: euroFeld(s.program.max_cents),
@@ -203,7 +211,7 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
           {zahl('max_open_codes', 'Offene Codes je Person')}
         </div>
         <div className="formular-reihe">
-          {zahl('wait_days', 'Wartezeit nach Versand (Tage)', 'Rückgabefrist, danach sind Punkte verfügbar')}
+          {zahl('wait_days', 'Einlösbar nach der Bestellung (Tage)', 'Punkte sind sofort gutgeschrieben, einlösbar nach dieser Rückgabefrist')}
           {zahl('retro_days', 'Bestellungen vor dem Beitritt zählen (Tage)')}
         </div>
         <Schalter titel="Code nur für das eigene Kundenkonto" text="Empfohlen. Verhindert, dass Codes weitergegeben werden." an={p.bind_customer} onChange={(v) => setProg({ ...p, bind_customer: v })} />
@@ -216,12 +224,14 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
       <Abschnitt
         id="verfall"
         titel="Verfall von Punkten und Codes"
-        text="Nicht eingelöste Punkte und Codes verfallen automatisch. Mitglieder bekommen vorher eine Push-Erinnerung. Die Frist steht auch in den Texten der App."
+        text="Nicht eingelöste Punkte und Codes verfallen automatisch. Mitglieder bekommen vorher je Stufe eine Push-Erinnerung (keine Mail) und sehen den Hinweis in der App. Die Frist steht auch in den Texten der App."
         onSave={alles}
       >
         <div className="formular-reihe">
           {zahl('points_expiry_months', 'Punkte verfallen nach (Monaten)', '0 = Punkte verfallen nie. Gezählt ab der Gutschrift, älteste zuerst.')}
-          {zahl('expiry_warn_days', 'Erinnerung so viele Tage vorher')}
+          <Feld titel="Erinnerungen so viele Tage vorher" hilfe="z. B. 60, 30 · leer = keine Erinnerung">
+            <input inputMode="numeric" value={warn} onChange={(e) => setWarn(e.target.value)} placeholder="60, 30" />
+          </Feld>
         </div>
         <div className="formular-reihe">
           {zahl('code_days', 'Ein Code gilt (Tage)')}
@@ -238,11 +248,10 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
       <Abschnitt
         id="stufen"
         titel="Mitgliedschaftsstufen"
-        text={`Der Einkaufswert der letzten ${p.tier_months} Monate entscheidet über die Stufe. Wer aufsteigt, bekommt eine Push-Nachricht; eine erreichte Stufe gilt mindestens so lange.`}
+        text="Der Einkaufswert seit dem Beitritt entscheidet über die Stufe (ohne Versand). Erreichte Stufen bleiben, nur Rückgaben senken den Einkaufswert. Wer aufsteigt, bekommt eine Push-Nachricht."
         onSave={alles}
       >
         <Schalter titel="Stufen verwenden" text="Aus: Alle sammeln mit dem Satz der Grundstufe." an={p.tiers_enabled} onChange={(v) => setProg({ ...p, tiers_enabled: v })} />
-        {zahl('tier_months', 'Zeitraum und Mindestdauer (Monate)')}
         <div className="stufen-editor">
           {p.tiers.map((t, i) => (
             <fieldset key={t.key} disabled={!p.tiers_enabled && i > 0}>
@@ -253,12 +262,12 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
                 <Feld titel="Name">
                   <input value={t.name} maxLength={30} onChange={(e) => stufe(i, { name: e.target.value })} />
                 </Feld>
-                <Feld titel="Punkte je 1 €">
+                <Feld titel="Punkte je 1 €" hilfe={zurueck(t.rate)}>
                   <input type="number" step="0.1" min={0} value={String(t.rate)} onChange={(e) => stufe(i, { rate: e.target.value === '' ? 0 : Number(e.target.value) })} />
                 </Feld>
               </div>
               {i > 0 && (
-                <Feld titel={`Ab Einkaufswert in ${p.tier_months} Monaten (€)`}>
+                <Feld titel="Ab Einkaufswert seit dem Beitritt (€)">
                   <input inputMode="decimal" value={geld.tiers[i] ?? ''} onChange={(e) => setGeld({ ...geld, tiers: geld.tiers.map((v, j) => (j === i ? e.target.value : v)) })} />
                 </Feld>
               )}
@@ -314,7 +323,7 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
           ))}
         </div>
         <p className="klein leise">
-          Exklusive Rabatte für eine Stufe: In Shopify einen Rabatt für das Kundensegment „Club: Silber“ oder „Club: Gold“ anlegen. Frühen Zugang zu neuen Düften kündigst du in der Team-App mit der
+          Exklusive Rabatte für eine Stufe: In Shopify einen Rabatt für das Kundensegment „Club: Silber“, „Club: Gold“ oder „Club: Platin“ anlegen. Frühen Zugang zu neuen Düften kündigst du in der Team-App mit der
           Vorlage „Früher Zugang“ an.
         </p>
       </Abschnitt>
@@ -326,8 +335,14 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
         </div>
         <div className="formular-reihe">
           {zahl('bonus_review', 'Für eine Bewertung', 'Das Team bestätigt jede Bewertung unter Aktionen')}
-          {zahl('review_max_month', 'Bewertungen je Monat höchstens')}
+          {p.review_once ? <div /> : zahl('review_max_month', 'Bewertungen je Monat höchstens')}
         </div>
+        <Schalter
+          titel="Bewertungsbonus nur einmal je Mitglied"
+          text="Empfohlen. Abgelehnte Anfragen zählen nicht. Aus: bis zur eingestellten Zahl je Monat."
+          an={p.review_once}
+          onChange={(v) => setProg({ ...p, review_once: v })}
+        />
         <div className="formular-reihe">
           {zahl('bonus_referrer', 'Empfehlung: für das werbende Mitglied')}
           {zahl('bonus_referred', 'Empfehlung: für den neuen Kunden')}
@@ -342,10 +357,16 @@ function Regeln({ data, speichern }: { data: Settings; speichern: Speichern }) {
 
       <Abschnitt
         id="startbonus"
-        titel="Startbonus für die Warteliste"
+        titel="Warteliste und Startbonus"
         text="Wer beim Beitritt den Shopify-Tag der Warteliste hat, bekommt einmalig diesen Bonus. Die Einladungen verschickst du unter Aktionen → Warteliste."
         onSave={alles}
       >
+        <div className="formular-reihe">
+          {zahl('waitlist_max', 'Plätze auf der Warteliste höchstens', '0 = unbegrenzt. Gezählt werden Kundenkonten mit dem Tag, alle 10 Minuten neu.')}
+          <Feld titel="Text, wenn die Liste voll ist" hilfe="Steht im Shop statt des Formulars. Restplätze werden nicht angezeigt.">
+            <input value={p.waitlist_full_text} maxLength={200} onChange={(e) => setProg({ ...p, waitlist_full_text: e.target.value })} />
+          </Feld>
+        </div>
         <div className="formular-reihe">
           {zahl('start_bonus', 'Startbonus (Punkte)', '0 = kein Startbonus')}
           <Feld titel="Shopify-Tag der Warteliste">

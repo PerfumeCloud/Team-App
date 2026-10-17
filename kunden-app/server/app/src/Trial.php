@@ -22,21 +22,22 @@ final class Trial
 {
     public const STEPS = [
         'ordered' => 'Bestellung eingegangen',
-        'pending' => 'Punkte vorgemerkt',
+        'pending' => 'Punkte gutgeschrieben (gesperrt)',
         'shipped' => 'Versendet',
         'delivered' => 'Zugestellt',
         'survey' => 'Befragung',
-        'credited' => 'Punkte gutgeschrieben',
+        'credited' => 'Punkte einlösbar',
         'referral' => 'Empfehlung belohnt',
         'tier' => 'Stufenaufstieg',
     ];
 
     /** Push-Vorlage je Schritt (für die Anzeige „Push angekommen?“) */
     private const PUSH = [
+        'pending' => 'points_pending',
         'shipped' => 'order_shipped',
         'delivered' => 'order_delivered',
         'survey' => 'survey',
-        'credited' => 'points_credited',
+        'credited' => 'points_unlocked',
         'referral' => 'referral_order',
         'tier' => 'tier_up',
     ];
@@ -283,12 +284,9 @@ final class Trial
         $amount = Util::decimal((int) $s['amount_cents']);
         $o['currentSubtotalPriceSet'] = ['shopMoney' => ['amount' => $amount]];
         $o['totalRefundedSet'] = ['shopMoney' => ['amount' => '0.00']];
-        if (!empty($s['skip_wait']) && !empty($o['fulfillments'])) {
-            $back = Util::iso(Util::now() - ((int) Points::program()['wait_days'] + 1) * Points::DAY_MS);
-            foreach ($o['fulfillments'] as &$f) {
-                $f['createdAt'] = $back;
-            }
-            unset($f);
+        if (!empty($s['skip_wait'])) {
+            // Sperrfrist überspringen: Punkte sofort einlösbar
+            $o['_unlock_at'] = (int) ($s['skip_wait_at'] ?? Util::now());
         }
         $o['test'] = false;
         return $o;
@@ -431,12 +429,19 @@ final class Trial
                 $r = Surveys::send($row, true);
                 return self::view(['message' => 'Befragung verschickt (' . ($r['channel'] ?? 'ohne Weg') . ').' . ($r['mail'] && !$r['mail']['sent'] ? ' Mail: ' . $r['mail']['message'] : '')]);
             case 'credited':
-                $need($order !== null && $order['shipped_at'] !== null, 'Punkte gibt es erst nach dem Versand.');
+                $need($order !== null && $order['status'] !== 'void', 'Erst die Bestellung anlegen.');
+                $need($order['reason'] !== 'payment' || !$real, 'Die Bestellung ist noch nicht bezahlt.');
                 $s['skip_wait'] = true;
+                $s['skip_wait_at'] = $now;
                 self::put($s);
-                if ($order['status'] === 'pending' && $order['reason'] === 'wait') {
-                    Db::exec('UPDATE club_orders SET available_at = ? WHERE order_id = ?', [$now, $s['order_id']]);
-                    Points::release();
+                if ($real) {
+                    if ($order['status'] === 'pending') {
+                        Db::exec('UPDATE club_orders SET available_at = ? WHERE order_id = ?', [$now, $s['order_id']]);
+                        Points::release();
+                    }
+                } else {
+                    // Schnelltest: bezahlt, Sperrfrist vorbei (Versand und Zustellung bleiben, wie sie sind)
+                    Points::upsertOrder($m, self::fakeOrder($s, true, $order['shipped_at'] !== null ? (int) $order['shipped_at'] : null, $order['delivered_at'] !== null ? (int) $order['delivered_at'] : null));
                 }
                 break;
             case 'referral':
@@ -464,7 +469,7 @@ final class Trial
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);
-                    Push::queue($m, 'referral_pending', ['punkte' => (string) $points], 'refpend:' . $oid, '/konto');
+                    Push::queue($m, 'referral_pending', ['punkte' => (string) $points, 'datum' => Events::day($now)], 'refpend:' . $oid, '/praemien');
                 }
                 Referrals::release();
                 break;
@@ -522,7 +527,7 @@ final class Trial
         $tierIdx = $m ? (int) array_search(Tiers::of($m)['key'], Tiers::KEYS, true) : 0;
         $done = [
             'ordered' => $order !== null ? (int) $s['started_at'] : null,
-            'pending' => $order !== null && ($order['reason'] !== 'payment' || $order['status'] === 'available') && $order['status'] !== 'void' ? (int) $order['updated_at'] : null,
+            'pending' => $order !== null && $order['status'] !== 'void' ? (int) $s['started_at'] : null,
             'shipped' => $order['shipped_at'] ?? null,
             'delivered' => $order['delivered_at'] ?? ($survey['delivered_at'] ?? null),
             'survey' => $survey['sent_at'] ?? null,
@@ -532,7 +537,7 @@ final class Trial
         ];
         $detail = [
             'ordered' => $order ? $order['name'] . ' · ' . Util::euro((int) $s['amount_cents']) . ($s['mode'] === 'real' ? ' (gezählt wie ' . Util::euro((int) $s['amount_cents']) . ', bezahlt 0 €)' : '') : ($s['mode'] === 'real' ? 'Wartet auf die Bestellung mit ' . ($s['codes'][0]['code'] ?? '') : null),
-            'pending' => $order ? (int) $order['points'] . ' Punkte' . ($order['status'] === 'pending' ? ' vorgemerkt' : '') : null,
+            'pending' => $order ? (int) $order['points'] . ' Punkte' . ($order['status'] === 'pending' ? ' gutgeschrieben' . ($order['reason'] === 'payment' ? ', Zahlung fehlt' : '') : '') : null,
             'shipped' => $order && $order['shipped_at'] === null && $s['mode'] === 'real' ? 'In der Team-App unter „Versand“ abhaken' : null,
             'delivered' => null,
             'survey' => $survey ? match (true) {
@@ -541,7 +546,7 @@ final class Trial
                 $survey['send_at'] !== null => 'Geplant für ' . date('d.m. H:i', intdiv((int) $survey['send_at'], 1000)) . ' Uhr',
                 default => 'Wartet auf die Zustellung',
             } : null,
-            'credited' => $order && $order['status'] === 'pending' && $order['reason'] === 'wait' ? 'Wartezeit bis ' . date('d.m.', intdiv((int) $order['available_at'], 1000)) . ' – überspringen möglich' : null,
+            'credited' => $order && $order['status'] === 'pending' && $order['available_at'] !== null ? 'Einlösbar ab ' . date('d.m.', intdiv((int) $order['available_at'], 1000)) . ' – überspringen möglich' : null,
             'referral' => $ref ? (int) $ref['points'] . ' Punkte für eine Freundes-Bestellung' . ($ref['status'] === 'void' ? ' (nicht vergeben: ' . $ref['reason'] . ')' : '') : null,
             'tier' => $m && $tierIdx > 0 ? 'Jetzt ' . Tiers::of($m)['name'] : null,
         ];

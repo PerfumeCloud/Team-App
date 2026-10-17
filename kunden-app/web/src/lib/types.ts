@@ -38,10 +38,14 @@ export interface Program {
   tiers_enabled: boolean;
   tier_months: number;
   tiers: Tier[];
+  /** Erinnerungen so viele Tage vor dem Verfall (z. B. [60, 30]) */
+  expiry_warn_list: number[];
   bonus: {
     birthday: number;
     newsletter: number;
     review: number;
+    /** Bewertungsbonus nur einmal je Mitglied */
+    review_once: boolean;
     referrer: number;
     referred: number;
     referral_min_cents: number;
@@ -78,8 +82,22 @@ export interface Step {
   affordable: boolean;
 }
 
+/** Gutgeschrieben, aber noch gesperrt: ab wann einlösbar (payment = erst nach der Zahlung) */
+export interface Unlock {
+  points: number;
+  at: number;
+  payment: boolean;
+}
+
 export interface Points {
+  /** einlösbar (kann nach einer Rückgabe ins Minus gehen) */
   balance: number;
+  /** einlösbar + gutgeschrieben, aber noch gesperrt */
+  total: number;
+  held: number;
+  unlocks: Unlock[];
+  /** Boni, die erst mit der ersten Bestellung kommen */
+  waiting: number;
   pending: number;
   locked: number;
   value_cents: number;
@@ -87,7 +105,7 @@ export interface Points {
   next_cents: number;
   steps: Step[];
   lifetime: number;
-  expiring: { points: number; at: number } | null;
+  expiring: { points: number; at: number; cents: number } | null;
 }
 
 export interface Code {
@@ -107,13 +125,13 @@ export interface Code {
 export interface TierInfo {
   key: string;
   name: string;
+  /** 1 = Bronze … 4 = Platin */
+  level: number;
   rate: number;
   benefits: string[];
-  until: number | null;
+  /** Einkaufswert seit dem Beitritt */
   spend_cents: number;
-  months: number;
-  next: { key: string; name: string; rate: number; min_cents: number; missing_cents: number } | null;
-  keep_cents: number;
+  next: { key: string; name: string; rate: number; min_cents: number; missing_cents: number; progress: number } | null;
 }
 
 export type PushCategory = 'orders' | 'points' | 'news';
@@ -139,6 +157,8 @@ export interface BonusStatus {
   newsletter: boolean;
   referral: { code: string | null; invited: number; rewarded: number; link?: ReferralLink | null };
   claims: Claim[];
+  /** Bewertungsbonus einmal je Mitglied: offen (wird geprüft) oder schon erhalten */
+  review?: { once: boolean; state: 'open' | 'approved' | null };
 }
 
 /** Empfehlungslink mit Rabatt für Freunde (Punkte je Bestellung über den Link) */
@@ -384,7 +404,8 @@ export interface AdminMemberDetail {
     ref_code: string | null;
     waitlist: boolean;
     newsletter: boolean;
-    tier_until: number | null;
+    /** Stufe bleibt mindestens (Stand vor 1.4 oder vom Team gesetzt) */
+    tier_floor: string | null;
     tier_spend_cents: number;
     referred_by: { id: string; name: string } | null;
     invited: number;
@@ -458,6 +479,8 @@ export interface InvitesOverview {
   template: { subject: string; text: string };
   subject: string;
   recent: { email: string; first_name: string | null; status: string; error: string | null; sent_at: number | null }[];
+  /** Höchstzahl der Warteliste (max 0 = unbegrenzt) */
+  limit: { max: number; count: number | null; full: boolean; text: string; counted_at: number | null };
   found?: number;
   added?: number;
 }
@@ -484,6 +507,7 @@ export interface FullProgram extends Omit<Program, 'bonus' | 'start_bonus' | 'pr
   bonus_birthday: number;
   bonus_newsletter: number;
   bonus_review: number;
+  review_once: boolean;
   review_max_month: number;
   bonus_referrer: number;
   bonus_referred: number;
@@ -495,6 +519,8 @@ export interface FullProgram extends Omit<Program, 'bonus' | 'start_bonus' | 'pr
   start_bonus_min_cents: number;
   start_bonus_days: number;
   waitlist_tag: string;
+  waitlist_max: number;
+  waitlist_full_text: string;
   count_test: boolean;
   bind_customer: boolean;
   combine_shipping: boolean;

@@ -28,7 +28,8 @@ const STANDARD: Program = {
   tiers_enabled: false,
   tier_months: 12,
   tiers: [],
-  bonus: { birthday: 0, newsletter: 0, review: 0, referrer: 0, referred: 0, referral_min_cents: 0 },
+  expiry_warn_list: [60, 30],
+  bonus: { birthday: 0, newsletter: 0, review: 0, review_once: true, referrer: 0, referred: 0, referral_min_cents: 0 },
   start_bonus: null,
   promo: null,
   next_promo: null,
@@ -39,9 +40,14 @@ function beispiel(p: Program): Points {
   const balance = Math.round(p.redeem_points * 2.4);
   const maxSteps = Math.max(1, Math.floor(p.max_cents / p.redeem_cents));
   const affordable = Math.min(maxSteps, Math.floor(balance / p.redeem_points));
+  const held = Math.round(p.redeem_points * 0.85);
   return {
     balance,
-    pending: Math.round(p.redeem_points * 0.85),
+    total: balance + held,
+    held,
+    unlocks: [{ points: held, at: Date.now() + 9 * 86400000, payment: false }],
+    waiting: 0,
+    pending: held,
     value_cents: affordable * p.redeem_cents,
     to_next: affordable >= maxSteps ? 0 : p.redeem_points - (balance % p.redeem_points),
     next_cents: Math.min(maxSteps, affordable + 1) * p.redeem_cents,

@@ -460,7 +460,7 @@ export const HELP: HelpArticle[] = [
   {
     id: 'club-update',
     category: 'club',
-    title: 'Members Club aktualisieren (auf Version 1.3.2)',
+    title: 'Members Club aktualisieren (auf Version 1.4.0)',
     intro:
       'Meldet die Team-App „Der Members Club läuft noch auf Version …“ oder zeigt die Testbestellung „Nicht gefunden“, ist der Club älter als die Team-App.',
     admin: true,
@@ -470,8 +470,8 @@ export const HELP: HelpArticle[] = [
       'netcup **Plesk** → **Dateien** → Ordner `app.perfumecloud.de/httpdocs` öffnen.',
       '**Hochladen** → ZIP wählen → beim Menü **⋯** **Dateien extrahieren**, „Vorhandene Dateien ersetzen“ anhaken.',
       '`app.perfumecloud.de` einmal öffnen. Der Club ergänzt die Datenbank selbst.',
-      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.3.2“.',
-      'Danach klappen **Testbestellung** mit Push-Check, die Fußzeile mit Logo in den Club-Mails und die Anmeldeseite der Club-App mit Grund, wenn du nicht als Admin erkannt wirst.',
+      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.4.0“.',
+      'Mit 1.4 gelten die neuen Punkte-Regeln: vier Stufen nach dem Einkaufswert seit dem Beitritt, Punkte sofort gutgeschrieben und 14 Tage nach der Bestellung einlösbar, Erinnerungen 60 und 30 Tage vor dem Verfall. Bisherige Stufen bleiben erhalten, die Umstellung verschickt keine Mitteilungen.',
     ],
     problems: [
       {
@@ -498,7 +498,7 @@ export const HELP: HelpArticle[] = [
     problems: [
       {
         q: 'Den Abschnitt „Admin-E-Mails“ gibt es nicht',
-        a: 'Der Club ist älter als 1.3.2: **Members Club aktualisieren**.',
+        a: 'Der Club ist zu alt: **Members Club aktualisieren**.',
       },
       {
         q: '„Darf keine Zugänge verwalten“',
@@ -539,7 +539,7 @@ export const HELP: HelpArticle[] = [
     id: 'club-nachricht',
     category: 'club',
     title: 'Nachricht an Club-Mitglieder senden',
-    intro: 'Push an alle Mitglieder oder nur an Silber und Gold, mit Vorlagen und Vier-Augen-Prinzip.',
+    intro: 'Push an alle Mitglieder oder nur an höhere Stufen (ab Silber, ab Gold, nur Platin), mit Vorlagen und Vier-Augen-Prinzip.',
     keywords: 'push mitglieder nachricht broadcast vorlage',
     steps: [
       '**Members Club → Nachricht an Mitglieder**.',

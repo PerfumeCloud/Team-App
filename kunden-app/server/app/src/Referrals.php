@@ -351,20 +351,18 @@ final class Referrals
             [$status, $reason] = ['void', 'zero'];
         } elseif ($amount < (int) $c['reward_min_cents']) {
             [$status, $reason] = ['void', 'min'];
-        } elseif (empty($o['fullyPaid'])) {
-            $reason = 'payment';
-        } elseif (($o['displayFulfillmentStatus'] ?? '') !== 'FULFILLED') {
-            $reason = 'shipping';
         } else {
-            foreach ($o['fulfillments'] ?? [] as $f) {
-                $at = ($f['status'] ?? 'SUCCESS') === 'SUCCESS' ? Util::ms($f['createdAt'] ?? null) : null;
-                if ($at !== null && ($shippedAt === null || $at > $shippedAt)) {
-                    $shippedAt = $at;
+            // Gutgeschrieben mit der Bestellung, einlösbar wait_days danach (wie eigene Bestellungen)
+            if (($o['displayFulfillmentStatus'] ?? '') === 'FULFILLED') {
+                foreach ($o['fulfillments'] ?? [] as $f) {
+                    $at = ($f['status'] ?? 'SUCCESS') === 'SUCCESS' ? Util::ms($f['createdAt'] ?? null) : null;
+                    if ($at !== null && ($shippedAt === null || $at > $shippedAt)) {
+                        $shippedAt = $at;
+                    }
                 }
             }
-            $shippedAt ??= Util::ms($o['processedAt'] ?? null) ?? $now;
-            $availableAt = $shippedAt + (int) $p['wait_days'] * Points::DAY_MS;
-            $reason = 'wait';
+            $availableAt = (Util::ms($o['processedAt'] ?? $o['createdAt'] ?? null) ?? $now) + (int) $p['wait_days'] * Points::DAY_MS;
+            $reason = empty($o['fullyPaid']) ? 'payment' : 'wait';
         }
 
         $row = [
@@ -388,7 +386,8 @@ final class Referrals
                 return;
             }
             if ($status === 'pending') {
-                Push::queue($referrer, 'referral_pending', ['punkte' => (string) $points], 'refpend:' . $id, '/konto');
+                Push::queue($referrer, 'referral_pending', ['punkte' => (string) $points, 'datum' => Events::day((int) $availableAt)], 'refpend:' . $id, '/praemien');
+                Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$referrer['id']]);
             }
             return;
         }
@@ -404,7 +403,12 @@ final class Referrals
         if ($old['status'] === 'void' && $fixed === null && in_array($old['reason'], ['limit', 'duplicate'], true)) {
             return; // bleibt so
         }
+        // Gutgeschrieben (gesperrt) und jetzt storniert: Bescheid geben, die Punkte fallen weg
+        if ($old['status'] === 'pending' && $status === 'void' && in_array($reason, ['cancelled', 'zero'], true)) {
+            Push::queue($referrer, 'points_deducted', ['punkte' => (string) (int) $old['points'], 'grund' => 'Die Bestellung über deinen Empfehlungslink wurde storniert'], 'refvoid:' . $id, '/praemien');
+        }
         Db::update('club_referral_orders', $row, ['order_id' => $id]);
+        Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$referrer['id']]);
     }
 
     /** Cronjob: Wartezeit vorbei → Punkte gutschreiben (mit Obergrenze je Jahr und ohne doppelte Belohnung). */
@@ -435,7 +439,7 @@ final class Referrals
             }
             $ledger = Points::book($referrer['id'], 'referral', (int) $r['points'], 'Bestellung über deinen Empfehlungslink', 'order:' . $r['order_id'], null, [], false);
             Db::exec('UPDATE club_referral_orders SET ledger_id = ? WHERE order_id = ?', [$ledger, $r['order_id']]);
-            Push::queue($referrer, 'referral_order', ['punkte' => (string) $r['points']], 'refok:' . $r['order_id']);
+            Push::queue($referrer, 'referral_order', ['punkte' => (string) $r['points']], 'refok:' . $r['order_id'], '/praemien');
             Events::rewardCheck($referrer['id']);
             $n++;
         }

@@ -124,30 +124,120 @@ final class Bonus
         }
     }
 
-    /** Eine Bestellung wurde gutgeschrieben: gesperrte Boni freischalten, Empfehlung belohnen. */
+    /**
+     * Eine Bestellung ist eingegangen (gutgeschrieben, noch gesperrt): Boni „nach der ersten Bestellung“ werden
+     * mit ihr einlösbar, das werbende Mitglied bekommt seinen Bonus sofort – einlösbar wie die Bestellung.
+     */
+    public static function onOrderPlaced(array $member, array $order): void
+    {
+        $unlock = (int) ($order['available_at'] ?? Util::now());
+        $rows = Db::all(
+            "SELECT id FROM club_ledger WHERE member_id = ? AND status = 'locked' AND unlock_rule = 'first_order' AND (unlock_min_cents IS NULL OR unlock_min_cents <= ?)",
+            [$member['id'], (int) $order['amount_cents']]
+        );
+        foreach ($rows as $l) {
+            Db::exec("UPDATE club_ledger SET unlock_rule = 'time', unlock_at = ?, unlock_order = ? WHERE id = ? AND status = 'locked'", [$unlock, $order['order_id'], $l['id']]);
+        }
+        if ($rows) {
+            Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$member['id']]);
+        }
+        self::rewardReferrer($member, $order);
+    }
+
+    /** Die Punkte einer Bestellung sind einlösbar: daran gebundene Boni freigeben (auch die des werbenden Mitglieds). */
     public static function onOrderAvailable(array $member, array $order): void
     {
-        $now = Util::now();
-        $amount = (int) $order['amount_cents'];
-        $locked = Db::all(
+        foreach (Db::all("SELECT * FROM club_ledger WHERE unlock_order = ? AND status = 'locked'", [$order['order_id']]) as $l) {
+            self::unlock($l);
+        }
+        // Bestellungen aus der Zeit vor 1.4 (noch ohne Bindung an die Bestellung)
+        $legacy = Db::all(
             "SELECT * FROM club_ledger WHERE member_id = ? AND status = 'locked' AND unlock_rule = 'first_order' AND (unlock_min_cents IS NULL OR unlock_min_cents <= ?)",
-            [$member['id'], $amount]
+            [$member['id'], (int) $order['amount_cents']]
         );
-        foreach ($locked as $l) {
-            $expires = $l['expires_days'] !== null && (int) $l['expires_days'] > 0 ? $now + (int) $l['expires_days'] * Points::DAY_MS : null;
-            if (Db::exec("UPDATE club_ledger SET status = 'available', credited_at = ?, expires_at = ? WHERE id = ? AND status = 'locked'", [$now, $expires, $l['id']]) === 1) {
-                Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$member['id']]);
-                Events::booked($member['id'], $l['kind'], (int) $l['points'], ($l['kind'] === 'start' ? 'Startbonus' : 'Bonus') . ' freigeschaltet');
+        foreach ($legacy as $l) {
+            self::unlock($l);
+        }
+        self::rewardReferrer($member, $order);
+    }
+
+    /** Die Bestellung wurde storniert oder ganz erstattet: daran gebundene Boni zurücknehmen. */
+    public static function onOrderVoid(array $member, array $order): void
+    {
+        foreach (Db::all('SELECT * FROM club_ledger WHERE unlock_order = ?', [$order['order_id']]) as $l) {
+            if ($l['status'] === 'locked') {
+                if ($l['kind'] === 'referral') {
+                    // Empfehlung: Bonus fällt weg (eine neue Bestellung des Freundes bringt ihn wieder)
+                    if (Db::exec("UPDATE club_ledger SET status = 'void' WHERE id = ? AND status = 'locked'", [$l['id']]) === 1) {
+                        Push::queue($l['member_id'], 'points_deducted', [
+                            'punkte' => (string) (int) $l['points'],
+                            'grund' => 'Die Bestellung deiner Empfehlung wurde storniert',
+                        ], 'refvoid:' . $l['id'], '/praemien');
+                    }
+                } else {
+                    // Startbonus und Einladung: warten wieder auf die erste Bestellung
+                    Db::exec("UPDATE club_ledger SET unlock_rule = 'first_order', unlock_at = NULL, unlock_order = NULL WHERE id = ? AND status = 'locked'", [$l['id']]);
+                }
+                Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$l['member_id']]);
+            } elseif ($l['status'] === 'available' && $l['kind'] === 'referral' && !Db::value("SELECT 1 FROM club_ledger WHERE kind = 'adjust' AND ref = ?", ['void:' . $l['id']])) {
+                // Nach der Freigabe storniert: wieder abziehen (wie die Punkte der Bestellung)
+                Points::book($l['member_id'], 'adjust', -(int) $l['points'], 'Empfehlung: Die Bestellung wurde storniert', 'void:' . $l['id']);
             }
         }
+    }
 
-        // Empfehlung: das werbende Mitglied bekommt seinen Bonus mit der ersten gutgeschriebenen Bestellung des Freundes
+    /** Cronjob: Boni mit Freigabedatum einlösbar machen (gebunden an eine Bestellung nur, wenn deren Punkte frei sind). */
+    public static function releaseDue(?int $now = null): int
+    {
+        $now ??= Util::now();
+        $rows = Db::all(
+            "SELECT l.* FROM club_ledger l LEFT JOIN club_orders o ON o.order_id = l.unlock_order
+             WHERE l.status = 'locked' AND l.unlock_rule = 'time' AND l.unlock_at <= ? AND (l.unlock_order IS NULL OR o.order_id IS NULL OR o.status = 'available')
+             LIMIT 500",
+            [$now]
+        );
+        $n = 0;
+        foreach ($rows as $l) {
+            $n += self::unlock($l) ? 1 : 0;
+        }
+        return $n;
+    }
+
+    /** Gesperrte Buchung freigeben → Push „jetzt einlösbar“. */
+    private static function unlock(array $l): bool
+    {
+        $now = Util::now();
+        $expires = $l['expires_days'] !== null && (int) $l['expires_days'] > 0 ? $now + (int) $l['expires_days'] * Points::DAY_MS : ($l['expires_at'] !== null ? (int) $l['expires_at'] : null);
+        if (Db::exec("UPDATE club_ledger SET status = 'available', credited_at = ?, expires_at = ? WHERE id = ? AND status = 'locked'", [$now, $expires, $l['id']]) !== 1) {
+            return false;
+        }
+        Db::exec('UPDATE club_members SET meta_dirty = 1 WHERE id = ?', [$l['member_id']]);
+        $grund = match ($l['kind']) {
+            'start' => 'Dein Startbonus',
+            'referred' => 'Dein Bonus für die Einladung',
+            'referral' => 'Dein Bonus für die Empfehlung',
+            default => Events::reason((string) $l['kind'], (int) $l['points'], $l['note']),
+        };
+        Push::queue($l['member_id'], 'points_unlocked', ['punkte' => (string) (int) $l['points'], 'grund' => $grund], 'unlock:l' . $l['id'], '/praemien');
+        Events::rewardCheck($l['member_id']);
+        return true;
+    }
+
+    /**
+     * Empfehlung über den Einladungscode beim Beitritt: das werbende Mitglied bekommt seinen Bonus mit der ersten
+     * Bestellung des Freundes – sofort gutgeschrieben, einlösbar wie die Bestellung, bei Storno fällt er weg.
+     */
+    private static function rewardReferrer(array $member, array $order): void
+    {
         $p = Points::program();
-        if (!$member['referred_by'] || (int) $p['bonus_referrer'] <= 0 || $amount < (int) $p['referral_min_cents']) {
+        if (!$member['referred_by'] || (int) $p['bonus_referrer'] <= 0 || (int) $order['amount_cents'] < (int) $p['referral_min_cents']) {
             return;
         }
-        if (Db::value("SELECT 1 FROM club_ledger WHERE kind = 'referral' AND ref = ?", [$member['id']])) {
-            return;
+        // Schon belohnt? Ein nach der Freigabe wieder abgezogener Bonus zählt nicht (neue Bestellung bringt ihn wieder)
+        foreach (Db::all("SELECT id FROM club_ledger WHERE kind = 'referral' AND ref = ? AND status <> 'void'", [$member['id']]) as $l) {
+            if (!Db::value("SELECT 1 FROM club_ledger WHERE kind = 'adjust' AND ref = ?", ['void:' . $l['id']])) {
+                return;
+            }
         }
         // Schon über den Empfehlungslink (Code in der Bestellung) belohnt – nicht doppelt
         if (Referrals::rewardedViaLink((string) $member['referred_by'], (string) $member['shopify_id'])) {
@@ -157,13 +247,23 @@ final class Bonus
         if (!$referrer) {
             return;
         }
-        $year = (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral' AND created_at > ?", [$referrer['id'], $now - 365 * Points::DAY_MS]);
+        $now = Util::now();
+        $year = (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral' AND status <> 'void' AND created_at > ?", [$referrer['id'], $now - 365 * Points::DAY_MS]);
         if ((int) $p['referral_max_year'] > 0 && $year >= (int) $p['referral_max_year']) {
             return;
         }
         $friend = trim((string) ($member['first_name'] ?? '')) ?: 'Deine Empfehlung';
-        Points::book($referrer['id'], 'referral', (int) $p['bonus_referrer'], "$friend hat zum ersten Mal bestellt", $member['id'], null, [], false);
-        Push::queue($referrer, 'referral', ['freund' => $friend, 'punkte' => (string) $p['bonus_referrer']], 'referral:' . $member['id']);
+        // Frei erst, wenn die Punkte der Bestellung frei sind (Wartezeit vorbei und bezahlt)
+        $free = $order['status'] === 'available';
+        $unlock = max($now, (int) ($order['available_at'] ?? $now));
+        $points = (int) $p['bonus_referrer'];
+        // An die Bestellung gebunden (auch wenn sie schon frei ist): bei Storno oder Rückgabe fällt der Bonus weg
+        Points::book($referrer['id'], 'referral', $points, "$friend hat zum ersten Mal bestellt", $member['id'], null, ['unlock_order' => $order['order_id']] + ($free ? [] : [
+            'status' => 'locked',
+            'unlock_rule' => 'time',
+            'unlock_at' => $unlock,
+        ]), false);
+        Push::queue($referrer, 'referral', ['freund' => $friend, 'punkte' => (string) $points, 'datum' => $free ? 'sofort' : Events::day($unlock)], 'referral:' . $member['id'] . ':' . $order['order_id']);
         Events::rewardCheck($referrer['id']);
     }
 
@@ -268,9 +368,17 @@ final class Bonus
         if (mb_strlen($note) < 3) {
             throw new HttpError(422, 'Schreib uns kurz, welchen Duft du wo bewertet hast.');
         }
-        $month = (int) Db::value("SELECT COUNT(*) FROM club_claims WHERE member_id = ? AND kind = 'review' AND status <> 'rejected' AND created_at > ?", [$member['id'], Util::now() - 30 * Points::DAY_MS]);
-        if ($month >= max(1, (int) $p['review_max_month'])) {
-            throw new HttpError(429, 'Du hast diesen Monat schon Bewertungen eingereicht. Danke dir!');
+        if ($p['review_once']) {
+            // Einmal je Mitglied: abgelehnte Anfragen zählen nicht
+            $prev = Db::value("SELECT status FROM club_claims WHERE member_id = ? AND kind = 'review' AND status IN ('open', 'approved') ORDER BY created_at DESC", [$member['id']]);
+            if ($prev) {
+                throw new HttpError(409, $prev === 'open' ? 'Deine Bewertung liegt uns schon vor, wir prüfen sie gerade.' : 'Du hast den Bonus für deine Bewertung schon bekommen. Danke dir!');
+            }
+        } else {
+            $month = (int) Db::value("SELECT COUNT(*) FROM club_claims WHERE member_id = ? AND kind = 'review' AND status <> 'rejected' AND created_at > ?", [$member['id'], Util::now() - 30 * Points::DAY_MS]);
+            if ($month >= max(1, (int) $p['review_max_month'])) {
+                throw new HttpError(429, 'Du hast diesen Monat schon Bewertungen eingereicht. Danke dir!');
+            }
         }
         Util::limit('claim:' . $member['id'], 5, 86400, 'Bitte versuche es morgen noch einmal.');
         $id = Util::uuid();
@@ -325,6 +433,10 @@ final class Bonus
         if ($approve && ($points <= 0 || $points > 100000)) {
             throw new HttpError(422, 'Bitte eine Punktzahl angeben.');
         }
+        if ($approve && $c['kind'] === 'review' && Points::program()['review_once']
+            && Db::value("SELECT 1 FROM club_claims WHERE member_id = ? AND kind = 'review' AND status = 'approved'", [$c['member_id']])) {
+            throw new HttpError(409, 'Dieses Mitglied hat den Bonus für eine Bewertung schon bekommen (einmal je Mitglied). Bitte ablehnen.');
+        }
         Db::update('club_claims', [
             'status' => $approve ? 'approved' : 'rejected',
             'points' => $approve ? $points : null,
@@ -351,11 +463,18 @@ final class Bonus
             'referral' => [
                 'code' => (int) $p['bonus_referrer'] > 0 || (int) $p['bonus_referred'] > 0 || Referrals::enabled() ? self::refCode($member) : null,
                 'invited' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE referred_by = ?', [$member['id']]),
-                'rewarded' => (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral'", [$member['id']]),
+                // ohne stornierte und wieder abgezogene Empfehlungen
+                'rewarded' => max(0, (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'referral' AND status <> 'void'", [$member['id']])
+                    - (int) Db::value("SELECT COUNT(*) FROM club_ledger WHERE member_id = ? AND kind = 'adjust' AND ref LIKE 'void:%'", [$member['id']])),
                 // Empfehlungslink mit Rabatt für Freunde (Punkte je Bestellung, auch ohne Club-Beitritt)
                 'link' => Referrals::status($member),
             ],
             'claims' => self::claims($member['id']),
+            // Bewertungsbonus: einmal je Mitglied – offen (wird geprüft) oder schon erhalten
+            'review' => [
+                'once' => (bool) $p['review_once'],
+                'state' => $p['review_once'] ? (Db::value("SELECT status FROM club_claims WHERE member_id = ? AND kind = 'review' AND status IN ('open', 'approved') ORDER BY created_at DESC", [$member['id']]) ?: null) : null,
+            ],
         ];
     }
 }

@@ -279,7 +279,7 @@ const clubServer = http.createServer((req, res) => {
       return send(200, {
         broadcasts: club.broadcasts.map(row),
         templates: [{ key: 'release', label: 'Neuer Duft', kind: 'news', title: 'Neu: {duft}', body: '{vorname}, unser neuer Duft {duft} ist da.', url: '', audience: 'all', fields: { duft: 'Name des Dufts' } }],
-        audiences: [{ key: 'all', label: 'Alle Mitglieder', count: 25 }, { key: 'silber', label: 'Silber und Gold', count: 8 }, { key: 'gold', label: 'Nur Gold', count: 2 }],
+        audiences: [{ key: 'all', label: 'Alle Mitglieder', count: 25 }, { key: 'silber', label: 'Ab Silber (Silber, Gold, Platin)', count: 8 }, { key: 'gold', label: 'Ab Gold (Gold, Platin)', count: 2 }, { key: 'platin', label: 'Nur Platin', count: 1 }],
         four_eyes: club.fourEyes, quiet: { start: 21, end: 8 }, app_url: clubUrl,
       });
     }
@@ -1236,10 +1236,10 @@ test('Club: schlechte Bewertung wird zur Aufgabe mit Push, Probelauf nur für Ad
   let old = await admin.req('GET', '/club/trial');
   assert.equal(old.status, 426);
   assert.match(old.data.error, /Members Club läuft noch auf Version 1\.1\.0/);
-  assert.match(old.data.error, /Club-Paket 1\.3\.2 hochladen/);
+  assert.match(old.data.error, /Club-Paket 1\.4\.0 hochladen/);
   old = await admin.req('POST', '/admin/club/ping');
   assert.equal(old.data.test.ok, false, 'Verbindungstest meldet die alte Version');
-  assert.match(old.data.test.message, /Version 1\.1\.0 · bitte auf 1\.3\.2 aktualisieren/);
+  assert.match(old.data.test.message, /Version 1\.1\.0 · bitte auf 1\.4\.0 aktualisieren/);
   await admin.req('POST', '/admin/club/ping');
   club.old = false;
   assert.equal((await admin.req('POST', '/admin/club/ping')).data.test.ok, true);

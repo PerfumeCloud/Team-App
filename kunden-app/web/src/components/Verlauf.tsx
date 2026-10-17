@@ -11,16 +11,17 @@ function detail(i: HistoryItem): string {
   if (i.kind !== 'order') {
     if (i.status === 'pending' && i.reason === 'first_order') {
       const ab = i.min_cents ? ` ab ${euro(i.min_cents)}` : '';
-      return `${wann} · wird mit deiner ersten Bestellung${ab} freigeschaltet`;
+      return `${wann} · wird mit deiner ersten Bestellung${ab} gutgeschrieben`;
     }
+    if (i.status === 'pending' && i.reason === 'payment') return `${wann} · gutgeschrieben, einlösbar nach der Zahlung`;
+    if (i.status === 'pending' && i.available_at) return `${wann} · gutgeschrieben, einlösbar ab ${datum(i.available_at, true)}`;
     return i.note ? `${wann} · ${i.note}` : wann;
   }
   const aktion = i.factor && i.factor > 1 ? ` · ${faktorText(i.factor)} Punkte` : '';
   if (i.status === 'available') return `${wann} · ${euro(i.amount_cents ?? 0)}${aktion}`;
   if (i.status === 'pending') {
-    if (i.reason === 'payment') return `${wann} · wartet auf die Zahlung${aktion}`;
-    if (i.reason === 'shipping') return `${wann} · kommt nach dem Versand${aktion}`;
-    return `${wann} · verfügbar ab ${datum(i.available_at, true)}${aktion}`;
+    if (i.reason === 'payment') return `${wann} · gutgeschrieben, einlösbar nach der Zahlung${aktion}`;
+    return `${wann} · gutgeschrieben, einlösbar ab ${datum(i.available_at, true)}${aktion}`;
   }
   const grund: Record<string, string> = { cancelled: 'storniert', refunded: 'erstattet', test: 'Testbestellung', zero: 'ohne Punkte' };
   return `${wann} · ${grund[i.reason ?? ''] ?? 'zählt nicht'}`;
@@ -29,7 +30,7 @@ function detail(i: HistoryItem): string {
 function zahl(i: HistoryItem): { text: string; cls: string; sr: string } {
   const betrag = `${i.points > 0 ? '+' : i.points < 0 ? '−' : ''}${punkte(Math.abs(i.points))}`;
   if (i.status === 'void') return { text: betrag, cls: 'weg', sr: 'verfallen' };
-  if (i.status === 'pending') return { text: betrag, cls: 'offen', sr: 'unterwegs' };
+  if (i.status === 'pending') return { text: betrag, cls: 'offen', sr: 'gesperrt' };
   return { text: betrag, cls: i.points < 0 ? 'minus' : 'plus', sr: '' };
 }
 

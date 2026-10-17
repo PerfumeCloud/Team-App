@@ -85,6 +85,7 @@ final class Invites
             'total' => array_sum($counts),
             'loaded_at' => Settings::get('invites_loaded_at'),
             'tag' => Points::program()['waitlist_tag'],
+            'limit' => Waitlist::status(),
             'start_bonus' => Points::startBonus(),
             'mail_ready' => Mailer::configured(),
             'template' => self::template(),

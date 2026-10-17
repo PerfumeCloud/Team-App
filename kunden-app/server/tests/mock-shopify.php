@@ -218,6 +218,10 @@ if (preg_match('#^/admin/api/[0-9-]+/graphql\.json$#', $path)) {
                 'id' => $c['id'], 'firstName' => $c['firstName'] ?? null, 'defaultEmailAddress' => ['emailAddress' => $c['email']],
             ], $list)]];
             break;
+        case 'ClubWaitlistCount':
+            preg_match('/tag:"([^"]+)"/', (string) $v['q'], $mm);
+            $data = ['customersCount' => ['count' => count(array_filter($state['customers'], static fn ($c) => in_array($mm[1] ?? '', $c['tags'] ?? [], true)))]];
+            break;
         case 'ClubShopId':
             $data = ['shop' => ['id' => 'gid://shopify/Shop/1']];
             break;

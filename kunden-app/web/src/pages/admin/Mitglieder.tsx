@@ -207,8 +207,9 @@ export function Mitglied() {
               ))}
             </select>
             <small>
-              Einkaufswert im Zeitraum: {euro(m.tier_spend_cents)}
-              {m.tier_until ? ` · gilt mindestens bis ${datum(m.tier_until)}` : ''}. Von Hand gesetzt gilt die Stufe für die eingestellte Dauer.
+              Einkaufswert seit dem Beitritt: {euro(m.tier_spend_cents)}
+              {m.tier_floor ? ` · bleibt mindestens ${data.tiers.find((t) => t.key === m.tier_floor)?.name ?? m.tier_floor}` : ''}. Von Hand gesetzt bleibt die Stufe mindestens erhalten; mit
+              mehr Einkaufswert steigt sie weiter.
             </small>
           </label>
           <div className="feld">

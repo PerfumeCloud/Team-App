@@ -311,11 +311,25 @@ test('Anmeldung mit dem Shopify-Kundenkonto und Beitritt', async () => {
   assert.equal(r.data.points.balance, 109);
   assert.equal(r.data.points.pending, 89 + 25);
   assert.equal(r.data.points.to_next, 100 - 9);
+  // 1.4: sofort gutgeschrieben, einlösbar 14 Tage nach der Bestellung (#1002) bzw. nach der Zahlung (#1003)
+  assert.equal(r.data.points.held, 89 + 25);
+  assert.equal(r.data.points.total, 109 + 89 + 25);
+  assert.equal(r.data.points.unlocks[0].points, 89);
+  assert.equal(r.data.points.unlocks[0].payment, false);
+  assert.ok(Math.abs(r.data.points.unlocks[0].at - (Date.now() + 12 * DAY)) < 120000, 'Bestellung vor 2 Tagen → in 12 Tagen einlösbar');
+  assert.equal(r.data.points.unlocks[1].payment, true);
 
   const m = await getMock();
   assert.deepEqual(m.customers[ANNA].tags, ['club']);
   assert.equal(m.metafields[`${ANNA}|club.punkte`], '109');
   assert.equal(m.metafields[`${ANNA}|club.punkte_ausstehend`], '114');
+  const status = JSON.parse(m.metafields[`${ANNA}|club.status`]);
+  assert.equal(status.punkte, 109);
+  assert.equal(status.gesperrt, 114);
+  assert.equal(status.nutzbar_ab_punkte, 89);
+  assert.match(status.nutzbar_ab, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(status.stufe, 'bronze');
+  assert.equal(status.naechste_stufe, 'Silber');
 
   // Bekannte Person landet direkt auf der gewünschten Seite
   const again = new Client();
@@ -399,10 +413,11 @@ test('Cronjob: Code benutzt, Wartezeit vorbei, Code abgelaufen', async () => {
   let r = await anna.req('POST', '/codes', { steps: 1 });
   const used = r.data.code;
   const m = await getMock();
-  m.orders.push(order(1006, { ago: 1000, amount: 45, codes: [used.code] }));
-  // #1002 ist jetzt seit 20 Tagen versendet
+  m.orders.push(order(1006, { ago: 1000, amount: 60, codes: [used.code] }));
+  // #1002 ist jetzt 20 Tage alt: die Sperrfrist (14 Tage ab der Bestellung) ist vorbei
   const o2 = m.orders.find((o) => o.name === '#1002');
-  o2.fulfillments[0].createdAt = iso(20 * DAY);
+  o2.processedAt = o2.createdAt = iso(20 * DAY);
+  o2.fulfillments[0].createdAt = iso(19 * DAY);
   o2.updatedAt = iso(500);
   await setMock({ orders: m.orders });
 
@@ -543,7 +558,7 @@ test('Push: Abo, Verschlüsselung und Mitteilung bei jeder Gutschrift und jedem 
 
   const list = await admin.req('GET', '/admin/members?q=anna');
   annaId = list.data.members[0].id;
-  assert.equal(list.data.members[0].tier, 'silber', '193,90 € in 12 Monaten');
+  assert.equal(list.data.members[0].tier, 'silber', '208,90 € Einkaufswert seit dem Beitritt');
 
   await admin.req('POST', `/admin/members/${annaId}/adjust`, { points: 30, note: 'Danke für dein Foto', kind: 'bonus' });
   let p = await waitPush(annaPhone, (x) => x.title === '+30 Punkte');
@@ -605,8 +620,9 @@ test('Stufen: Silber bringt 1,5 Punkte pro Euro', async () => {
   assert.equal(r.data.tier.key, 'silber');
   assert.equal(r.data.tier.rate, 1.5);
   assert.equal(r.data.tier.next.key, 'gold');
-  assert.equal(r.data.tier.next.missing_cents, 40000 - 19390);
-  assert.ok(r.data.tier.until > Date.now() + 360 * DAY);
+  assert.equal(r.data.tier.next.missing_cents, 50000 - 20890);
+  assert.equal(r.data.tier.level, 2);
+  assert.equal(r.data.tier.next.progress, 2, '8,90 € von 300 € zwischen Silber und Gold');
   const m = await getMock();
   // nach dem Beitritt bestellt (frühere Bestellungen zählen mit dem Grundsatz)
   const o = order(1007, { ago: 1000, amount: 100, shippedAgo: 15 * DAY, delivered: true });
@@ -617,9 +633,23 @@ test('Stufen: Silber bringt 1,5 Punkte pro Euro', async () => {
   const h = r.data.history.find((x) => x.title === 'Bestellung #1007');
   assert.equal(h.points, 150);
   assert.equal(h.rate, 1.5);
-  const p = await waitPush(annaPhone, (x) => x.title === '+150 Punkte');
-  // „Prämie bereit“ wird an die Gutschrift angehängt statt einer zweiten Mitteilung
-  assert.equal(p.body, 'Bestellung #1007. Dein Kontostand: 410 Punkte. Du hast jetzt 20 € Rabatt bereit.');
+  // Sofort gutgeschrieben, aber gesperrt: einlösbar 14 Tage nach der Bestellung
+  assert.equal(h.status, 'pending');
+  assert.equal(h.reason, 'wait');
+  assert.ok(Math.abs(h.available_at - (Date.now() + 14 * DAY)) < 120000);
+  let p = await waitPush(annaPhone, (x) => x.title === '+150 Punkte gutgeschrieben');
+  assert.match(p.body, /^Bestellung #1007\. Ab \d{2}\.\d{2}\.\d{4} kannst du sie einlösen\.$/);
+  assert.equal(r.data.points.balance, 260, 'noch nicht einlösbar');
+  assert.equal(r.data.points.total, 260 + 150 + 60 + 25, 'gesamt mit den gesperrten Punkten (#1007, #1006, #1003)');
+  // 14 Tage später: einlösbar (Bestellung zurückdatiert, der Satz der Stufe bleibt)
+  const m2 = await getMock();
+  const o7 = m2.orders.find((x) => x.name === '#1007');
+  o7.processedAt = o7.createdAt = iso(15 * DAY); // updatedAt bleibt: der Abgleich holt sie ohnehin wieder (>= Zeiger)
+  await setMock({ orders: m2.orders });
+  await cron();
+  p = await waitPush(annaPhone, (x) => x.title === 'Deine 150 Punkte sind jetzt einlösbar');
+  // „Prämie bereit“ wird an die Freigabe angehängt statt einer zweiten Mitteilung
+  assert.equal(p.body, 'Bestellung #1007. Einlösbar: 410 Punkte, direkt im Warenkorb. Du hast jetzt 20 € Rabatt bereit.');
   // Kein Versand-Push für alte Sendungen
   assert.equal((await received(annaPhone)).some((x) => /#1007/.test(x.body) && x.title.includes('unterwegs')), false);
   assert.equal((await getMock()).metafields[`${ANNA}|club.stufe`], 'silber', 'Schlüssel (für Segmente), Name kommt aus club.programm');
@@ -654,7 +684,9 @@ test('Aktion: doppelte Punkte mit Push zum Start und Regeln im Shop', async () =
     const v = (await getMock()).metafields['gid://shopify/Shop/1|club.programm'];
     return v && JSON.parse(v).promos.length ? JSON.parse(v) : null;
   });
-  assert.deepEqual(prog.tiers.map((t) => [t.key, t.rate, t.min_cents]), [['bronze', 1, 0], ['silber', 1.5, 15000], ['gold', 2, 40000]]);
+  assert.deepEqual(prog.tiers.map((t) => [t.key, t.rate, t.min_cents]), [['bronze', 1, 0], ['silber', 1.5, 20000], ['gold', 2, 50000], ['platin', 3, 100000]]);
+  assert.equal(prog.tier_basis, 'lifetime');
+  assert.deepEqual(prog.waitlist, { full: false, text: 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!' });
   assert.equal(prog.promos[0].factor, 2);
   // Segment „Club: Prämie einlösbar“ wird angelegt und folgt der Einlöse-Schwelle
   const segment = async (q) => waitFor2(async () => Object.values((await getMock()).segments || {}).find((s) => s.name === 'Club: Prämie einlösbar' && s.query === q));
@@ -745,7 +777,7 @@ test('Empfehlung: Freundin und werbendes Mitglied bekommen Punkte', async () => 
   assert.equal(r.data.bonus.referral.invited, 1);
   assert.equal(r.data.bonus.referral.rewarded, 1);
   const p = await waitPush(annaPhone, (x) => x.title === 'Danke fürs Weitersagen');
-  assert.equal(p.body, 'Dora hat zum ersten Mal bestellt. Dafür bekommst du 100 Punkte.');
+  assert.equal(p.body, 'Dora hat zum ersten Mal bestellt. Dafür sind dir 100 Punkte gutgeschrieben, einlösbar ab sofort. Du hast jetzt 25 € Rabatt bereit.');
 });
 
 test('Geburtstag: Bonus einmal im Jahr', async () => {
@@ -903,7 +935,7 @@ test('Team-App: Statistik, Nachricht an Mitglieder mit Prüfung und Freigabe, Fe
   let r = await internal('GET', '/stats');
   assert.equal(r.status, 200);
   assert.equal(r.data.members, 3);
-  assert.deepEqual(r.data.tiers.map((t) => [t.key, t.count]), [['bronze', 2], ['silber', 1], ['gold', 0]]);
+  assert.deepEqual(r.data.tiers.map((t) => [t.key, t.count]), [['bronze', 2], ['silber', 1], ['gold', 0], ['platin', 0]]);
   assert.equal(r.data.bonus.start.count, 1);
   assert.equal(r.data.bonus.referral.points, 100);
   assert.equal(r.data.bonus.birthday.count, 1);
@@ -916,7 +948,7 @@ test('Team-App: Statistik, Nachricht an Mitglieder mit Prüfung und Freigabe, Fe
   r = await internal('GET', '/widget');
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal(r.data.members, 3);
-  assert.deepEqual(r.data.tiers.map((t) => [t.key, t.count]), [['bronze', 2], ['silber', 1], ['gold', 0]]);
+  assert.deepEqual(r.data.tiers.map((t) => [t.key, t.count]), [['bronze', 2], ['silber', 1], ['gold', 0], ['platin', 0]]);
   assert.ok(r.data.new_7 >= r.data.new_today);
   assert.equal(r.data.recent.length, 3);
   assert.ok(r.data.recent.some((m) => m.name === 'Anna B.'), JSON.stringify(r.data.recent));
@@ -1300,7 +1332,7 @@ test('Empfehlungslink: Rabatt für Freunde, Punkte je Bestellung – auch ohne B
   assert.equal(rows['#5004'].reason, 'min');
   assert.equal(await annaPoints(), before + 120);
   const p = await waitPush(annaPhone, (x) => x.title === 'Danke fürs Weitersagen' && /deinen Link/.test(x.body));
-  assert.equal(p.body, 'Für eine Bestellung über deinen Link bekommst du 120 Punkte.');
+  assert.equal(p.body, 'Deine 120 Punkte für die Bestellung über deinen Link sind jetzt einlösbar.');
   await waitPush(annaPhone, (x) => x.title === 'Über deinen Link wurde bestellt');
 
   r = await anna.req('GET', '/me');
@@ -1358,7 +1390,7 @@ test('Testbestellung: simuliert mit allen Schritten, Push auf die Geräte des Ad
   const orderPts = sql("SELECT points FROM club_orders WHERE order_id LIKE 'probelauf:%'")[0].points;
   assert.ok(orderPts >= 59);
   assert.equal(r.data.balance, orderPts + 118);
-  for (const title of ['Testbestellung · Dein Paket ist unterwegs', 'Testbestellung · Dein Duft ist angekommen', 'Testbestellung · Wie gefällt dir Sunset Dune?', `Testbestellung · +${orderPts} Punkte`, 'Testbestellung · Danke fürs Weitersagen', 'Testbestellung · Willkommen in Silber']) {
+  for (const title of ['Testbestellung · Dein Paket ist unterwegs', 'Testbestellung · Dein Duft ist angekommen', 'Testbestellung · Wie gefällt dir Sunset Dune?', `Testbestellung · +${orderPts} Punkte gutgeschrieben`, `Testbestellung · Deine ${orderPts} Punkte sind jetzt einlösbar`, 'Testbestellung · Danke fürs Weitersagen', 'Testbestellung · Willkommen in Silber']) {
     await waitPush(annaPhone, (x) => x.title === title);
   }
   assert.ok(r.data.steps.find((s) => s.key === 'shipped').push.status === 'sent');
@@ -1434,7 +1466,7 @@ test('Push-Check: private Adresse eintragen, Testpush, Testbestellung auch in de
   assert.equal((await internalReq('POST', '/push/test', { user, member_id: fremd })).status, 422);
 
   // Ruhezeit jetzt: die Pushs der Testbestellung kommen trotzdem sofort
-  const hour = Number(new Intl.DateTimeFormat('de-DE', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Europe/Berlin' }).format(new Date()));
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Berlin' }).formatToParts(new Date()).find((x) => x.type === 'hour').value);
   assert.equal((await admin.req('PUT', '/admin/push', { quiet: { start: hour, end: (hour + 2) % 24 } })).status, 200);
   r = await internalReq('POST', '/trial/start', { user, mode: 'sim', amount_cents: 3000 });
   assert.equal(r.status, 200, JSON.stringify(r.data));
@@ -1504,6 +1536,182 @@ test('Abgleich: ohne Freigabe für Name und E-Mail laufen die Punkte weiter', as
   await cron();
   r = await admin.req('GET', '/admin/dashboard');
   assert.equal(r.data.checklist.find((x) => x.key === 'customer_data').ok, true, 'Hinweis verschwindet wieder');
+});
+
+const EMIL = 'gid://shopify/Customer/70';
+const emil = new Client();
+const emilPhone = pushDevice('emil');
+const berlinDay = (ms) => new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' }).format(new Date(ms));
+test('1.4: Empfehlung erst mit der Bestellung, Storno, Rückgabe, Verfall-Erinnerung, Bewertung einmal, Warteliste, Umstellung', async () => {
+  await admin.req('PUT', '/admin/push', { quiet: { start: 0, end: 0 } });
+  let m = await getMock();
+  m.customers[EMIL] = { id: EMIL, email: 'emil@example.de', firstName: 'Emil', lastName: 'Kraus', tags: [] };
+  await setMock({ customers: m.customers, login: { customer: EMIL, deny: false } });
+  assert.equal(await emil.shopifyLogin('/'), '/willkommen');
+  const refCode = (await anna.req('GET', '/me')).data.bonus.referral.code;
+  let r = await emil.req('POST', '/me/join', { terms: true, einladung: refCode });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.points.balance, 50);
+  assert.equal(r.data.points.waiting, 100, 'Einladungsbonus wartet auf die erste Bestellung');
+  r = await emil.req('POST', '/push/subscribe', { endpoint: emilPhone.endpoint, keys: emilPhone.keys });
+  assert.equal(r.data.devices, 1);
+  const emilId = sql('SELECT id FROM club_members WHERE email = ?', ['emil@example.de'])[0].id;
+  const annaMe = (await anna.req('GET', '/me')).data;
+  const annaBefore = annaMe.points;
+  const annaSeen = (await received(annaPhone)).length;
+
+  // Erste Bestellung: Punkte sofort gutgeschrieben, einlösbar in 14 Tagen – der Bonus fürs werbende Mitglied auch
+  await addOrders([order(7001, { ago: 5000, amount: 40, customer: EMIL })]);
+  await cron();
+  r = await emil.req('GET', '/points');
+  const p7001 = r.data.history.find((x) => x.title === 'Bestellung #7001').points;
+  assert.equal(r.data.points.held, p7001 + 100);
+  assert.equal(r.data.points.waiting, 0);
+  assert.equal(r.data.points.balance, 50);
+  const unlockDay = berlinDay(Date.now() - 5000 + 14 * DAY);
+  let p = await waitPush(emilPhone, (x) => x.title === `+${p7001} Punkte gutgeschrieben`);
+  assert.match(p.body, new RegExp(`Ab ${unlockDay.replace(/\./g, '\\.')} kannst du sie einlösen\\.$`));
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.points.balance, annaBefore.balance, 'noch nicht einlösbar');
+  assert.equal(r.data.points.held, annaBefore.held + 100);
+  p = await waitPush(annaPhone, (x) => x.title === 'Danke fürs Weitersagen' && x.body.startsWith('Emil'));
+  assert.equal(p.body, `Emil hat zum ersten Mal bestellt. Dafür sind dir 100 Punkte gutgeschrieben, einlösbar ab ${unlockDay}.`);
+
+  // Storniert: Bonus fällt weg, Einladungsbonus wartet wieder
+  await addOrders([order(7001, { ago: 5000, amount: 40, customer: EMIL, cancelled: true })]);
+  await cron();
+  r = await emil.req('GET', '/me');
+  assert.equal(r.data.points.held, 0);
+  assert.equal(r.data.points.waiting, 100);
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.points.held, annaBefore.held);
+  p = await waitPush(annaPhone, (x) => x.title === '−100 Punkte' && x.body.startsWith('Die Bestellung deiner Empfehlung'));
+  assert.equal(p.body, `Die Bestellung deiner Empfehlung wurde storniert. Dein Kontostand: ${annaBefore.balance.toLocaleString('de-DE')} Punkte.`);
+  assert.equal(sql("SELECT COUNT(*) AS n FROM club_ledger WHERE kind = 'referral' AND ref = ? AND status = 'void'", [emilId])[0].n, 1);
+
+  // Neue Bestellung (vor 15 Tagen, also schon frei): beide Boni sofort einlösbar
+  await addOrders([order(7002, { ago: 15 * DAY, amount: 150, customer: EMIL })]);
+  await cron();
+  r = await emil.req('GET', '/me');
+  assert.equal(r.data.points.balance, 50 + 150 + 100);
+  assert.equal(r.data.points.held, 0);
+  p = await waitPush(emilPhone, (x) => x.title === 'Deine 100 Punkte sind jetzt einlösbar');
+  assert.match(p.body, /^Dein Bonus für die Einladung\. Einlösbar: \d+ Punkte, direkt im Warenkorb\./);
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.points.balance, annaBefore.balance + 100);
+  p = await waitPush(annaPhone, (x) => x.title === 'Danke fürs Weitersagen' && x.body.includes('einlösbar ab sofort.') && x.body.startsWith('Emil'));
+  assert.equal(r.data.bonus.referral.rewarded, annaMe.bonus.referral.rewarded + 1);
+
+  // Eingelöst und danach zurückgeschickt: Kontostand darf ins Minus, der Empfehlungsbonus wird abgezogen
+  r = await emil.req('POST', '/codes', { steps: 2 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.points.balance, 100);
+  const refunded = order(7002, { ago: 15 * DAY, amount: 150, customer: EMIL });
+  refunded.currentSubtotalPriceSet.shopMoney.amount = '0.00';
+  refunded.totalRefundedSet.shopMoney.amount = '154.90';
+  await addOrders([refunded]);
+  await cron();
+  r = await emil.req('GET', '/me');
+  assert.equal(r.data.points.balance, -50);
+  assert.equal(r.data.points.value_cents, 0);
+  p = await waitPush(emilPhone, (x) => x.title === '−150 Punkte');
+  assert.match(p.body, /Dein Kontostand: -50 Punkte\.$/);
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.points.balance, annaBefore.balance);
+  p = await waitPush(annaPhone, (x) => x.title === '−100 Punkte' && x.body.startsWith('Empfehlung: Die Bestellung wurde storniert'));
+  assert.equal(sql("SELECT COUNT(*) AS n FROM club_ledger WHERE kind = 'adjust' AND member_id = ? AND ref LIKE 'void:%'", [annaId])[0].n, 1);
+  // Zweite Stornomeldung bucht nichts doppelt
+  await addOrders([refunded]);
+  await cron();
+  assert.equal((await anna.req('GET', '/me')).data.points.balance, annaBefore.balance);
+  const annaNew = (await received(annaPhone)).slice(annaSeen);
+  assert.equal(annaNew.length, 4, JSON.stringify(annaNew.map((x) => [x.title, x.body])));
+
+  // Verfall-Erinnerung: 60 und 30 Tage vorher je einmal, nur Push (keine Mail)
+  assert.equal((await admin.req('PUT', '/admin/settings', { program: { expiry_warn_list: '30, 0' } })).status, 422);
+  r = await admin.req('PUT', '/admin/settings', { program: { expiry_warn_list: '30, 60, 60' } });
+  assert.deepEqual(r.data.program.expiry_warn_list, [60, 30]);
+  const now = Date.now();
+  const lot = globalThis.crypto.randomUUID();
+  sql("INSERT INTO club_ledger (id, member_id, kind, points, note, created_at, status, credited_at, expires_at) VALUES (?, ?, 'bonus', 120, 'Test', ?, 'available', ?, ?)", [lot, annaId, now, now, now + 50 * DAY]);
+  const remind = (at) => JSON.parse(execFileSync('php', [join(here, 'helper.php'), 'expiry-remind', annaId, String(at)], { env }).toString()).sent;
+  const mailsBefore = mails().length;
+  assert.equal(remind(now), true, '50 Tage vorher: Stufe 60');
+  assert.equal(remind(now + DAY), false, 'nur einmal je Stufe');
+  assert.equal(remind(now + 25 * DAY), true, '25 Tage vorher: Stufe 30');
+  assert.equal(remind(now + 45 * DAY), false);
+  await cron();
+  const expDay = berlinDay(now + 50 * DAY);
+  p = await waitPush(annaPhone, (x) => x.title === `120 Punkte verfallen am ${expDay}`);
+  assert.equal(p.body, 'Das sind 6 €. Löse sie vorher im Warenkorb ein, dann gehen sie nicht verloren.');
+  assert.equal((await received(annaPhone)).filter((x) => x.title === `120 Punkte verfallen am ${expDay}`).length, 2);
+  assert.equal(mails().length, mailsBefore);
+  r = await anna.req('GET', '/me');
+  assert.equal(r.data.points.expiring.points, 120);
+  assert.equal(r.data.points.expiring.cents, 600);
+  sql('DELETE FROM club_ledger WHERE id = ?', [lot]);
+
+  // Bewertungsbonus nur einmal je Mitglied
+  r = await emil.req('POST', '/me/review', { note: 'Sunset Dune bei Google bewertet' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  r = await emil.req('POST', '/me/review', { note: 'Noch eine Bewertung' });
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, 'Deine Bewertung liegt uns schon vor, wir prüfen sie gerade.');
+  const claim = (await admin.req('GET', '/admin/claims')).data.claims.find((c) => c.member.email === 'emil@example.de');
+  r = await admin.req('POST', `/admin/claims/${claim.id}`, { approve: true });
+  assert.equal(r.status, 200);
+  assert.equal((await admin.req('POST', `/admin/claims/${claim.id}`, { approve: true })).status, 404, 'schon erledigt');
+  // Ältere zweite Anfrage (aus der Zeit vor 1.4) lässt sich nicht mehr freigeben
+  const old = globalThis.crypto.randomUUID();
+  sql("INSERT INTO club_claims (id, member_id, kind, note, status, created_at) VALUES (?, ?, 'review', 'alt', 'open', ?)", [old, emilId, Date.now()]);
+  r = await admin.req('POST', `/admin/claims/${old}`, { approve: true });
+  assert.equal(r.status, 409);
+  assert.match(r.data.error, /einmal je Mitglied/);
+  assert.equal((await admin.req('POST', `/admin/claims/${old}`, { approve: false })).status, 200);
+  r = await emil.req('POST', '/me/review', { note: 'Und noch eine' });
+  assert.equal(r.status, 409);
+  assert.equal(r.data.error, 'Du hast den Bonus für deine Bewertung schon bekommen. Danke dir!');
+  r = await emil.req('GET', '/me');
+  assert.equal(r.data.points.balance, -50 + 25);
+  assert.deepEqual(r.data.bonus.review, { once: true, state: 'approved' });
+
+  // Warteliste mit Höchstzahl: voll → Hinweis im Admin und im Shop, Restplätze werden nicht gezeigt
+  r = await admin.req('PUT', '/admin/settings', { program: { waitlist_max: -1 } });
+  assert.equal(r.status, 422);
+  r = await admin.req('PUT', '/admin/settings', { program: { waitlist_max: 1, waitlist_full_text: 'Gerade voll – bald gibt es neue Plätze.' } });
+  assert.equal(r.data.program.waitlist_max, 1);
+  r = await admin.req('GET', '/admin/invites');
+  assert.equal(r.data.limit.max, 1);
+  assert.ok(r.data.limit.count >= 1, 'Clara hat den Tag der Warteliste');
+  assert.equal(r.data.limit.full, true);
+  const shopWaitlist = (full) => waitFor2(async () => {
+    const v = (await getMock()).metafields['gid://shopify/Shop/1|club.programm'];
+    const w = v && JSON.parse(v).waitlist;
+    return w && w.full === full ? w : null;
+  });
+  assert.deepEqual(await shopWaitlist(true), { full: true, text: 'Gerade voll – bald gibt es neue Plätze.' });
+  assert.equal(JSON.stringify(await getMock()).includes('"remaining"'), false);
+  await admin.req('PUT', '/admin/settings', { program: { waitlist_max: 0, waitlist_full_text: 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!' } });
+  await shopWaitlist(false);
+  assert.equal((await admin.req('GET', '/admin/invites')).data.limit.full, false);
+
+  // Umstellung auf 1.4: bisherige Stufe bleibt als Untergrenze, ohne Mitteilungen
+  sql("UPDATE club_members SET tier = 'gold', tier_floor = NULL WHERE id = ?", [emilId]);
+  sql("DELETE FROM club_settings WHERE k = 'rules_14'");
+  sql("UPDATE club_settings SET v = ? WHERE k = 'schema_version'", [JSON.stringify('1.3.2')]);
+  const queued = sql('SELECT COUNT(*) AS n FROM club_push_queue')[0].n;
+  r = await emil.req('GET', '/me');
+  assert.equal(r.status, 200);
+  assert.equal(setting('schema_version'), '1.4.0');
+  assert.ok(setting('rules_14'));
+  assert.deepEqual(sql('SELECT tier, tier_floor FROM club_members WHERE id = ?', [emilId])[0], { tier: 'gold', tier_floor: 'gold' });
+  assert.equal(r.data.tier.key, 'gold', 'Stufe bleibt trotz Rückgabe');
+  assert.equal(sql('SELECT COUNT(*) AS n FROM club_push_queue')[0].n, queued, 'keine Mitteilungen durch die Umstellung');
+  const prog = Object.fromEntries(setting('program').tiers.map((t) => [t.key, t.min_cents]));
+  assert.deepEqual(prog, { bronze: 0, silber: 20000, gold: 50000, platin: 100000 });
+
+  // Emil tritt wieder aus (Zahlen der folgenden Tests bleiben gleich)
+  assert.equal((await emil.req('DELETE', '/me')).status, 200);
 });
 
 test('Abmelden und Austreten', async () => {

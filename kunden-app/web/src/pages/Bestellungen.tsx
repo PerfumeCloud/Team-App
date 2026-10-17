@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router';
 import { ExternalLink, Package, RefreshCw, Sparkles, Truck } from 'lucide-react';
 import { useKunde } from '../lib/kontext';
 import { useTitel } from '../lib/hooks';
-import { datum, datumZeit, euro, punkteWort, seit } from '../lib/format';
+import { datum, datumZeit, euro, kurzdatum, punkteWort, seit } from '../lib/format';
 import type { Order, OrderPoints, Program } from '../lib/types';
 import { Chip, Hb, Hinweis, Laden, Leer, ProduktBild, Seitenkopf } from '../components/ui';
 
@@ -47,7 +47,7 @@ export function PunkteChip({ p }: { p: OrderPoints | null }) {
   if (p.status === 'pending') {
     return (
       <span className="punkte-chip unterwegs-chip">
-        <Sparkles /> +{punkteWort(p.points)} unterwegs
+        <Sparkles /> +{punkteWort(p.points)} {p.reason === 'payment' ? 'nach der Zahlung' : p.available_at ? `ab ${kurzdatum(p.available_at)}` : 'gesperrt'}
       </span>
     );
   }
@@ -58,14 +58,12 @@ export function PunkteChip({ p }: { p: OrderPoints | null }) {
 export function punkteText(p: OrderPoints | null, prog: Program): string {
   if (!p) return 'Diese Bestellung liegt vor deinem Club-Beitritt und zählt deshalb nicht.';
   const n = punkteWort(p.points);
-  if (p.status === 'available') return `${n} sind auf deinem Konto.`;
+  if (p.status === 'available') return `${n} sind auf deinem Konto und einlösbar.`;
   if (p.status === 'pending') {
-    if (p.reason === 'payment') return `${n} kommen, sobald deine Zahlung eingegangen ist.`;
-    if (p.reason === 'shipping')
-      return prog.wait_days > 0
-        ? `${n} kommen ${prog.wait_days} Tage nach dem Versand auf dein Konto, wenn die Rückgabefrist vorbei ist.`
-        : `${n} kommen auf dein Konto, sobald deine Bestellung versendet ist.`;
-    return `${n} kommen am ${datum(p.available_at, true)} auf dein Konto, wenn die Rückgabefrist vorbei ist.`;
+    if (p.reason === 'payment') return `${n} sind dir gutgeschrieben. Einlösen kannst du sie, sobald deine Zahlung eingegangen ist.`;
+    return prog.wait_days > 0
+      ? `${n} sind dir gutgeschrieben. Einlösen kannst du sie ab ${datum(p.available_at, true)}, wenn die Rückgabefrist von ${prog.wait_days} Tagen vorbei ist.`
+      : `${n} sind dir gutgeschrieben und gleich einlösbar.`;
   }
   if (p.reason === 'cancelled') return 'Für stornierte Bestellungen gibt es keine Punkte.';
   if (p.reason === 'refunded') return 'Die Bestellung wurde erstattet, deshalb gibt es dafür keine Punkte.';

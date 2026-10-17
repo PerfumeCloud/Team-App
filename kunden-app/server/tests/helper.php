@@ -12,4 +12,7 @@ if ($cmd === 'sql') {
     } else {
         echo json_encode(['changed' => Club\Db::exec($sql, $params)]);
     }
+} elseif ($cmd === 'expiry-remind') {
+    // php helper.php expiry-remind <member_id> <now_ms>: Verfall-Erinnerung zu einem späteren Zeitpunkt prüfen
+    echo json_encode(['sent' => Club\Expiry::remind($sql, (int) ($argv[3] ?? 0), Club\Points::warnDays())]);
 }

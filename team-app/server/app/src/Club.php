@@ -16,7 +16,7 @@ final class Club
     private const TIMEOUT = 10;
 
     /** Club-Version, die zu dieser Team-App gehört (liegt im selben Paket). Ältere Clubs kennen nicht alle Funktionen. */
-    public const EXPECTED = '1.3.2';
+    public const EXPECTED = '1.4.0';
 
     // ---------- Konfiguration ----------
 

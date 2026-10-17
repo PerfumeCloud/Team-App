@@ -4,17 +4,17 @@ declare(strict_types=1);
 namespace Club;
 
 /**
- * Mitgliedsstufen Bronze, Silber, Gold.
+ * Mitgliedsstufen Bronze, Silber, Gold, Platin.
  *
- * Maßgeblich ist der Warenwert der bezahlten Bestellungen in den letzten tier_months Monaten.
- * Wer eine höhere Stufe erreicht, steigt sofort auf und behält sie mindestens tier_months Monate.
- * Danach wird neu gerechnet; abgestiegen wird erst, wenn die Stufe abgelaufen ist.
+ * Maßgeblich ist der Einkaufswert seit dem Beitritt (Warenwert der Bestellungen, die im Club zählen).
+ * Er wächst nur; wer eine Stufe erreicht, steigt sofort auf und bleibt dort. Nur eine Rückgabe kann ihn senken.
+ * Wer vor 1.4 schon eine Stufe hatte, behält sie mindestens (tier_floor) – auch wenn die Schwellen jetzt höher sind.
  */
 final class Tiers
 {
-    public const KEYS = ['bronze', 'silber', 'gold'];
+    public const KEYS = ['bronze', 'silber', 'gold', 'platin'];
 
-    /** Stufen aus den Einstellungen, immer genau drei, aufsteigend. */
+    /** Stufen aus den Einstellungen, immer genau vier, aufsteigend. */
     public static function normalize(mixed $tiers, float $base): array
     {
         $defaults = Points::DEFAULTS['tiers'];
@@ -115,21 +115,18 @@ final class Tiers
         return $p['tiers_enabled'] ? (float) self::of($member, $p)['rate'] : (float) $p['earn_per_euro'];
     }
 
-    /** Warenwert der bezahlten Bestellungen im Zeitraum (in Cent). */
+    /** Einkaufswert seit dem Beitritt (in Cent): bezahlte Bestellungen, die im Club zählen. */
     public static function spend(string $memberId, ?int $now = null, ?array $p = null): int
     {
-        $p ??= Points::program();
-        $now ??= Util::now();
-        $since = (new \DateTimeImmutable('@' . intdiv($now, 1000)))->modify('-' . (int) $p['tier_months'] . ' months')->getTimestamp() * 1000;
         return (int) Db::value(
-            "SELECT COALESCE(SUM(amount_cents), 0) FROM club_orders WHERE member_id = ? AND ordered_at >= ?
+            "SELECT COALESCE(SUM(amount_cents), 0) FROM club_orders WHERE member_id = ?
              AND (status = 'available' OR (status = 'pending' AND reason IN ('shipping', 'wait')))",
-            [$memberId, $since]
+            [$memberId]
         );
     }
 
-    /** Stufe neu bestimmen (nach jeder Änderung an Bestellungen und täglich). Gibt das aktuelle Mitglied zurück. */
-    public static function evaluate(array $member, ?int $now = null): array
+    /** Stufe neu bestimmen (nach jeder Änderung an Bestellungen). Gibt das aktuelle Mitglied zurück. */
+    public static function evaluate(array $member, ?int $now = null, bool $notify = true): array
     {
         $p = Points::program();
         if (!$p['tiers_enabled'] || !$member['joined_at']) {
@@ -144,23 +141,13 @@ final class Tiers
                 $qual = $i;
             }
         }
+        // Mindeststufe aus der Zeit vor 1.4 (damals niedrigere Schwellen)
+        $floor = !empty($member['tier_floor']) ? self::index((string) $member['tier_floor'], $tiers) : 0;
+        $qual = max($qual, $floor);
         $cur = self::index((string) $member['tier'], $tiers);
-        $until = $member['tier_until'] !== null ? (int) $member['tier_until'] : null;
-        $months = (int) $p['tier_months'];
-        $validUntil = (new \DateTimeImmutable('@' . intdiv($now, 1000)))->modify("+$months months")->getTimestamp() * 1000;
-        $update = ['tier_spend_cents' => $spend];
-
-        if ($qual > $cur) {
+        $update = ['tier_spend_cents' => $spend, 'tier_until' => null];
+        if ($qual !== $cur) {
             $update['tier'] = $tiers[$qual]['key'];
-            $update['tier_until'] = $validUntil;
-        } elseif ($qual === $cur && $qual > 0) {
-            $update['tier_until'] = max($until ?? 0, $validUntil);
-        } elseif ($qual < $cur && ($until === null || $until < $now)) {
-            $update['tier'] = $tiers[$qual]['key'];
-            $update['tier_until'] = $qual > 0 ? $validUntil : null;
-        }
-        $changedTier = isset($update['tier']) && $update['tier'] !== $member['tier'];
-        if ($changedTier) {
             $update['meta_dirty'] = 1;
         }
         $differs = false;
@@ -173,23 +160,23 @@ final class Tiers
             Db::update('club_members', $update, ['id' => $member['id']]);
         }
         $fresh = array_merge($member, $update);
-        if ($changedTier && $qual > $cur) {
+        if ($notify && $qual > $cur) {
             $t = $tiers[$qual];
             Push::queue($fresh, 'tier_up', [
                 'stufe' => $t['name'],
                 'satz' => self::rateText((float) $t['rate']),
-            ], 'tier:' . $member['id'] . ':' . $t['key'] . ':' . date('Y-m', intdiv($now, 1000)));
+            ], 'tier:' . $member['id'] . ':' . $t['key']);
         }
         return $fresh;
     }
 
-    /** Täglich: abgelaufene Stufen prüfen (Abstieg) und Umsätze aktualisieren. */
+    /** Täglich: Stufen aus der Zeit vor 1.4 (mit Ablaufdatum) einmal auf die neue Regel umstellen. */
     public static function runDaily(): string
     {
         $now = Util::now();
         $n = 0;
-        foreach (Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND (tier_until IS NOT NULL AND tier_until < ?) LIMIT 500', [$now]) as $m) {
-            $after = self::evaluate($m, $now);
+        foreach (Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND tier_until IS NOT NULL LIMIT 500') as $m) {
+            $after = self::evaluate($m, $now, false);
             $n += $after['tier'] !== $m['tier'] ? 1 : 0;
         }
         return "$n Stufen geändert";
@@ -213,24 +200,30 @@ final class Tiers
         $cur = self::index((string) $member['tier'], $tiers);
         $spend = (int) $member['tier_spend_cents'];
         $next = $tiers[$cur + 1] ?? null;
-        // Was fehlt, um die nächste Stufe zu erreichen – oder um die aktuelle zu halten
-        $keep = $cur > 0 && $spend < (int) $tiers[$cur]['min_cents'] ? (int) $tiers[$cur]['min_cents'] - $spend : 0;
         return [
             'key' => $tiers[$cur]['key'],
             'name' => $tiers[$cur]['name'],
+            'level' => $cur + 1,
             'rate' => $tiers[$cur]['rate'],
             'benefits' => $tiers[$cur]['benefits'],
-            'until' => $member['tier_until'] !== null ? (int) $member['tier_until'] : null,
             'spend_cents' => $spend,
-            'months' => (int) $p['tier_months'],
             'next' => $next ? [
                 'key' => $next['key'],
                 'name' => $next['name'],
                 'rate' => $next['rate'],
                 'min_cents' => (int) $next['min_cents'],
                 'missing_cents' => max(0, (int) $next['min_cents'] - $spend),
+                // Fortschritt von der aktuellen zur nächsten Schwelle (0–100)
+                'progress' => self::progress($spend, (int) $tiers[$cur]['min_cents'], (int) $next['min_cents']),
             ] : null,
-            'keep_cents' => $keep,
         ];
+    }
+
+    public static function progress(int $spend, int $from, int $to): int
+    {
+        if ($to <= $from) {
+            return 100;
+        }
+        return max(0, min(100, (int) floor(($spend - $from) * 100 / ($to - $from))));
     }
 }

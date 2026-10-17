@@ -1,8 +1,8 @@
-import { MessageCircleHeart, Package, Star } from 'lucide-react';
+import { Calculator, MessageCircleHeart, Package, Star } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTitel } from '../lib/hooks';
 import { euro, punkteWort } from '../lib/format';
-import { boni, sammelText } from '../lib/regeln';
+import { boni, sammelText, wertText } from '../lib/regeln';
 import { Hb, Hinweis, Leer, PunkteKarte, Seitenkopf } from '../components/ui';
 import { BestellungKarte, useBestellungen } from './Bestellungen';
 import { CodeKarte } from './Praemien';
@@ -53,6 +53,17 @@ export default function Uebersicht() {
             <Hb to="/praemien">Prämien ansehen</Hb>
           )}
         </PunkteKarte>
+      )}
+
+      {points && (
+        <Link className="karte wert-kurz" to="/praemien#wert">
+          <span className="symbol">
+            <Calculator />
+          </span>
+          <p className="klein">
+            {wertText(p, tier)} <span className="textlink">So rechnen wir</span>
+          </p>
+        </Link>
       )}
 
       <AktionBanner p={p} />
@@ -124,7 +135,7 @@ export default function Uebersicht() {
         )}
       </section>
 
-      {tier && <StufenKarte tier={tier} p={p} />}
+      {tier && <StufenKarte tier={tier} p={p} points={points} />}
 
       {offen.length > 0 && (
         <section className="raster">

@@ -315,6 +315,9 @@ function Bewertung() {
   const [fehler, setFehler] = useState<string | null>(null);
   if (p.bonus.review <= 0 || !me.bonus) return null;
   const claims = me.bonus.claims.filter((c) => c.kind === 'review').slice(0, 3);
+  // Einmal je Mitglied: nach dem Einreichen wird geprüft, danach ist der Bonus erledigt
+  const einmal = me.bonus.review?.once ?? p.bonus.review_once;
+  const status = einmal ? (me.bonus.review?.state ?? null) : null;
 
   async function senden(e: FormEvent) {
     e.preventDefault();
@@ -339,17 +342,28 @@ function Bewertung() {
       </span>
       <div className="extra-inhalt">
         <b>{punkteWort(p.bonus.review)} für deine Bewertung</b>
-        <p className="klein">
-          Du hast einen Duft im Shop oder bei Google bewertet? Schreib uns kurz, welchen und wo. Wir prüfen das und schreiben dir die Punkte gut.
-        </p>
-        <form className="formular" onSubmit={senden}>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="z. B. „Sunset Dune, im Shop unter Anna M.“" style={{ minHeight: '4.5rem' }} />
-          <div>
-            <button className="knopf" type="submit" disabled={busy || note.trim().length < 3 || me.preview}>
-              <Send /> Einreichen
-            </button>
-          </div>
-        </form>
+        {status === 'approved' ? (
+          <p className="erledigt">
+            <Check aria-hidden="true" /> Bonus für deine Bewertung erhalten. Danke!
+          </p>
+        ) : status === 'open' ? (
+          <p className="klein">Danke! Wir prüfen deine Bewertung gerade und melden uns, sobald die Punkte da sind.</p>
+        ) : (
+          <p className="klein">
+            Du hast einen Duft im Shop oder bei Google bewertet? Schreib uns kurz, welchen und wo. Wir prüfen das und schreiben dir die Punkte gut
+            {einmal ? ' (einmal je Mitglied)' : ''}.
+          </p>
+        )}
+        {!status && (
+          <form className="formular" onSubmit={senden}>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="z. B. „Sunset Dune, im Shop unter Anna M.“" style={{ minHeight: '4.5rem' }} />
+            <div>
+              <button className="knopf" type="submit" disabled={busy || note.trim().length < 3 || me.preview}>
+                <Send /> Einreichen
+              </button>
+            </div>
+          </form>
+        )}
         {fehler && <Hinweis fehler>{fehler}</Hinweis>}
         {claims.length > 0 && (
           <ul className="verlauf">

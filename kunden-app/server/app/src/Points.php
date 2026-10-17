@@ -8,12 +8,14 @@ namespace Club;
  *
  * Punkte je Bestellung werden bei jedem Abgleich aus dem aktuellen Stand der Bestellung berechnet
  * (Warenwert nach Rabatten und Rücksendungen, ohne Versand) – mit dem Punktesatz der Stufe und dem Faktor
- * einer Aktion, die beim ersten Abgleich festgehalten werden. Sie sind zuerst „unterwegs“ und werden
- * verfügbar, sobald die Bestellung bezahlt, komplett versendet und die Wartezeit (Widerrufsfrist) vorbei ist.
- * Storniert oder erstattet → keine Punkte. Alle anderen Buchungen stehen im Journal (club_ledger).
+ * einer Aktion, die beim ersten Abgleich festgehalten werden. Sie stehen sofort nach der Bestellung im Konto,
+ * aber gesperrt: einlösbar wird es wait_days Tage nach der Bestellung, wenn sie bezahlt ist.
+ * Storniert oder erstattet → die Punkte werden wieder abgezogen, auch wenn das ein Minus ergibt
+ * (es wird mit den nächsten Punkten verrechnet). Alle anderen Buchungen stehen im Journal (club_ledger).
  *
- * Kontostand = verfügbare Bestellpunkte + Summe der verfügbaren Journal-Buchungen.
- * Gesperrte Buchungen (z. B. Startbonus „nach der ersten Bestellung“) zählen erst nach der Freischaltung.
+ * Kontostand (einlösbar) = verfügbare Bestellpunkte + Summe der verfügbaren Journal-Buchungen.
+ * Gesperrte Buchungen zählen erst nach der Freischaltung: mit Datum (unlock_rule time, z. B. Empfehlung)
+ * oder nach der ersten Bestellung (unlock_rule first_order, z. B. Startbonus der Warteliste).
  */
 final class Points
 {
@@ -26,26 +28,30 @@ final class Points
         'max_cents' => 5000,       // höchster Wert je Code
         'code_days' => 90,         // so lange gilt ein Code
         'code_expiry_refund' => true, // abgelaufener Code: Punkte zurück (sonst verfallen sie mit dem Code)
-        'wait_days' => 14,         // nach dem Versand, bis die Punkte verfügbar sind
+        'wait_days' => 14,         // nach der Bestellung, bis die Punkte einlösbar sind
         'welcome_points' => 50,    // Bonus beim Beitritt
         'retro_days' => 30,        // Bestellungen so viele Tage vor dem Beitritt zählen mit
         'max_open_codes' => 3,     // gleichzeitig offene Codes je Person
         'points_expiry_months' => 24, // Punkte verfallen so viele Monate nach der Gutschrift (0 = nie)
-        'expiry_warn_days' => 30,  // so lange vorher gibt es eine Erinnerung
-        // Stufen: Umsatz der letzten tier_months Monate entscheidet, die Stufe gilt dann tier_months Monate
+        'expiry_warn_days' => 30,  // (bis 1.3) eine Erinnerung so lange vorher – jetzt expiry_warn_list
+        'expiry_warn_list' => [60, 30], // Erinnerungen so viele Tage vor dem Verfall (Push und Hinweis in der App)
+        // Stufen: Einkaufswert seit dem Beitritt entscheidet. Erreichte Stufen bleiben; nur eine Rückgabe kann
+        // den Einkaufswert wieder senken. tier_months gilt nicht mehr (nur noch für ältere Einstellungen).
         'tiers_enabled' => true,
         'tier_months' => 12,
         'tiers' => [
             ['key' => 'bronze', 'name' => 'Bronze', 'min_cents' => 0, 'rate' => 1.0, 'benefits' => ['Willkommensbonus und Punkte zum Geburtstag', 'Club-Aktionen per Push als Erste erfahren']],
-            ['key' => 'silber', 'name' => 'Silber', 'min_cents' => 15000, 'rate' => 1.5, 'benefits' => ['Früher Zugang zu neuen Düften', 'Exklusive Aktionen für Silber und Gold']],
-            ['key' => 'gold', 'name' => 'Gold', 'min_cents' => 40000, 'rate' => 2.0, 'benefits' => ['Neue Düfte vor allen anderen', 'Exklusive Rabatte und kleine Überraschungen']],
+            ['key' => 'silber', 'name' => 'Silber', 'min_cents' => 20000, 'rate' => 1.5, 'benefits' => ['Früher Zugang zu neuen Düften', 'Exklusive Aktionen ab Silber']],
+            ['key' => 'gold', 'name' => 'Gold', 'min_cents' => 50000, 'rate' => 2.0, 'benefits' => ['Früher Zugang zu neuen Düften', 'Exklusive Rabatte und kleine Überraschungen']],
+            ['key' => 'platin', 'name' => 'Platin', 'min_cents' => 100000, 'rate' => 3.0, 'benefits' => ['Neue Düfte vor allen anderen', 'Persönliche Duftberatung', 'Ein kleines Geschenk zum Geburtstag']],
         ],
         // Bonuspunkte
         'bonus_birthday' => 50,
         'bonus_newsletter' => 25,
         'bonus_review' => 25,
+        'review_once' => true,     // Bewertungsbonus nur einmal je Mitglied (sonst bis review_max_month je 30 Tage)
         'review_max_month' => 2,
-        'bonus_referrer' => 100,   // für das werbende Mitglied, sobald die erste Bestellung des Freundes gutgeschrieben ist
+        'bonus_referrer' => 100,   // für das werbende Mitglied: mit der ersten Bestellung des Freundes, einlösbar nach wait_days
         'bonus_referred' => 100,   // für den Freund, nach der ersten Bestellung
         'referral_min_cents' => 0,
         'referral_max_year' => 10,
@@ -56,6 +62,8 @@ final class Points
         'start_bonus_min_cents' => 0,
         'start_bonus_days' => 0,    // nach der Freischaltung so viele Tage gültig (0 = normale Verfallsregel)
         'waitlist_tag' => 'warteliste',
+        'waitlist_max' => 0,       // Höchstzahl auf der Warteliste (0 = unbegrenzt)
+        'waitlist_full_text' => 'Die Warteliste ist gerade voll. Schau bald wieder vorbei!',
         'count_test' => false,     // Testbestellungen zählen (nur zum Ausprobieren)
         'bind_customer' => true,   // Code gilt nur für das eigene Kundenkonto
         'combine_shipping' => true,
@@ -121,7 +129,21 @@ final class Points
         $num('start_bonus', 0, 100000);
         $num('start_bonus_min_cents', 0, 10000000);
         $num('start_bonus_days', 0, 3650);
-        foreach (['active', 'count_test', 'bind_customer', 'combine_shipping', 'combine_order', 'combine_product', 'code_expiry_refund', 'tiers_enabled', 'start_bonus_requires_order'] as $flag) {
+        $num('waitlist_max', 0, 1000000);
+        if (array_key_exists('expiry_warn_list', $in)) {
+            $list = is_array($in['expiry_warn_list']) ? $in['expiry_warn_list'] : preg_split('/[\s,;]+/', (string) $in['expiry_warn_list'], -1, PREG_SPLIT_NO_EMPTY);
+            $days = [];
+            foreach ($list as $d) {
+                if (!is_numeric($d) || (int) $d < 1 || (int) $d > 365) {
+                    throw new HttpError(422, 'Erinnerungen vor dem Verfall: bitte Tage zwischen 1 und 365 angeben, z. B. „60, 30“.');
+                }
+                $days[] = (int) $d;
+            }
+            $days = array_values(array_unique($days));
+            rsort($days);
+            $p['expiry_warn_list'] = array_slice($days, 0, 4);
+        }
+        foreach (['active', 'count_test', 'bind_customer', 'combine_shipping', 'combine_order', 'combine_product', 'code_expiry_refund', 'tiers_enabled', 'start_bonus_requires_order', 'review_once'] as $flag) {
             if (array_key_exists($flag, $in)) {
                 $p[$flag] = (bool) $in[$flag];
             }
@@ -136,6 +158,10 @@ final class Points
                 throw new HttpError(422, 'Bitte ein Datum für die Frist des Startbonus angeben (oder leer lassen).');
             }
             $p['start_bonus_until'] = $d;
+        }
+        if (array_key_exists('waitlist_full_text', $in)) {
+            $t = Util::str($in['waitlist_full_text'], 200, false);
+            $p['waitlist_full_text'] = $t !== '' ? $t : self::DEFAULTS['waitlist_full_text'];
         }
         if (array_key_exists('waitlist_tag', $in)) {
             $tag = Util::str($in['waitlist_tag'], 40, false);
@@ -164,6 +190,16 @@ final class Points
         // Regeln im Shop (Metafeld club.programm) aktualisieren – Shop-Texte und Punkteanzeige ziehen nach
         ShopSync::markDirty();
         return $p;
+    }
+
+    /** Tage vor dem Verfall, an denen erinnert wird (absteigend, z. B. [60, 30]). */
+    public static function warnDays(?array $p = null): array
+    {
+        $p ??= self::program();
+        $list = is_array($p['expiry_warn_list'] ?? null) ? $p['expiry_warn_list'] : [(int) $p['expiry_warn_days']];
+        $list = array_values(array_filter(array_map('intval', $list), static fn ($d) => $d > 0));
+        rsort($list);
+        return $list;
     }
 
     /** Startbonus der Warteliste, wenn er gerade gilt. */
@@ -206,6 +242,7 @@ final class Points
             'welcome_points' => $p['welcome_points'],
             'retro_days' => $p['retro_days'],
             'points_expiry_months' => $p['points_expiry_months'],
+            'expiry_warn_list' => self::warnDays($p),
             'tiers_enabled' => $p['tiers_enabled'],
             'tier_months' => $p['tier_months'],
             'tiers' => $p['tiers_enabled'] ? $p['tiers'] : [],
@@ -213,6 +250,7 @@ final class Points
                 'birthday' => $p['bonus_birthday'],
                 'newsletter' => $p['bonus_newsletter'],
                 'review' => $p['bonus_review'],
+                'review_once' => (bool) $p['review_once'],
                 'referrer' => $p['bonus_referrer'],
                 'referred' => $p['bonus_referred'],
                 'referral_min_cents' => $p['referral_min_cents'],
@@ -227,6 +265,7 @@ final class Points
 
     /**
      * Punkte und Status einer Shopify-Bestellung. null = liegt vor dem Zeitraum des Clubs (zählt nicht).
+     * pending = gutgeschrieben, aber noch gesperrt (reason wait: bis available_at, payment: Zahlung fehlt).
      * @return array{points:int, status:string, reason:?string, amount_cents:int, shipped_at:?int, available_at:?int, ordered_at:int}|null
      */
     public static function compute(array $o, array $member, array $prog, int $now, float $rate = -1, float $factor = 1.0): ?array
@@ -253,26 +292,26 @@ final class Points
         if ($points <= 0) {
             return ['status' => 'void', 'reason' => $refunded > 0 ? 'refunded' : 'zero'] + $r;
         }
+        // Versand nur noch für die Anzeige und die Push-Nachricht „unterwegs“
+        if (($o['displayFulfillmentStatus'] ?? '') === 'FULFILLED') {
+            $shipped = null;
+            foreach ($o['fulfillments'] ?? [] as $f) {
+                if (($f['status'] ?? 'SUCCESS') !== 'SUCCESS') {
+                    continue;
+                }
+                $at = Util::ms($f['createdAt'] ?? null);
+                if ($at !== null && ($shipped === null || $at > $shipped)) {
+                    $shipped = $at;
+                }
+            }
+            $r['shipped_at'] = $shipped ?? $ordered;
+        }
+        // Gutgeschrieben ist sofort, einlösbar wait_days nach der Bestellung (Testbestellung: auf Wunsch sofort)
+        $available = isset($o['_unlock_at']) ? (int) $o['_unlock_at'] : $ordered + (int) $prog['wait_days'] * self::DAY_MS;
+        $r['available_at'] = $available;
         if (empty($o['fullyPaid'])) {
             return ['reason' => 'payment'] + $r;
         }
-        if (($o['displayFulfillmentStatus'] ?? '') !== 'FULFILLED') {
-            return ['reason' => 'shipping'] + $r;
-        }
-        $shipped = null;
-        foreach ($o['fulfillments'] ?? [] as $f) {
-            if (($f['status'] ?? 'SUCCESS') !== 'SUCCESS') {
-                continue;
-            }
-            $at = Util::ms($f['createdAt'] ?? null);
-            if ($at !== null && ($shipped === null || $at > $shipped)) {
-                $shipped = $at;
-            }
-        }
-        $shipped ??= $ordered;
-        $available = $shipped + (int) $prog['wait_days'] * self::DAY_MS;
-        $r['shipped_at'] = $shipped;
-        $r['available_at'] = $available;
         if ($available <= $now) {
             return ['status' => 'available', 'reason' => null] + $r;
         }
@@ -554,10 +593,40 @@ final class Points
         return (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_orders WHERE member_id = ? AND status = 'pending'", [$memberId]);
     }
 
-    /** Boni, die auf eine Bedingung warten (z. B. erste Bestellung). */
+    /** Gesperrte Journal-Buchungen: mit Datum (z. B. Empfehlung) und Boni, die auf die erste Bestellung warten. */
     public static function locked(string $memberId): int
     {
         return (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_ledger WHERE member_id = ? AND status = 'locked'", [$memberId]);
+    }
+
+    /**
+     * Gutgeschrieben, aber noch nicht einlösbar – mit Datum: Bestellungen in der Sperrfrist, Boni mit Freigabedatum,
+     * Bestellungen über den Empfehlungslink. Boni, die auf die erste Bestellung warten, zählen nicht dazu.
+     * @return array{points:int, unlocks:list<array{points:int, at:int, payment:bool}>}
+     */
+    public static function held(string $memberId): array
+    {
+        $rows = [];
+        foreach (Db::all("SELECT points, available_at, reason FROM club_orders WHERE member_id = ? AND status = 'pending' AND points > 0", [$memberId]) as $o) {
+            $rows[] = ['points' => (int) $o['points'], 'at' => (int) ($o['available_at'] ?? 0), 'payment' => $o['reason'] === 'payment'];
+        }
+        foreach (Db::all("SELECT points, unlock_at FROM club_ledger WHERE member_id = ? AND status = 'locked' AND unlock_rule = 'time' AND points > 0", [$memberId]) as $l) {
+            $rows[] = ['points' => (int) $l['points'], 'at' => (int) ($l['unlock_at'] ?? 0), 'payment' => false];
+        }
+        foreach (Db::all("SELECT points, available_at, reason FROM club_referral_orders WHERE member_id = ? AND status = 'pending' AND reason IN ('wait', 'payment') AND points > 0", [$memberId]) as $r) {
+            $rows[] = ['points' => (int) $r['points'], 'at' => (int) ($r['available_at'] ?? 0), 'payment' => $r['reason'] === 'payment'];
+        }
+        // Je Tag zusammengefasst, früheste zuerst
+        $byDay = [];
+        foreach ($rows as $r) {
+            $day = date('Y-m-d', intdiv(max(0, $r['at']), 1000)) . ($r['payment'] ? 'p' : '');
+            $byDay[$day] ??= ['points' => 0, 'at' => $r['at'], 'payment' => $r['payment']];
+            $byDay[$day]['points'] += $r['points'];
+            $byDay[$day]['at'] = max($byDay[$day]['at'], $r['at']);
+        }
+        $unlocks = array_values($byDay);
+        usort($unlocks, static fn ($a, $b) => [$a['payment'], $a['at']] <=> [$b['payment'], $b['at']]);
+        return ['points' => array_sum(array_column($rows, 'points')), 'unlocks' => array_slice($unlocks, 0, 6)];
     }
 
     /** Kontostand, Wert in Euro, Abstand zur nächsten Prämie und die Einlöse-Stufen. */
@@ -577,18 +646,44 @@ final class Points
             ];
         }
         $affordable = min($maxSteps, intdiv(max(0, $balance), (int) $p['redeem_points']));
+        $held = self::held($member['id']);
         return [
             'balance' => $balance,
+            // Gesamt = einlösbar + gutgeschrieben, aber noch gesperrt (mit Datum)
+            'total' => $balance + $held['points'],
+            'held' => $held['points'],
+            'unlocks' => $held['unlocks'],
+            // Boni, die erst mit der ersten Bestellung kommen
+            'waiting' => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_ledger WHERE member_id = ? AND status = 'locked' AND (unlock_rule IS NULL OR unlock_rule <> 'time')", [$member['id']]),
             'pending' => $pending,
             'locked' => self::locked($member['id']),
             'value_cents' => $affordable * (int) $p['redeem_cents'],
-            'to_next' => $affordable >= $maxSteps ? 0 : (int) $p['redeem_points'] - (max(0, $balance) % (int) $p['redeem_points']),
+            // im Minus (nach einer Rückgabe): erst ausgleichen, dann bis zur ersten Prämie
+            'to_next' => $affordable >= $maxSteps ? 0 : ($balance < 0 ? (int) $p['redeem_points'] - $balance : (int) $p['redeem_points'] - ($balance % (int) $p['redeem_points'])),
             'next_cents' => min($maxSteps, $affordable + 1) * (int) $p['redeem_cents'],
             'steps' => $steps,
             'lifetime' => (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_orders WHERE member_id = ? AND status = 'available'", [$member['id']])
                 + (int) Db::value("SELECT COALESCE(SUM(points), 0) FROM club_ledger WHERE member_id = ? AND status = 'available' AND points > 0 AND kind <> 'refund'", [$member['id']]),
-            'expiring' => Expiry::next($member['id']),
+            'expiring' => self::expiring($member['id'], $p),
         ];
+    }
+
+    /** Nächster Verfall in der längsten Erinnerungsfrist (z. B. 60 Tage) mit Euro-Wert – für den Hinweis in der App. */
+    private static function expiring(string $memberId, array $p): ?array
+    {
+        $days = self::warnDays($p);
+        $next = Expiry::next($memberId, null, $days ? max($days) : 30);
+        if (!$next) {
+            return null;
+        }
+        return $next + ['cents' => self::worth($next['points'], $p)];
+    }
+
+    /** Wert von Punkten in Cent (100 Punkte = 5 € → 120 Punkte = 6 €). */
+    public static function worth(int $points, ?array $p = null): int
+    {
+        $p ??= self::program();
+        return (int) floor(max(0, $points) * (int) $p['redeem_cents'] / max(1, (int) $p['redeem_points']));
     }
 
     public const TITLES = [
@@ -632,6 +727,7 @@ final class Points
                 $title = 'Korrektur vom Team';
             }
             $locked = $l['status'] === 'locked';
+            $timed = $locked && $l['unlock_rule'] === 'time';
             $items[] = [
                 'id' => 'l' . $l['id'],
                 'kind' => $l['kind'],
@@ -639,9 +735,24 @@ final class Points
                 'note' => $l['note'],
                 'points' => (int) $l['points'],
                 'status' => $locked ? 'pending' : 'available',
-                'reason' => $locked ? 'first_order' : null,
-                'min_cents' => $locked && $l['unlock_min_cents'] !== null ? (int) $l['unlock_min_cents'] : null,
+                'reason' => $timed ? 'wait' : ($locked ? 'first_order' : null),
+                'available_at' => $timed && $l['unlock_at'] !== null ? (int) $l['unlock_at'] : null,
+                'min_cents' => $locked && !$timed && $l['unlock_min_cents'] !== null ? (int) $l['unlock_min_cents'] : null,
                 'at' => (int) $l['created_at'],
+            ];
+        }
+        // Bestellungen über den Empfehlungslink, die noch gesperrt sind (gutgeschrieben wird ins Journal)
+        foreach (Db::all("SELECT * FROM club_referral_orders WHERE member_id = ? AND status = 'pending' AND reason IN ('wait', 'payment') ORDER BY ordered_at DESC LIMIT 20", [$memberId]) as $r) {
+            $items[] = [
+                'id' => 'r' . preg_replace('/\W/', '', (string) $r['order_id']),
+                'kind' => 'referral',
+                'title' => self::TITLES['referral'],
+                'note' => 'Bestellung über deinen Empfehlungslink',
+                'points' => (int) $r['points'],
+                'status' => 'pending',
+                'reason' => $r['reason'],
+                'available_at' => $r['available_at'] !== null ? (int) $r['available_at'] : null,
+                'at' => (int) $r['ordered_at'],
             ];
         }
         usort($items, static fn ($a, $b) => $b['at'] <=> $a['at']);
@@ -670,7 +781,8 @@ final class Points
 
     /**
      * Bucht Punkte ins Journal. Verfügbare Buchungen lösen eine Push-Nachricht aus (Gutschrift/Abzug mit Grund).
-     * $extra: status ('available'|'locked'), unlock_rule, unlock_min_cents, expires_days, expires_at
+     * $extra: status ('available'|'locked'), unlock_rule ('first_order'|'time'), unlock_min_cents, unlock_at, unlock_order,
+     * expires_days, expires_at
      */
     public static function book(string $memberId, string $kind, int $points, ?string $note, ?string $ref = null, ?string $by = null, array $extra = [], bool $notify = true): string
     {
@@ -689,6 +801,8 @@ final class Points
             'status' => $status,
             'unlock_rule' => $extra['unlock_rule'] ?? null,
             'unlock_min_cents' => $extra['unlock_min_cents'] ?? null,
+            'unlock_at' => $extra['unlock_at'] ?? null,
+            'unlock_order' => $extra['unlock_order'] ?? null,
             'expires_days' => $extra['expires_days'] ?? null,
             'expires_at' => $extra['expires_at'] ?? null,
             'credited_at' => $status === 'available' ? $now : null,
@@ -941,13 +1055,33 @@ final class Points
     {
         $rows = Db::all('SELECT * FROM club_members WHERE joined_at IS NOT NULL AND meta_dirty = 1 AND test = 0 LIMIT ' . $max);
         $done = 0;
-        foreach (array_chunk($rows, 6) as $chunk) {
+        foreach (array_chunk($rows, 5) as $chunk) {
             $fields = [];
             foreach ($chunk as $m) {
-                $fields[] = ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => 'punkte', 'type' => 'number_integer', 'value' => (string) self::balance($m['id'])];
+                $balance = self::balance($m['id']);
+                $held = self::held($m['id']);
+                $fields[] = ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => 'punkte', 'type' => 'number_integer', 'value' => (string) $balance];
                 $fields[] = ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => 'punkte_ausstehend', 'type' => 'number_integer', 'value' => (string) (self::pending($m['id']) + self::locked($m['id']))];
                 $fields[] = ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => 'mitglied_seit', 'type' => 'date', 'value' => date('Y-m-d', intdiv((int) $m['joined_at'], 1000))];
                 $fields[] = ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => 'stufe', 'type' => 'single_line_text_field', 'value' => Tiers::of($m)['key']];
+                // Für Startseite und Warenkorb im Theme: einlösbar, gesperrt mit Datum, Stufe und Fortschritt
+                $first = $held['unlocks'][0] ?? null;
+                $tier = Tiers::info($m);
+                $fields[] = ['ownerId' => $m['shopify_id'], 'namespace' => 'club', 'key' => 'status', 'type' => 'json', 'value' => Util::json([
+                    'punkte' => $balance,
+                    'wert_cents' => self::worth($balance),
+                    'gesperrt' => $held['points'],
+                    'gesamt' => $balance + $held['points'],
+                    'nutzbar_ab' => $first ? date('Y-m-d', intdiv($first['at'], 1000)) : null,
+                    'nutzbar_ab_punkte' => $first ? $first['points'] : 0,
+                    'stufe' => $tier ? $tier['key'] : Tiers::of($m)['key'],
+                    'stufe_name' => $tier ? $tier['name'] : Tiers::of($m)['name'],
+                    'umsatz_cents' => (int) $m['tier_spend_cents'],
+                    'naechste_stufe' => $tier && $tier['next'] ? $tier['next']['name'] : null,
+                    'fehlt_cents' => $tier && $tier['next'] ? $tier['next']['missing_cents'] : 0,
+                    'fortschritt' => $tier && $tier['next'] ? $tier['next']['progress'] : 100,
+                    'stand' => gmdate('c'),
+                ])];
             }
             $d = Shopify::graphql(
                 'mutation ClubMeta($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { metafields { key } userErrors { field message } } }',

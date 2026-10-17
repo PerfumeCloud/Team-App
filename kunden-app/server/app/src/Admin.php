@@ -181,7 +181,7 @@ final class Admin
                 'ref_code' => $m['ref_code'],
                 'waitlist' => (bool) $m['waitlist'],
                 'newsletter' => $m['newsletter_at'] !== null,
-                'tier_until' => $m['tier_until'] !== null ? (int) $m['tier_until'] : null,
+                'tier_floor' => $m['tier_floor'] ?? null,
                 'tier_spend_cents' => (int) $m['tier_spend_cents'],
                 'referred_by' => $inviter ? ['id' => $inviter['id'], 'name' => trim(($inviter['first_name'] ?? '') . ' ' . ($inviter['last_name'] ?? '')) ?: $inviter['email']] : null,
                 'invited' => (int) Db::value('SELECT COUNT(*) FROM club_members WHERE referred_by = ?', [$m['id']]),
@@ -202,7 +202,7 @@ final class Admin
         ];
     }
 
-    /** Stufe von Hand setzen (gilt für die eingestellte Dauer) oder Geburtstag korrigieren. */
+    /** Stufe von Hand setzen (gilt dann mindestens, höhere erreicht das Mitglied weiter selbst) oder Geburtstag korrigieren. */
     public static function updateMember(array $admin, string $id, array $in): array
     {
         $m = Db::one('SELECT * FROM club_members WHERE id = ? AND joined_at IS NOT NULL', [$id]);
@@ -215,10 +215,10 @@ final class Admin
             if (!in_array($tier, Tiers::KEYS, true)) {
                 throw new HttpError(422, 'Unbekannte Stufe.');
             }
-            if ($tier !== $m['tier']) {
-                $months = (int) Points::program()['tier_months'];
+            if ($tier !== $m['tier'] || $tier !== ($m['tier_floor'] ?? Tiers::KEYS[0])) {
                 $update['tier'] = $tier;
-                $update['tier_until'] = $tier === Tiers::KEYS[0] ? null : Expiry::addMonths(Util::now(), $months);
+                $update['tier_floor'] = $tier === Tiers::KEYS[0] ? null : $tier;
+                $update['tier_until'] = null;
                 $update['meta_dirty'] = 1;
             }
         }
@@ -242,6 +242,8 @@ final class Admin
             Util::log('Admin ' . $admin['email'] . ' ändert Mitglied ' . $id . ': ' . implode(', ', array_keys($update)));
         }
         if (isset($update['tier'])) {
+            // Einkaufswert reicht für mehr? Dann gilt die höhere Stufe.
+            Tiers::evaluate(Db::one('SELECT * FROM club_members WHERE id = ?', [$id]), null, false);
             Http::defer(static fn () => Points::pushMetafields());
         }
         return self::member($id);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { ArrowRight, CircleAlert, Copy, Hourglass, Info, Lock } from 'lucide-react';
+import { ArrowRight, CircleAlert, Copy, Gift, Hourglass, Info, Lock, Undo2 } from 'lucide-react';
 import zeichen from '../assets/zeichen.svg';
 import karteBild from '../assets/wueste-karte.jpg';
 import duenenBreit from '../assets/wueste-hell.jpg';
@@ -280,7 +280,7 @@ function useHochzaehlen(ziel: number): number {
 export function PunkteKarte({ points, program, children, marke }: { points: Points; program: Program; children?: ReactNode; marke?: string }) {
   const stand = useHochzaehlen(points.balance);
   const maxErreicht = points.to_next === 0;
-  const anteil = maxErreicht ? 100 : Math.round(((program.redeem_points - points.to_next) / program.redeem_points) * 100);
+  const anteil = maxErreicht ? 100 : Math.max(0, Math.round(((program.redeem_points - points.to_next) / program.redeem_points) * 100));
   const [breite, setBreite] = useState(0);
   useEffect(() => {
     const t = requestAnimationFrame(() => setBreite(anteil));
@@ -297,7 +297,7 @@ export function PunkteKarte({ points, program, children, marke }: { points: Poin
       <div>
         <p className="stand">
           <b>{punkte(stand)}</b>
-          <span>{points.balance === 1 ? 'Punkt' : 'Punkte'}</span>
+          <span>{points.balance === 1 ? 'Punkt' : 'Punkte'} einlösbar</span>
         </p>
         <p className="wert">
           {points.value_cents > 0 ? (
@@ -319,21 +319,31 @@ export function PunkteKarte({ points, program, children, marke }: { points: Poin
           {maxErreicht ? `Du kannst den höchsten Code über ${euro(program.max_cents)} einlösen.` : `Noch ${punkteWort(points.to_next)} bis ${euro(points.next_cents)} Rabatt`}
         </p>
       </div>
-      {(points.pending > 0 || points.locked > 0 || points.expiring) && (
+      {(points.held > 0 || points.waiting > 0 || points.expiring || points.balance < 0) && (
         <div className="karte-zusatz">
-          {points.pending > 0 && (
+          {points.balance < 0 && (
             <p className="unterwegs">
-              <span className="live" aria-hidden="true" /> {punkteWort(points.pending)} unterwegs
+              <Undo2 className="icon-klein" aria-hidden="true" /> Nach einer Rückgabe liegt dein Konto im Minus. Neue Punkte gleichen das zuerst aus.
             </p>
           )}
-          {points.locked > 0 && (
+          {points.held > 0 && (
             <p className="unterwegs">
-              <Lock className="icon-klein" aria-hidden="true" /> {punkteWort(points.locked)} Bonus warten auf deine erste Bestellung
+              <span className="live" aria-hidden="true" /> Insgesamt {punkteWort(points.total)}, davon {punkte(points.held)} noch gesperrt
+            </p>
+          )}
+          {points.unlocks.slice(0, 3).map((u) => (
+            <p className="unterwegs eingerueckt" key={`${u.at}-${u.payment}`}>
+              <Lock className="icon-klein" aria-hidden="true" /> {punkteWort(u.points)} {u.payment ? 'einlösbar nach der Zahlung' : `einlösbar ab ${datum(u.at)}`}
+            </p>
+          ))}
+          {points.waiting > 0 && (
+            <p className="unterwegs">
+              <Gift className="icon-klein" aria-hidden="true" /> {punkteWort(points.waiting)} Bonus warten auf deine erste Bestellung
             </p>
           )}
           {points.expiring && (
             <p className="unterwegs">
-              <Hourglass className="icon-klein" aria-hidden="true" /> {punkteWort(points.expiring.points)} verfallen am {datum(points.expiring.at, true)}
+              <Hourglass className="icon-klein" aria-hidden="true" /> {punkteWort(points.expiring.points)} ({euro(points.expiring.cents)}) verfallen am {datum(points.expiring.at, true)}
             </p>
           )}
         </div>

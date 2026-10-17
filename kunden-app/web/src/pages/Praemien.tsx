@@ -8,7 +8,7 @@ import { datum, euro, punkte, punkteWort, tageBis } from '../lib/format';
 import type { Code, Points, PointsResponse } from '../lib/types';
 import { Dialog, Erfolg, Hb, Hinweis, KopierKnopf, Laden, Seitenkopf } from '../components/ui';
 import { codeStatus, FruehereCodes, Verlauf } from '../components/Verlauf';
-import { AktionBanner, SoFunktionierts } from '../components/Club';
+import { AktionBanner, PunkteFragen, SoFunktionierts, WertTabelle } from '../components/Club';
 
 export function CodeKarte({ c, onZurueck }: { c: Code; onZurueck?: (c: Code) => void }) {
   const tage = tageBis(c.expires_at);
@@ -106,18 +106,20 @@ export default function Praemien() {
       <AktionBanner p={p} />
       {points.expiring && (
         <Hinweis>
-          {punkteWort(points.expiring.points)} verfallen am {datum(points.expiring.at, true)}. Löse sie vorher ein, dann gehen sie nicht verloren.
+          {punkteWort(points.expiring.points)} ({euro(points.expiring.cents)}) verfallen am {datum(points.expiring.at, true)}. Löse sie vorher ein, dann gehen sie nicht verloren.
         </Hinweis>
       )}
+      {points.balance < 0 && <Hinweis>Nach einer Rückgabe liegt dein Konto bei {punkteWort(points.balance)}. Neue Punkte gleichen das zuerst aus.</Hinweis>}
 
       <section className="karte">
         <div className="karte-kopf">
           <h2>
             {punkte(points.balance)} <em style={{ color: 'var(--em)' }}>{points.balance === 1 ? 'Punkt' : 'Punkte'}</em>
           </h2>
-          {points.pending + points.locked > 0 && (
+          {points.held > 0 && (
             <span className="unterwegs">
-              <span className="live" aria-hidden="true" /> {punkte(points.pending + points.locked)} unterwegs
+              <Lock className="icon-klein" aria-hidden="true" /> {punkte(points.held)} gesperrt
+              {points.unlocks[0] && !points.unlocks[0].payment ? `, ab ${datum(points.unlocks[0].at)} einlösbar` : ''}
             </span>
           )}
         </div>
@@ -171,6 +173,12 @@ export default function Praemien() {
         <Verlauf items={history} />
         <FruehereCodes codes={frueher} zurueck={p.code_expiry_refund} />
       </section>
+
+      <div id="wert">
+        <WertTabelle p={p} aktuell={data.tier?.key} />
+      </div>
+
+      <PunkteFragen p={p} tier={data.tier} />
 
       <SoFunktionierts p={p} rate={data.tier?.rate} />
 

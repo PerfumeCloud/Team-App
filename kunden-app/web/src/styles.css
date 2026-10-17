@@ -13,6 +13,13 @@
   --weich:cubic-bezier(.16,1,.3,1); --wechsel:cubic-bezier(.4,0,.2,1);
   --rand:max(clamp(1rem,4vw,3rem),env(safe-area-inset-left));
   --dock-unten:calc(5.2rem + env(safe-area-inset-bottom));
+  /* Stufen wie Metallkarten: poliertes Kupferbraun, gebürstetes Silber, warmes Gold, fast schwarzes Platin */
+  --t-bronze:linear-gradient(135deg,#5E3218 0%,#9C5A2F 34%,#D69B68 50%,#A3633A 66%,#5A2F16 100%);
+  --t-silber:linear-gradient(135deg,#737A84 0%,#BEC4CB 34%,#F3F5F7 50%,#AEB4BC 66%,#6A717A 100%);
+  --t-gold:linear-gradient(135deg,#7E5F26 0%,#C29B52 34%,#F0DCA4 50%,#B8914A 66%,#76571F 100%);
+  --t-platin:linear-gradient(135deg,#121316 0%,#26282D 42%,#3B3E44 52%,#1E2024 64%,#0E0F11 100%);
+  --t-platin-schrift:linear-gradient(180deg,#F4F3F1 0%,#C9CACD 55%,#9C9EA3 100%);
+  --t-eigen:linear-gradient(135deg,#B9A890 0%,#DDD3C5 50%,#B5A389 100%);
   color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -346,9 +353,30 @@ a.karte:hover{transform:translateY(-2px);border-color:rgba(35,33,32,.4);box-shad
 .aktion svg{width:1.15rem;height:1.15rem;color:var(--wood);flex:none}
 .stufe-zeichen{display:grid;place-items:center;width:2.6rem;height:2.6rem;border-radius:50%;flex:none;font-family:"Tenor Sans",sans-serif;font-size:1rem;letter-spacing:.04em;border:1px solid transparent}
 .stufe-zeichen.klein{width:1.9rem;height:1.9rem;font-size:.8rem}
-.stufe-bronze{background:var(--wood);color:var(--styx)}
-.stufe-silber{background:var(--styx);color:var(--amber);border-color:var(--tea);box-shadow:inset 0 0 0 3px var(--carbon)}
-.stufe-gold{background:var(--amber);color:var(--styx);box-shadow:inset 0 0 0 2px var(--amber),inset 0 0 0 3px var(--wood)}
+.stufe-bronze{background:var(--t-bronze);color:#FFF4E8;text-shadow:0 1px 1px rgba(60,28,10,.45)}
+.stufe-silber{background:var(--t-silber);color:#1E2227;border-color:rgba(30,34,39,.18)}
+.stufe-gold{background:var(--t-gold);color:#2A1E08;border-color:rgba(42,30,8,.18)}
+.stufe-platin{background:var(--t-platin);color:#E7E6E3;box-shadow:inset 0 0 0 1px rgba(231,230,227,.28)}
+.stufe-eigen{background:var(--t-eigen);color:var(--titel)}
+
+/* Metallkarte der Stufe (Seitenverhältnis einer Bankkarte) */
+.stufe-oben{display:grid;gap:1.1rem;align-items:center}
+@media (min-width:640px){.stufe-oben{grid-template-columns:minmax(0,18.5rem) minmax(0,1fr)}}
+.stufe-text{display:grid;gap:.35rem;justify-items:start}
+.stufe-text h2{font-size:clamp(1.5rem,1.2rem + 1vw,1.9rem);line-height:1.05}
+.metallkarte{position:relative;isolation:isolate;aspect-ratio:1.586;width:100%;max-width:22rem;border-radius:1rem;padding:1rem 1.1rem;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
+  background:var(--t-eigen);color:var(--titel);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 .7rem 1.6rem -1rem rgba(20,14,8,.6)}
+.metallkarte::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.26) 45%,transparent 58%);mix-blend-mode:soft-light;pointer-events:none}
+.metallkarte .oben{display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase}
+.metallkarte .name{font-family:"Tenor Sans",sans-serif;font-size:1.6rem;letter-spacing:.24em;text-transform:uppercase;line-height:1}
+.metallkarte .unten{display:flex;justify-content:space-between;align-items:flex-end;gap:.8rem;font-size:.875rem;font-variant-numeric:tabular-nums}
+.k-bronze{background:var(--t-bronze);color:#FFF4E8;text-shadow:0 1px 1px rgba(60,28,10,.45)}
+.k-silber{background:var(--t-silber);color:#1E2227}
+.k-gold{background:var(--t-gold);color:#2A1E08}
+.k-platin{background:var(--t-platin);color:#E7E6E3;box-shadow:inset 0 0 0 1px rgba(231,230,227,.22),0 .8rem 1.8rem -1rem rgba(0,0,0,.75)}
+.k-platin .name{background:var(--t-platin-schrift);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none}
+.k-platin::before{content:"";position:absolute;inset:6px;border-radius:.65rem;border:1px solid rgba(231,230,227,.16);pointer-events:none}
+@media (prefers-reduced-transparency:reduce),(forced-colors:active){.metallkarte::after{display:none}}
 .stufe-titel{display:flex;align-items:center;gap:.75rem}
 .stufe-titel h2{font-size:clamp(1.5rem,1.2rem + 1vw,1.9rem);line-height:1.05}
 .satz{font-family:"Tenor Sans",sans-serif;font-size:.8125rem;letter-spacing:.08em;white-space:nowrap;padding:.3rem .7rem;border-radius:999px;border:1px solid var(--tea);background:var(--styx);color:var(--titel)}
@@ -356,7 +384,8 @@ a.karte:hover{transform:translateY(-2px);border-color:rgba(35,33,32,.4);box-shad
 .haken-liste li{display:flex;gap:.5rem;align-items:flex-start}
 .haken-liste svg{width:1rem;height:1rem;flex:none;margin-top:.25rem;color:var(--gruen-tief)}
 .stufen{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
-@media (min-width:760px){.stufen{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:640px){.stufen{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1100px){.stufen{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .stufen>li{display:grid;gap:.45rem;align-content:start;justify-items:start;padding:1rem;border-radius:1.2rem;border:1px solid var(--tea);background:rgba(255,255,255,.6)}
 .stufen>li.aktuell{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
 .stufen>li b{font-weight:400;font-size:1.15rem;color:var(--titel)}
@@ -397,7 +426,8 @@ a.karte:hover{transform:translateY(-2px);border-color:rgba(35,33,32,.4);box-shad
 
 /* Stufen-Editor im Admin-Bereich */
 .stufen-editor{display:grid;gap:.8rem}
-@media (min-width:1000px){.stufen-editor{grid-template-columns:repeat(3,minmax(0,1fr))}.stufen-editor .formular-reihe{grid-template-columns:none}}
+@media (min-width:760px){.stufen-editor{grid-template-columns:repeat(2,minmax(0,1fr))}.stufen-editor .formular-reihe{grid-template-columns:none}}
+@media (min-width:1680px){.stufen-editor{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .stufen-editor fieldset{display:grid;gap:.8rem;align-content:start;margin:0;padding:1rem;border-radius:1.2rem;border:1px solid var(--tea);background:rgba(255,255,255,.55);min-width:0}
 .stufen-editor fieldset[disabled]{opacity:.5}
 .stufen-editor legend{display:flex;align-items:center;gap:.5rem;padding:0 .4rem;font-size:1.05rem;color:var(--titel)}
@@ -567,3 +597,26 @@ details.mehr[open] summary{margin-bottom:.8rem}
 .oder::before,.oder::after{content:"";flex:1;height:1px;background:var(--tea)}
 .knopf-voll{width:100%}
 .umbruch{overflow-wrap:anywhere}
+
+/* ===== Was sind meine Punkte wert? ===== */
+.wert-kurz{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.9rem;align-items:center;text-decoration:none}
+.wert-kurz .symbol{width:2.3rem;height:2.3rem}
+.wert-kurz .symbol svg{width:1rem;height:1rem}
+.wert-kurz .textlink{white-space:nowrap;text-decoration:underline;text-decoration-color:var(--tea)}
+.karte.wert{display:grid;gap:.9rem}
+.tabelle-rahmen{overflow-x:auto;margin:0 -.2rem;padding:0 .2rem}
+.wert-tabelle{width:100%;border-collapse:collapse;font-size:.9375rem;font-variant-numeric:tabular-nums}
+.wert-tabelle th,.wert-tabelle td{padding:.6rem .45rem;border-bottom:1px solid var(--linie);text-align:left;font-weight:400}
+.wert-tabelle thead th{font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.16em;text-transform:uppercase;color:var(--leise)}
+.wert-tabelle .zahl{text-align:right;white-space:nowrap}
+.wert-tabelle tbody tr:last-child>*{border-bottom:0}
+.wert-tabelle tr.aktuell>*{background:rgba(255,255,255,.75)}
+.wert-tabelle tr.aktuell>:first-child{border-radius:.7rem 0 0 .7rem;box-shadow:inset 2px 0 0 var(--wood)}
+.wert-tabelle tr.aktuell>:last-child{border-radius:0 .7rem .7rem 0}
+@media (max-width:380px){.wert-tabelle{font-size:.875rem}.wert-tabelle th,.wert-tabelle td{padding:.55rem .3rem}}
+.karte.fragen{display:grid;gap:.2rem}
+.karte.fragen h2{margin-bottom:.4rem}
+.karte.fragen .mehr p{padding:.2rem 0 .6rem}
+.unterwegs.eingerueckt{padding-left:1.4rem;font-size:.875rem}
+.karte-zusatz .unterwegs{align-items:flex-start;line-height:1.45}
+.karte-zusatz .unterwegs>.live,.karte-zusatz .unterwegs>svg{margin-top:.38em}

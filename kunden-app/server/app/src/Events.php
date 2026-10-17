@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace Club;
 
 /**
- * Was nach einer Änderung passiert: Push-Nachrichten (Versand, Zustellung, Gutschrift, Abzug, Prämie bereit),
- * Freischalten von Boni und Neuberechnung der Stufe.
+ * Was nach einer Änderung passiert: Push-Nachrichten (Versand, Zustellung, Gutschrift mit Sperrfrist, einlösbar,
+ * Abzug, Prämie bereit), Freischalten von Boni und Neuberechnung der Stufe.
  */
 final class Events
 {
@@ -30,20 +30,42 @@ final class Events
             Push::queue($member, 'order_delivered', ['bestellung' => $name], 'delivered:' . $new['order_id'], $url);
         }
 
-        // Punkte gutgeschrieben oder wieder abgezogen
-        $was = $old && $old['status'] === 'available' ? (int) $old['points'] : 0;
-        $is = $new['status'] === 'available' ? (int) $new['points'] : 0;
+        // Punkte: sofort gutgeschrieben (gesperrt), später einlösbar – oder wieder abgezogen
         $factor = (float) ($new['factor'] ?? 1);
-        if ($is > $was) {
-            $grund = 'Bestellung ' . $name . ($factor > 1 ? ' (' . Promotions::factorText($factor) . ' Punkte)' : '');
-            Push::queue($member, 'points_credited', ['punkte' => (string) ($is - $was), 'grund' => $grund], 'credit:' . $new['order_id'] . ':' . $is, '/praemien');
-            if ($was === 0) {
-                Bonus::onOrderAvailable($member, $new);
+        $grund = 'Bestellung ' . $name . ($factor > 1 ? ' (' . Promotions::factorText($factor) . ' Punkte)' : '');
+        $wasCounted = $old && $old['status'] !== 'void' ? (int) $old['points'] : 0;
+        $isCounted = $new['status'] !== 'void' ? (int) $new['points'] : 0;
+        $wasFree = $old && $old['status'] === 'available' ? (int) $old['points'] : 0;
+        $isFree = $new['status'] === 'available' ? (int) $new['points'] : 0;
+        $placed = $isCounted > 0 && $wasCounted === 0;
+        if ($placed) {
+            Bonus::onOrderPlaced($member, $new);
+        }
+        if ($isCounted > $wasCounted && $new['status'] === 'pending') {
+            Push::queue($member, 'points_pending', [
+                'punkte' => (string) ($isCounted - $wasCounted),
+                'grund' => $grund,
+                'datum' => self::day($new['available_at'] !== null ? (int) $new['available_at'] : $now),
+            ], 'held:' . $new['order_id'] . ':' . $isCounted, '/praemien');
+        } elseif ($isFree > $wasFree) {
+            if ($wasCounted > 0 && $old['status'] === 'pending') {
+                // Sperrfrist vorbei
+                Push::queue($member, 'points_unlocked', ['punkte' => (string) $isFree, 'grund' => $grund], 'unlock:' . $new['order_id'] . ':' . $isFree, '/praemien');
+            } else {
+                Push::queue($member, 'points_credited', ['punkte' => (string) ($isFree - $wasFree), 'grund' => $grund], 'credit:' . $new['order_id'] . ':' . $isFree, '/praemien');
             }
-            self::rewardCheck($member['id']);
-        } elseif ($is < $was) {
-            $grund = 'Bestellung ' . $name . ($new['status'] === 'void' ? ($new['reason'] === 'cancelled' ? ' wurde storniert' : ' wurde erstattet') : ' wurde teilweise erstattet');
-            Push::queue($member, 'points_deducted', ['punkte' => (string) ($was - $is), 'grund' => $grund], 'debit:' . $new['order_id'] . ':' . $is, '/praemien');
+        }
+        if ($isCounted < $wasCounted) {
+            $why = 'Bestellung ' . $name . ($new['status'] === 'void' ? ($new['reason'] === 'cancelled' ? ' wurde storniert' : ' wurde erstattet') : ' wurde teilweise erstattet');
+            Push::queue($member, 'points_deducted', ['punkte' => (string) ($wasCounted - $isCounted), 'grund' => $why], 'debit:' . $new['order_id'] . ':' . $isCounted, '/praemien');
+        }
+        if ($new['status'] === 'void' && $old && $old['status'] !== 'void') {
+            Bonus::onOrderVoid($member, $new);
+        }
+        if ($isFree > $wasFree && $wasFree === 0) {
+            Bonus::onOrderAvailable($member, $new);
+        }
+        if ($isFree !== $wasFree) {
             self::rewardCheck($member['id']);
         }
 
@@ -54,6 +76,12 @@ final class Events
                 Tiers::evaluate($fresh, $now);
             }
         }
+    }
+
+    /** „31.10.2026“ für Push-Texte */
+    public static function day(int $ms): string
+    {
+        return date('d.m.Y', intdiv($ms, 1000));
     }
 
     /** Gründe für Buchungen im Klartext (für Push-Nachrichten). */

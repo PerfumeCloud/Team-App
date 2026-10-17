@@ -11,7 +11,7 @@ namespace Club;
  */
 final class Broadcasts
 {
-    public const AUDIENCES = ['all' => 'Alle Mitglieder', 'silber' => 'Silber und Gold', 'gold' => 'Nur Gold'];
+    public const AUDIENCES = ['all' => 'Alle Mitglieder', 'silber' => 'Ab Silber (Silber, Gold, Platin)', 'gold' => 'Ab Gold (Gold, Platin)', 'platin' => 'Nur Platin'];
     public const STATUS = [
         'draft' => 'Entwurf',
         'review' => 'Zur Prüfung',

@@ -34,8 +34,38 @@ export function sammelText(p: Program, eigeneRate?: number): string {
 
 export function wartenText(p: Program): string {
   return p.wait_days > 0
-    ? `Deine Punkte kommen ${p.wait_days} Tage nach dem Versand auf dein Konto, so lange läuft die Rückgabefrist.`
-    : 'Deine Punkte kommen nach dem Versand auf dein Konto.';
+    ? `Deine Punkte sind sofort nach der Bestellung gutgeschrieben. Einlösen kannst du sie ${p.wait_days} Tage nach der Bestellung, so lange läuft die Rückgabefrist.`
+    : 'Deine Punkte sind sofort nach der Bestellung gutgeschrieben und einlösbar.';
+}
+
+/** Wert eines Punktes in Prozent vom Einkauf: 1,5 Punkte je € × (5 € je 100 Punkte) = 7,5 % */
+export function prozent(rate: number, p: Program): number {
+  return (rate * p.redeem_cents) / Math.max(1, p.redeem_points);
+}
+
+/** „7,5 %“ */
+export function prozentText(rate: number, p: Program): string {
+  return `${punkte(Math.round(prozent(rate, p) * 10) / 10)}\u00a0%`;
+}
+
+/** Wert einer Punktzahl in Cent (anteilig: 120 Punkte = 6 €) */
+export function wertCent(n: number, p: Program): number {
+  return Math.floor((Math.max(0, n) * p.redeem_cents) / Math.max(1, p.redeem_points));
+}
+
+/** „Du bist Silber: Für 1 € Einkauf bekommst du 1,5 Punkte. 100 Punkte sind 5 € wert, also 7,5 % zurück.“ */
+export function wertText(p: Program, tier?: { name: string; rate: number } | null): string {
+  const rate = tier?.rate ?? p.earn_per_euro;
+  const wer = tier ? `Du bist ${tier.name}: Für` : 'Für';
+  return `${wer} 1\u00a0€ Einkauf bekommst du ${satz(rate)}. ${punkteWort(p.redeem_points)} sind ${euro(p.redeem_cents)} wert, also ${prozentText(rate, p)} zurück.`;
+}
+
+/** „Wir erinnern dich 60 und 30 Tage vorher per Mitteilung.“ */
+export function erinnerungText(p: Program): string | null {
+  const tage = [...(p.expiry_warn_list ?? [])].sort((a, b) => b - a);
+  if (tage.length === 0) return null;
+  const liste = tage.length === 1 ? String(tage[0]) : `${tage.slice(0, -1).join(', ')} und ${tage[tage.length - 1]}`;
+  return `Wir erinnern dich ${liste} Tage vorher per Mitteilung.`;
 }
 
 export function einloesenText(p: Program): string {
@@ -47,7 +77,8 @@ export function verfallText(p: Program): string | null {
   if (p.points_expiry_months <= 0) return null;
   const m = p.points_expiry_months;
   const dauer = m % 12 === 0 ? `${m / 12} ${m === 12 ? 'Jahr' : 'Jahre'}` : `${m} Monate`;
-  return `Nicht eingelöste Punkte verfallen ${dauer} nach der Gutschrift.`;
+  const erinnerung = erinnerungText(p);
+  return `Nicht eingelöste Punkte verfallen ${dauer} nach der Gutschrift.${erinnerung ? ` ${erinnerung}` : ''}`;
 }
 
 export function codeText(p: Program): string {
@@ -78,12 +109,17 @@ export function boni(p: Program): { key: string; titel: string; text: string }[]
       key: 'referral',
       titel: beide && p.bonus.referrer === p.bonus.referred ? `${punkteWort(p.bonus.referrer)} für euch beide` : `${punkteWort(Math.max(p.bonus.referrer, p.bonus.referred))} fürs Weitersagen`,
       text: beide
-        ? `Lade Freunde ein: Du bekommst ${punkteWort(p.bonus.referrer)}, sie ${punkteWort(p.bonus.referred)}, sobald sie zum ersten Mal bestellen.`
-        : 'Lade Freunde ein, Punkte gibt es nach ihrer ersten Bestellung.',
+        ? `Lade Freunde ein: Du bekommst ${punkteWort(p.bonus.referrer)}, sie ${punkteWort(p.bonus.referred)}. Gutgeschrieben mit ihrer ersten Bestellung, einlösbar wie die Punkte dafür.`
+        : 'Lade Freunde ein: Punkte gibt es mit ihrer ersten Bestellung.',
     });
   }
   if (p.bonus.newsletter > 0) out.push({ key: 'newsletter', titel: `${punkteWort(p.bonus.newsletter)} für den Newsletter`, text: 'Einmalig, wenn du dich im Shop für unseren Newsletter anmeldest.' });
-  if (p.bonus.review > 0) out.push({ key: 'review', titel: `${punkteWort(p.bonus.review)} für eine Bewertung`, text: 'Bewerte einen Duft und sag uns kurz Bescheid.' });
+  if (p.bonus.review > 0)
+    out.push({
+      key: 'review',
+      titel: `${punkteWort(p.bonus.review)} für eine Bewertung`,
+      text: p.bonus.review_once ? 'Einmalig: Bewerte einen Duft und sag uns kurz Bescheid.' : 'Bewerte einen Duft und sag uns kurz Bescheid.',
+    });
   return out;
 }
 

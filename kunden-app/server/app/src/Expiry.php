@@ -114,7 +114,7 @@ final class Expiry
             return null;
         }
         $now ??= Util::now();
-        $within = ($withinDays ?? max(30, (int) $p['expiry_warn_days'])) * Points::DAY_MS;
+        $within = ($withinDays ?? max(30, ...(Points::warnDays($p) ?: [30]))) * Points::DAY_MS;
         $first = null;
         $lots = self::lots($memberId, $p);
         foreach ($lots as $l) {
@@ -155,7 +155,10 @@ final class Expiry
         return $due;
     }
 
-    /** Täglich: Punkte verfallen lassen und vorher daran erinnern. */
+    /**
+     * Täglich: Punkte verfallen lassen und vorher daran erinnern – je Stufe der Liste einmal (Standard 60 und 30 Tage
+     * vorher). Liegt der Verfall schon näher als die erste Stufe, kommt nur die nächste passende Erinnerung.
+     */
     public static function run(?int $now = null): string
     {
         $now ??= Util::now();
@@ -166,19 +169,38 @@ final class Expiry
         }
         $expired = 0;
         $warned = 0;
-        $warnDays = (int) $p['expiry_warn_days'];
+        $stages = Points::warnDays($p);
         foreach (Db::all('SELECT id FROM club_members WHERE joined_at IS NOT NULL') as $m) {
             $expired += self::expireMember($m['id'], $now);
-            if ($warnDays > 0) {
-                $next = self::next($m['id'], $now, $warnDays);
-                if ($next) {
-                    $warned += Push::queue($m['id'], 'points_expiring', [
-                        'punkte' => (string) $next['points'],
-                        'datum' => date('d.m.Y', intdiv($next['at'], 1000)),
-                    ], 'expwarn:' . $m['id'] . ':' . date('Y-m-d', intdiv($next['at'], 1000))) ? 1 : 0;
-                }
+            if ($stages) {
+                $warned += self::remind($m['id'], $now, $stages, $p) ? 1 : 0;
             }
         }
         return "$expired Punkte verfallen, $warned Erinnerungen";
+    }
+
+    /** Erinnerung für den nächsten Verfall, wenn eine Stufe (z. B. 60 Tage vorher) erreicht ist. */
+    public static function remind(string $memberId, int $now, array $stages, ?array $p = null): bool
+    {
+        $next = self::next($memberId, $now, max($stages));
+        if (!$next) {
+            return false;
+        }
+        $daysLeft = (int) ceil(($next['at'] - $now) / Points::DAY_MS);
+        $stage = null;
+        foreach ($stages as $d) {
+            if ($daysLeft <= $d) {
+                $stage = $d; // kleinste passende Stufe (Liste ist absteigend)
+            }
+        }
+        if ($stage === null) {
+            return false;
+        }
+        return Push::queue($memberId, 'points_expiring', [
+            'punkte' => number_format($next['points'], 0, ',', '.'),
+            'euro' => Util::euro(Points::worth($next['points'], $p)),
+            'datum' => date('d.m.Y', intdiv($next['at'], 1000)),
+            'tage' => (string) $daysLeft,
+        ], 'expwarn:' . $memberId . ':' . date('Y-m-d', intdiv($next['at'], 1000)) . ':' . $stage);
     }
 }

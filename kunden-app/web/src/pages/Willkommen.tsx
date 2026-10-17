@@ -15,7 +15,7 @@ import { KundenShell } from '../components/Shell';
 
 export default function Willkommen() {
   useTitel('Willkommen');
-  const { me, setMe } = useKunde();
+  const { me, setMe, reloadMe } = useKunde();
   const status = useStatus();
   const navigate = useNavigate();
   const p = me.program;
@@ -89,7 +89,7 @@ export default function Willkommen() {
             ) : (
               'Teilnahmebedingungen'
             )}
-            . Punkte werden {p.wait_days > 0 ? `${p.wait_days} Tage nach dem Versand` : 'nach dem Versand'} gutgeschrieben. {codeText(p)} {verfallText(p)} Austreten kann ich jederzeit.
+            . Punkte werden mit der Bestellung gutgeschrieben{p.wait_days > 0 ? ` und sind ${p.wait_days} Tage danach einlösbar` : ''}; bei Storno oder Rückgabe werden sie wieder abgezogen. {codeText(p)} {verfallText(p)} Austreten kann ich jederzeit.
           </span>
         </label>
         {fehler && <Hinweis fehler>{fehler}</Hinweis>}
@@ -140,13 +140,15 @@ export default function Willkommen() {
             {beigetreten.points && beigetreten.points.balance > 0
               ? `${punkteWort(beigetreten.points.balance)} sind schon auf deinem Konto.`
               : 'Ab jetzt sammelst du mit jeder Bestellung Punkte.'}
-            {beigetreten.points && beigetreten.points.locked > 0 && ` Dazu warten ${punkteWort(beigetreten.points.locked)} Bonus auf deine erste Bestellung.`}
+            {beigetreten.points && beigetreten.points.waiting > 0 && ` Dazu warten ${punkteWort(beigetreten.points.waiting)} Bonus auf deine erste Bestellung.`}
           </p>
           <Hb
             dunkel
             onClick={() => {
               navigate('/', { replace: true });
               setMe(beigetreten);
+              // Punkte aus Bestellungen vor dem Beitritt kommen kurz nach dem Beitritt dazu
+              void reloadMe();
             }}
           >
             Zu meinen Punkten

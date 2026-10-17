@@ -1,7 +1,8 @@
 const zahl = new Intl.NumberFormat('de-DE');
 
 export function punkte(n: number): string {
-  return zahl.format(n);
+  // echtes Minuszeichen (nach einer Rückgabe kann das Konto im Minus sein)
+  return zahl.format(n).replace('-', '−');
 }
 
 /** 500 → „5 €“, 1290 → „12,90 €“ (wie im Shop: glatte Beträge ohne Nachkommastellen) */
