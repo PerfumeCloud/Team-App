@@ -1,0 +1,31 @@
+{%- comment -%}
+  Drei Versprechen: Versand, Verpackung, Bezahlung. Texte und Symbole stehen in den Theme-Einstellungen unter „Versprechen“,
+  damit Startseite und Warenkorb immer dasselbe sagen.
+  {% render 'versprechen', art: 'gross' %}  Startseite: drei Spalten mit großen Kreisen
+  {% render 'versprechen', art: 'klein' %}  Warenkorb: kompakt unter der Bestellung
+{%- endcomment -%}
+{%- assign art = art | default: 'gross' -%}
+<ul class="versprechen-reihe">
+  {%- for i in (1..3) -%}
+    {%- liquid
+      assign k_symbol = 'versprechen_' | append: i | append: '_symbol'
+      assign k_titel = 'versprechen_' | append: i | append: '_titel'
+      assign k_text = 'versprechen_' | append: i | append: '_text'
+      assign v_titel = settings[k_titel]
+      assign v_text = settings[k_text]
+      assign v_symbol = settings[k_symbol] | default: 'paket'
+    -%}
+    {%- if v_titel != blank -%}
+    <li class="versprechen-punkt"{% if art == 'gross' %} data-auf="hoch" style="--v:{{ forloop.index0 }}"{% endif %}>
+      <span class="versprechen-kreis" aria-hidden="true"><svg><use href="#i-{{ v_symbol }}"/></svg></span>
+      {%- if art == 'gross' -%}
+        <h3 class="versprechen-titel">{{ v_titel | escape }}</h3>
+      {%- else -%}
+        <p class="versprechen-titel">{{ v_titel | escape }}</p>
+      {%- endif -%}
+      {%- comment -%} „1–3 Werktage“ und „50 €“ nie über zwei Zeilen trennen {%- endcomment -%}
+      {%- if v_text != blank -%}<p class="versprechen-text">{{ v_text | escape | replace: '–', '–&#8288;' | replace: ' €', '&nbsp;€' | newline_to_br }}</p>{%- endif -%}
+    </li>
+    {%- endif -%}
+  {%- endfor -%}
+</ul>

@@ -50,7 +50,7 @@
 <section class="club-regeln" id="club" aria-labelledby="h-club-{{ section.id }}">
   <div class="club-regeln-innen">
     <div class="club-kopfzeile">
-      <p class="club-label">{{ prog.name | default: 'Perfume Cloud Club' | escape }}</p>
+      <p class="club-label club-marke-name" translate="no">{{ prog.name | default: 'Perfume Cloud Club' | escape }}</p>
       <h2 id="h-club-{{ section.id }}">{{ section.settings.titel }}</h2>
       {%- if section.settings.text != blank -%}<p>{{ section.settings.text }}</p>{%- endif -%}
     </div>
@@ -94,7 +94,7 @@
       <li class="club-schritt">
         <span class="nr" aria-hidden="true">02</span>
         <p class="club-schritt-titel">Im Warenkorb einlösen</p>
-        <p>{{ prog.redeem_points }} Punkte sind {{ prog.redeem_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code{% if prog.max_cents > 0 %}, bis {{ prog.max_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} je Bestellung{% endif %}.</p>
+        <p>{{ prog.redeem_points }} Punkte sind {% render 'club-euro', cents: prog.redeem_cents %} Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code{% if prog.max_cents > 0 %}, bis {% render 'club-euro', cents: prog.max_cents %} je Bestellung{% endif %}.</p>
       </li>
       <li class="club-schritt">
         <span class="nr" aria-hidden="true">03</span>
@@ -105,29 +105,7 @@
 
     {%- if section.settings.stufen and prog.tiers_enabled and prog.tiers.size > 0 -%}
       <p class="club-label">Stufen</p>
-      <ul class="club-stufen">
-        {%- for t in prog.tiers -%}
-          {%- liquid
-            assign t_ganz = t.rate | floor
-            if t_ganz == t.rate
-              assign t_text = t_ganz
-            else
-              assign t_text = t.rate | append: '' | replace: '.', ','
-            endif
-          -%}
-          <li class="club-stufe{% if t.key == meine %} ist-meine{% endif %}">
-            <div class="club-stufe-kopf">
-              <p class="club-stufe-name">{{ t.name | escape }}</p>
-              {%- if t.key == meine -%}<span class="club-marke">Deine Stufe</span>{%- endif -%}
-            </div>
-            <p class="club-stufe-satz"><b>{{ t_text }}</b> {% if t.rate == 1 %}Punkt{% else %}Punkte{% endif %} je Euro</p>
-            <p class="club-stufe-ab">{% if t.min_cents > 0 %}ab {{ t.min_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Einkauf {% if prog.tier_basis == 'lifetime' %}seit dem Beitritt{% else %}in {{ prog.tier_months }} Monaten{% endif %}{% else %}für alle Mitglieder{% endif %}</p>
-            {%- if t.benefits.size > 0 -%}
-              <ul>{% for b in t.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
-            {%- endif -%}
-          </li>
-        {%- endfor -%}
-      </ul>
+      {%- render 'club-stufen', prog: prog, meine: meine -%}
     {%- endif -%}
 
     {%- if section.settings.boni -%}
@@ -153,7 +131,7 @@
     <div class="club-aktion-knopf">
       {%- if mitglied -%}
         <a class="hb hb-klein" href="{{ app }}"><span class="hb-text">Zum Club</span><span class="hb-hover" aria-hidden="true"><span>Zum Club</span><svg aria-hidden="true"><use href="#i-person"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
-        <span class="leise">Du hast {{ customer.metafields.club.punkte.value | default: 0 }} Punkte.</span>
+        {%- assign p = customer.metafields.club.punkte.value | default: 0 -%}<span class="leise">Du hast {% render 'club-zahl', n: p %} {% if p == 1 %}Punkt{% else %}Punkte{% endif %}.</span>
       {%- else -%}
         <a class="hb hb-klein" href="{{ app }}"><span class="hb-text">Kostenlos beitreten</span><span class="hb-hover" aria-hidden="true"><span>Kostenlos beitreten</span><svg aria-hidden="true"><use href="#i-person"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
         <span class="leise">Mit deinem Kundenkonto, in einer Minute.</span>

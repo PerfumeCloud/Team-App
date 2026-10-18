@@ -26,7 +26,7 @@
     <div class="club-einloesen" data-club-einloesen data-proxy="{{ prog.cart.proxy | default: '/apps/club' }}" data-cents="{{ cart.items_subtotal_price }}" data-app="{{ app }}">
       <div class="club-einloesen-kopf">
         <p class="club-label">Club-Punkte einlösen</p>
-        <p class="club-einloesen-stand" data-club-e-stand>{% render 'club-zahl', n: punkte %} {% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}{% if wert > 0 %} · {{ wert | money_without_trailing_zeros }}{% endif %}</p>
+        <p class="club-einloesen-stand" data-club-e-stand>{% render 'club-zahl', n: punkte %} {% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}{% if wert > 0 %} · {% render 'club-euro', cents: wert %}{% endif %}</p>
       </div>
 
       <div class="club-einloesen-wahl" data-club-e-wahl hidden>

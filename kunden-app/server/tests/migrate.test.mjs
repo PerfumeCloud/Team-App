@@ -14,6 +14,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'club-migrate-'));
 const PORT = 19500 + Math.floor(Math.random() * 400);
 const app = `http://127.0.0.1:${PORT}`;
 const dbFile = join(tmp, 'club.sqlite');
+const APP_VERSION = readFileSync(join(serverDir, 'app', 'bootstrap.php'), 'utf8').match(/define\('APP_VERSION', '([^']+)'\)/)[1];
 const env = { ...process.env, CLUB_CONFIG: join(tmp, 'config.php'), CLUB_STORAGE: tmp, CLUB_MAIL_LOG: join(tmp, 'mails.log') };
 let php;
 
@@ -68,7 +69,7 @@ after(() => {
 test('Version 1.0 wird beim ersten Aufruf auf 1.1 umgebaut – ohne Datenverlust', async () => {
   const status = await (await fetch(`${app}/api/status`)).json();
   assert.equal(status.installed, true, JSON.stringify(status));
-  assert.equal(status.version, '1.2.0');
+  assert.equal(status.version, APP_VERSION);
 
   const tables = tableList();
   for (const old of ['settings', 'admins', 'members', 'sessions', 'ledger', 'codes', 'order_cache']) {
@@ -93,7 +94,7 @@ test('Version 1.0 wird beim ersten Aufruf auf 1.1 umgebaut – ohne Datenverlust
   assert.equal(l.credited_at, l.created_at);
   const program = JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'program'")[0].v);
   assert.equal(program.welcome_points, 50, 'Einstellungen bleiben erhalten');
-  assert.equal(JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'schema_version'")[0].v), '1.2.0');
+  assert.equal(JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'schema_version'")[0].v), APP_VERSION);
   assert.ok(JSON.parse(sql("SELECT v FROM club_settings WHERE k = 'internal_key'")[0].v).length > 20);
 });
 

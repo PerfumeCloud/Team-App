@@ -83,7 +83,7 @@ export function FruehereCodes({ codes, zurueck = true }: { codes: Code[]; zuruec
         {codes.map((c) => (
           <li key={c.id}>
             <span className="was">
-              <span style={{ fontFamily: '"Tenor Sans", sans-serif', letterSpacing: '.08em' }}>{c.code}</span>
+              <span className="code-text">{c.code}</span>
               <small>{codeStatus(c, zurueck)}</small>
             </span>
             <span className="zahl">{euro(c.value_cents)}</span>

@@ -1,0 +1,45 @@
+{%- comment -%}
+  Die Stufen als ruhige Karten im Theme-Design. Die Metallfarbe der Stufe zeigt sich nur dezent:
+  feine Linie an der Oberkante, kleine Münze vor dem Namen, Punkte vor den Vorteilen.
+  Eigene Stufen (anderer Schlüssel als bronze, silber, gold, platin) bekommen Sand.
+  Genutzt von „Club auf der Startseite“ und „Club-Regeln“, damit beide immer gleich aussehen.
+  {% render 'club-stufen', prog: prog, meine: stufe_key %}
+{%- endcomment -%}
+{%- liquid
+  assign schritt_pf = prog.redeem_points | default: 100 | times: 1.0
+  assign schritt_c = prog.redeem_cents | default: 500
+  if prog.tier_basis == 'lifetime'
+    assign seit = 'seit dem Beitritt'
+  else
+    assign seit = 'in ' | append: prog.tier_months | append: ' Monaten'
+  endif
+-%}
+<ul class="club-stufen">
+  {%- for t in prog.tiers -%}
+    {%- liquid
+      assign metall = 'eigen'
+      case t.key
+        when 'bronze', 'silber', 'gold', 'platin'
+          assign metall = t.key
+      endcase
+      capture t_satz
+        render 'club-komma', x: t.rate
+      endcapture
+      assign t_pct = t.rate | times: schritt_c | divided_by: schritt_pf
+      capture t_pct_text
+        render 'club-komma', x: t_pct
+      endcapture
+    -%}
+    <li class="club-stufe s-{{ metall }}{% if meine != blank and t.key == meine %} ist-meine{% endif %}">
+      <div class="club-stufe-kopf">
+        <p class="club-stufe-name"><span class="club-stufe-muenze" aria-hidden="true"></span>{{ t.name | escape }}</p>
+        {%- if meine != blank and t.key == meine -%}<span class="club-marke">Deine Stufe</span>{%- endif -%}
+      </div>
+      <p class="club-stufe-satz"><b>{{ t_satz }}</b> {% if t.rate == 1 %}Punkt{% else %}Punkte{% endif %} je Euro<span class="club-stufe-zurueck">also {{ t_pct_text }}&nbsp;% zurück</span></p>
+      <p class="club-stufe-ab">{% if t.min_cents > 0 %}ab {% render 'club-euro', cents: t.min_cents %} Einkauf {{ seit }}{% else %}für alle Mitglieder{% endif %}</p>
+      {%- if t.benefits.size > 0 -%}
+        <ul>{% for b in t.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
+      {%- endif -%}
+    </li>
+  {%- endfor -%}
+</ul>

@@ -56,7 +56,7 @@ export default function Willkommen() {
 
       {gast && (
         <Hinweis>
-          <b style={{ fontWeight: 400, fontStyle: 'italic' }}>{gast.name}</b> hat dich eingeladen.
+          <b>{gast.name}</b> hat dich eingeladen.
           {gast.points > 0 && ` Nach deiner ersten Bestellung bekommst du ${punkteWort(gast.points)} extra.`}
         </Hinweis>
       )}

@@ -59,7 +59,7 @@ function StufenVerteilung({ tiers, gesamt }: { tiers: DashboardDaten['tiers']; g
         {tiers.map((t) => (
           <li key={t.key}>
             <i style={{ background: STUFEN_FARBE[t.key] ?? 'var(--carbon)', boxShadow: t.key === 'silber' ? 'inset 0 0 0 1px rgba(35,33,32,.3)' : undefined }} />
-            {t.name} <b style={{ fontWeight: 400 }}>{punkte(t.count)}</b>
+            {t.name} <b>{punkte(t.count)}</b>
             <span className="leise">{gesamt > 0 ? `${Math.round((t.count / gesamt) * 100)} %` : ''}</span>
           </li>
         ))}
@@ -173,7 +173,7 @@ export default function Dashboard() {
       <div className="kennzahlen">
         <Kennzahl titel="Gesammelt" wert={punkte(pts.earned)} unten={`+${punkte(pts.earned_30)} in 30 Tagen`} />
         <Kennzahl titel="Eingelöst" wert={punkte(pts.redeemed)} unten={`${punkte(pts.redeemed_30)} in 30 Tagen`} />
-        <Kennzahl titel="Offen" wert={punkte(pts.available)} unten={`≙ ${euro(pts.available_value_cents)} Rabatt`} />
+        <Kennzahl titel="Offen" wert={punkte(pts.available)} unten={`entspricht ${euro(pts.available_value_cents)} Rabatt`} />
         <Kennzahl titel="Unterwegs" wert={punkte(pts.pending + pts.locked)} unten={pts.locked > 0 ? `davon ${punkte(pts.locked)} Startbonus o. Ä.` : 'noch in der Rückgabefrist'} />
         <Kennzahl titel="Verfallen" wert={punkte(pts.expired)} unten="nach Ablauf der Frist" />
         <Kennzahl titel="Prämien eingelöst" wert={punkte(codes.used?.count ?? 0)} unten={`${euro(codes.used?.cents ?? 0)} · ${data.codes_used_30.count} in 30 Tagen`} />

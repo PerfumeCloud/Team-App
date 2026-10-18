@@ -1,0 +1,8 @@
+{%- comment -%}
+  Die im Shop aktiven Zahlungsarten als Symbole (Shopify liefert die Bilder). Erscheinen von selbst, sobald eine Zahlungsart an ist.
+{%- endcomment -%}
+{%- if shop.enabled_payment_types.size > 0 -%}
+<ul class="zahlarten" aria-label="Zahlungsarten">
+  {%- for t in shop.enabled_payment_types -%}<li>{{ t | payment_type_svg_tag: class: 'zahlart' }}</li>{%- endfor -%}
+</ul>
+{%- endif -%}

@@ -487,17 +487,18 @@ export const HELP: HelpArticle[] = [
   {
     id: 'club-update',
     category: 'club',
-    title: 'Members Club aktualisieren (auf Version 1.4.0)',
+    title: 'Members Club aktualisieren (auf Version 1.5.0)',
     intro:
       'Meldet die Team-App „Der Members Club läuft noch auf Version …“ oder zeigt die Testbestellung „Nicht gefunden“, ist der Club älter als die Team-App.',
     admin: true,
-    keywords: 'club update version nicht gefunden testbestellung 1.3 zip',
+    keywords: 'club update version nicht gefunden testbestellung 1.3 1.4 1.5 zip schrift stufen',
     steps: [
       'Die Datei `perfumecloud-club-upload.zip` bereitlegen (aus dem Chat mit Claude).',
       'netcup **Plesk** → **Dateien** → Ordner `app.perfumecloud.de/httpdocs` öffnen.',
       '**Hochladen** → ZIP wählen → beim Menü **⋯** **Dateien extrahieren**, „Vorhandene Dateien ersetzen“ anhaken.',
       '`app.perfumecloud.de` einmal öffnen. Der Club ergänzt die Datenbank selbst.',
-      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.4.0“.',
+      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.5.0“.',
+      'Mit 1.5 haben Club-App und Shop die Schrift der Team-App (Inter und Cormorant Garamond, gleich hohe Ziffern). Nur der Firmenname bleibt in seiner Schrift. Dazu kommen dezente Metallfarben an den Stufen und im Theme die drei Versprechen: Versand, Verpackung, Bezahlung.',
       'Mit 1.4 gelten die neuen Punkte-Regeln: vier Stufen nach dem Einkaufswert seit dem Beitritt, Punkte sofort gutgeschrieben und 14 Tage nach der Bestellung einlösbar, Erinnerungen 60 und 30 Tage vor dem Verfall. Bisherige Stufen bleiben erhalten, die Umstellung verschickt keine Mitteilungen.',
       'Punkte im Warenkorb einlösen: einmal den **App-Proxy** in der Shopify-App einrichten und das neue Theme unveröffentlicht hochladen, prüfen und dann veröffentlichen (Anleitung `docs/KUNDEN-APP.md`, **Update 1.3.2 → 1.4**).',
     ],

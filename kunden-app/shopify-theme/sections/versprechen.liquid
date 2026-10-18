@@ -1,0 +1,25 @@
+{%- comment -%}
+  Startseite: drei Versprechen (Versand, Verpackung, Bezahlung) in hellen Kreisen. Die Texte stehen in den
+  Theme-Einstellungen unter „Versprechen“, damit sie im Warenkorb gleich lauten.
+{%- endcomment -%}
+<section class="versprechen" aria-labelledby="h-versprechen-{{ section.id }}">
+  <div class="versprechen-innen">
+    {%- if section.settings.titel != blank -%}
+      <h2 class="versprechen-kopf" id="h-versprechen-{{ section.id }}">{{ section.settings.titel }}</h2>
+    {%- else -%}
+      <h2 class="sr" id="h-versprechen-{{ section.id }}">Einkaufen bei Perfume Cloud</h2>
+    {%- endif -%}
+    {% render 'versprechen', art: 'gross' %}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Versprechen",
+  "settings": [
+    { "type": "paragraph", "content": "Symbole, Titel und Texte änderst du unter Theme-Einstellungen → Versprechen. So stehen sie auf der Startseite und im Warenkorb gleich." },
+    { "type": "inline_richtext", "id": "titel", "label": "Überschrift (leer lassen: keine)" }
+  ],
+  "presets": [{ "name": "Versprechen" }]
+}
+{% endschema %}

@@ -224,7 +224,7 @@ export function Bestellung() {
           </div>
           {o.points && o.points.points > 0 && (
             <p className="stand" style={{ gap: '.4rem' }}>
-              <b style={{ fontSize: 'clamp(2.6rem, 2rem + 3vw, 3.6rem)' }} className={o.points.status === 'void' ? 'leise' : undefined}>
+              <b style={{ fontSize: 'clamp(2.9rem, 2.2rem + 3.3vw, 4rem)' }} className={o.points.status === 'void' ? 'leise' : undefined}>
                 +{o.points.points}
               </b>
               <span>{o.points.status === 'available' ? 'gutgeschrieben' : o.points.status === 'pending' ? 'unterwegs' : 'verfallen'}</span>
@@ -261,7 +261,7 @@ export function Bestellung() {
         </ul>
         <div className="bestellung-fuss" style={{ borderTop: '1px solid var(--linie)', paddingTop: '.9rem' }}>
           <span>Gesamt</span>
-          <strong style={{ fontWeight: 400, fontSize: '1.25rem' }}>{euro(o.total_cents, o.currency)}</strong>
+          <strong style={{ fontSize: '1.125rem', fontVariantNumeric: 'tabular-nums' }}>{euro(o.total_cents, o.currency)}</strong>
         </div>
         {o.status_url && (
           <div>

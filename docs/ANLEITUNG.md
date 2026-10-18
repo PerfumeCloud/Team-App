@@ -19,7 +19,7 @@ Die App ist eine **Web-App**: Sie liegt auf eurem netcup-Webhosting unter `https
 | **O – Postfach: Ordner, Gesendet, Erledigt** | alle | zum Nachlesen |
 | **P – Hilfe in der App** | alle | – |
 | **Update auf 1.8** | Marius, wenn die App schon läuft | ca. 10 Min. |
-| **Update auf 1.9** | Marius, zusammen mit Members Club 1.4 | ca. 10 Min. |
+| **Update auf 1.9** | Marius, zusammen mit Members Club 1.5 | ca. 10 Min. |
 
 **Bereitlegen:**
 - Zugang zum netcup **Customer Control Panel (CCP)**: <https://www.customercontrolpanel.de>
@@ -503,14 +503,16 @@ Unter **Hilfe** (am Computer links im Menü, am Handy oben das **Rettungsring-Sy
 
 **Links bleiben in der App:** Links zu Shop, Shopify, Instagram oder zur Sendungsverfolgung öffnen in einem **neuen Tab**. Die installierte App bleibt dabei offen, auf dem Handy wie am Computer.
 
-## Update auf Version 1.9 (Members Club 1.4, Postfächer und Ordner anordnen)
+## Update auf Version 1.9 (Members Club 1.5, Postfächer und Ordner anordnen)
 
-Gehört zum Members Club **1.4**: Die Team-App 1.9 erwartet den Club in Version 1.4.0. Am besten beides nacheinander aufspielen. Alle Daten bleiben erhalten.
+Gehört zum Members Club **1.5**: Die Team-App 1.9 braucht den Club mindestens in Version 1.4.0, am besten gleich 1.5.0. Beides nacheinander aufspielen. Alle Daten bleiben erhalten.
 
-1. Neue **`perfumecloud-team-app-upload.zip`** hochladen und mit „Vorhandene Dateien ersetzen“ entpacken. Unter **Einstellungen** steht ganz unten „Version 1.9.0“.
-2. Members Club auf **1.4** bringen: [KUNDEN-APP.md](KUNDEN-APP.md), **Update 1.3.2 → 1.4** (mit App-Proxy und neuem Theme).
-3. **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: „Version 1.4.0“.
+1. Neue **`perfumecloud-team-app-upload.zip`** hochladen und mit „Vorhandene Dateien ersetzen“ entpacken. Unter **Einstellungen** steht ganz unten „Version 1.9.1“.
+2. Members Club auf **1.5** bringen: [KUNDEN-APP.md](KUNDEN-APP.md), erst **Update 1.3.2 → 1.4** (mit App-Proxy), dann **Update 1.4 → 1.5** (neues Theme mit neuer Schrift).
+3. **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: „Version 1.5.0“.
 4. Auf iPhones die App einmal ganz schließen und neu öffnen, damit die neue Version lädt.
+
+Läuft 1.9.0 schon, reicht Schritt 1. In 1.9.1 kennt nur die Hilfe („Members Club aktualisieren“) den Club 1.5.
 
 **Neu im Postfach:**
 - **Reihenfolge ändern:** eigene Reihenfolge der Postfächer (nur für dich) und der Ordner (fürs Team), am Computer ziehen, am Handy mit Pfeilen (Teil O).

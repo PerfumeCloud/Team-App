@@ -1,0 +1,25 @@
+{%- comment -%}
+  Betrag in Cent als Euro, immer deutsch geschrieben: 20000 → „200 €“, 499 → „4,99 €“, 100000 → „1.000 €“.
+  Der Club rechnet nur in Euro, deshalb hängt das nicht vom Währungsformat im Shop ab. {% render 'club-euro', cents: t.min_cents %}
+{%- endcomment -%}
+{%- liquid
+  assign c = cents | default: 0 | plus: 0 | round
+  assign n = c | divided_by: 100 | floor
+  assign cent = c | modulo: 100
+  assign text = ''
+  for i in (1..6)
+    if n >= 1000
+      assign teil = n | modulo: 1000 | plus: 1000 | append: '' | slice: 1, 3
+      assign text = '.' | append: teil | append: text
+      assign n = n | divided_by: 1000 | floor
+    else
+      assign text = n | append: text
+      break
+    endif
+  endfor
+  if cent > 0
+    assign teil = cent | plus: 100 | append: '' | slice: 1, 2
+    assign text = text | append: ',' | append: teil
+  endif
+  echo text | append: '&nbsp;€'
+-%}

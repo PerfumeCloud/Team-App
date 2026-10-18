@@ -1,6 +1,6 @@
 {%- comment -%}
   Perfume Cloud Club auf der Startseite (ab Club 1.4).
-  Gäste sehen die vier Stufen als Metallkarten, wie es funktioniert und was ein Einkauf bringt.
+  Gäste sehen die Stufen (ruhige Karten mit Metallfarbe, wahlweise große Metallkarten), wie es funktioniert und was ein Einkauf bringt.
   Angemeldete Mitglieder sehen ihre eigene Karte mit Punktestand, gesperrten Punkten und dem Weg zur nächsten Stufe.
   Regeln aus dem Shop-Metafeld club.programm, Stand aus dem Kunden-Metafeld club.status. Beides pflegt die Club-App,
   im Theme muss nichts von Hand angepasst werden. Eine eigene Anmeldung braucht es nicht, die Shop-Anmeldung reicht.
@@ -83,7 +83,7 @@
 <section class="club-start{% if mitglied %} ist-mitglied{% endif %}" id="club" aria-labelledby="h-club-{{ section.id }}">
   <div class="club-start-innen">
     <div class="club-kopfzeile">
-      <p class="club-label">{{ club_name | escape }}</p>
+      <p class="club-label club-marke-name" translate="no">{{ club_name | escape }}</p>
       {%- if mitglied -%}
         {%- assign vorname = customer.first_name | strip | escape -%}
         {%- if vorname != blank -%}
@@ -131,14 +131,14 @@
         <div class="club-mein-karte">
           {%- capture links -%}{% render 'club-zahl', n: punkte %} {% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}{%- endcapture -%}
           {%- if meine -%}
-            {%- assign rechts = wert | money_without_trailing_zeros -%}
+            {%- capture rechts -%}{% render 'club-euro', cents: wert %}{%- endcapture -%}
             {%- render 'club-karte', t: meine, nr: meine_nr, club: club_name, links: links, rechts: rechts -%}
           {%- endif -%}
         </div>
         <div class="club-mein-text">
           <p class="club-stand"><b>{% render 'club-zahl', n: punkte %}</b> <span>{% if punkte == 1 %}Punkt{% else %}Punkte{% endif %}</span></p>
           {%- if punkte >= schritt_p -%}
-            <p>Das sind <b>{{ wert | money_without_trailing_zeros }}</b> Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code.</p>
+            <p>Das sind <b>{% render 'club-euro', cents: wert %}</b> Rabatt. Du löst sie direkt im Warenkorb ein, ohne Code.</p>
           {%- elsif punkte >= 0 -%}
             {%- assign fehlen = schritt_p | minus: punkte -%}
             <p>Ab {% render 'club-zahl', n: schritt_p %} Punkten löst du sie im Warenkorb ein. Dir fehlen noch {% render 'club-zahl', n: fehlen %}.</p>
@@ -187,7 +187,7 @@
               endcase
             -%}
             <div class="club-weg">
-              <p><span>Noch <b>{{ status.fehlt_cents | money_without_trailing_zeros }}</b> Einkauf bis {{ status.naechste_stufe | escape }}</span><span class="leise">{{ anteil }} %</span></p>
+              <p><span>Noch <b>{% render 'club-euro', cents: status.fehlt_cents %}</b> Einkauf bis {{ status.naechste_stufe | escape }}</span><span class="leise">{{ anteil }} %</span></p>
               <span class="club-balken" style="--anteil:{{ anteil }}%" role="progressbar" aria-label="Weg bis {{ status.naechste_stufe | escape }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ anteil }}"><i class="k-{{ n_metall }}"></i></span>
             </div>
           {%- elsif stufen_an and status != blank and meine_nr == prog.tiers.size -%}
@@ -209,8 +209,11 @@
       </div>
 
     {%- else -%}
-      {%- comment -%} ===== Gäste: vier Metallkarten, drei Schritte ===== {%- endcomment -%}
-      {%- if stufen_an -%}
+      {%- comment -%} ===== Gäste: die Stufen (ruhige Karten oder Metallkarten), drei Schritte ===== {%- endcomment -%}
+      {%- if stufen_an and section.settings.stufen_art != 'metall' -%}
+        <h3 class="sr">Die Stufen im Club</h3>
+        {%- render 'club-stufen', prog: prog, meine: '' -%}
+      {%- elsif stufen_an -%}
         <ul class="club-metalle" aria-label="Die Stufen im Club">
           {%- for t in prog.tiers -%}
             {%- liquid
@@ -230,7 +233,7 @@
               {%- render 'club-karte', t: t, nr: forloop.index, club: club_name, links: links, rechts: rechts -%}
               <div class="club-metall-text">
                 <p class="sr">{{ t.name | escape }}</p>
-                <p class="club-metall-ab">{% if t.min_cents > 0 %}ab {{ t.min_cents | money_without_trailing_zeros }} Einkauf {{ seit | replace: 'deinem', 'dem' }}{% else %}für alle Mitglieder{% endif %}</p>
+                <p class="club-metall-ab">{% if t.min_cents > 0 %}ab {% render 'club-euro', cents: t.min_cents %} Einkauf {{ seit | replace: 'deinem', 'dem' }}{% else %}für alle Mitglieder{% endif %}</p>
                 <p><b>{{ t_satz }} {% if t.rate == 1 %}Punkt{% else %}Punkte{% endif %}</b> je 1 €, also {{ t_pct_text }} % zurück</p>
                 {%- if t.benefits.size > 0 -%}
                   <ul>{% for b in t.benefits %}<li>{{ b | escape }}</li>{% endfor %}</ul>
@@ -267,7 +270,7 @@
         <li class="club-schritt">
           <span class="nr" aria-hidden="true">03</span>
           <p class="club-schritt-titel">Im Warenkorb einlösen</p>
-          <p>{% render 'club-zahl', n: schritt_p %} Punkte sind {{ schritt_c | money_without_trailing_zeros }} Rabatt. Du wählst im Warenkorb, wie viele du nutzt, ohne Code{% if prog.max_cents > 0 %}, bis {{ prog.max_cents | money_without_trailing_zeros }} je Bestellung{% endif %}.</p>
+          <p>{% render 'club-zahl', n: schritt_p %} Punkte sind {% render 'club-euro', cents: schritt_c %} Rabatt. Du wählst im Warenkorb, wie viele du nutzt, ohne Code{% if prog.max_cents > 0 %}, bis {% render 'club-euro', cents: prog.max_cents %} je Bestellung{% endif %}.</p>
         </li>
       </ol>
     {%- endif -%}
@@ -276,7 +279,7 @@
     {%- if section.settings.beispiel_zeigen and beispiel > 0 -%}
       {%- assign beispiel_c = beispiel | times: 100 -%}
       <div class="club-beispiel">
-        <p class="club-label">So viel bringen {{ beispiel_c | money_without_trailing_zeros }} Einkauf</p>
+        <p class="club-label">So viel bringen {% render 'club-euro', cents: beispiel_c %} Einkauf</p>
         <table class="club-tabelle">
           <thead><tr><th scope="col">Stufe</th><th scope="col" class="zahl">Punkte</th><th scope="col" class="zahl">Wert</th><th scope="col" class="zahl">Zurück</th></tr></thead>
           <tbody>
@@ -290,7 +293,7 @@
                 <tr{% if meine and t.key == meine.key %} class="aktuell"{% endif %}>
                   <th scope="row">{{ t.name | escape }}{% if meine and t.key == meine.key %} <span class="club-marke">Du</span>{% endif %}</th>
                   <td class="zahl">{% render 'club-zahl', n: b_p %} P</td>
-                  <td class="zahl">{{ b_c | money_without_trailing_zeros }}</td>
+                  <td class="zahl">{% render 'club-euro', cents: b_c %}</td>
                   <td class="zahl">{% render 'club-komma', x: t_pct %} %</td>
                 </tr>
               {%- endfor -%}
@@ -300,7 +303,7 @@
                 assign b_c = b_p | times: schritt_c | divided_by: schritt_pf | floor
                 assign t_pct = grund | times: schritt_c | divided_by: schritt_pf
               -%}
-              <tr><th scope="row">Alle Mitglieder</th><td class="zahl">{% render 'club-zahl', n: b_p %} P</td><td class="zahl">{{ b_c | money_without_trailing_zeros }}</td><td class="zahl">{% render 'club-komma', x: t_pct %} %</td></tr>
+              <tr><th scope="row">Alle Mitglieder</th><td class="zahl">{% render 'club-zahl', n: b_p %} P</td><td class="zahl">{% render 'club-euro', cents: b_c %}</td><td class="zahl">{% render 'club-komma', x: t_pct %} %</td></tr>
             {%- endif -%}
           </tbody>
         </table>
@@ -350,6 +353,15 @@
     { "type": "inline_richtext", "id": "titel", "label": "Überschrift für Gäste", "default": "Sammeln, einlösen, <em>aufsteigen</em>" },
     { "type": "textarea", "id": "text", "label": "Text für Gäste", "default": "Für jede Bestellung bekommst du Punkte. Du löst sie direkt im Warenkorb ein, ohne Code. Je mehr du bei uns einkaufst, desto höher deine Stufe." },
     { "type": "inline_richtext", "id": "titel_mitglied", "label": "Überschrift für Mitglieder", "info": "[name] wird durch den Vornamen ersetzt.", "default": "Schön, dass du da bist, <em>[name]</em>" },
+    {
+      "type": "select", "id": "stufen_art", "label": "Stufen für Gäste",
+      "options": [
+        { "value": "karten", "label": "Ruhige Karten mit Metallfarbe" },
+        { "value": "metall", "label": "Große Metallkarten" }
+      ],
+      "default": "karten",
+      "info": "Mitglieder sehen immer ihre eigene Metallkarte mit Punktestand."
+    },
     { "type": "checkbox", "id": "beispiel_zeigen", "label": "Rechenbeispiel zeigen", "default": true },
     { "type": "number", "id": "beispiel", "label": "Einkaufswert im Beispiel (€)", "default": 80 },
     { "type": "checkbox", "id": "boni", "label": "Bonuspunkte zeigen (für Gäste)", "default": true },

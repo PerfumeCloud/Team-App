@@ -1,6 +1,6 @@
 # Kunden-App „Perfume Cloud Club“ online stellen – Schritt für Schritt
 
-Die Club-App ist eine **Web-App** für eure Kundinnen und Kunden unter `https://app.perfumecloud.de`. Sie läuft auf demselben netcup-Webhosting wie die Team-App und sieht aus wie der Shop (Elfenbein, Dünen, Castoro, Glas-Dock).
+Die Club-App ist eine **Web-App** für eure Kundinnen und Kunden unter `https://app.perfumecloud.de`. Sie läuft auf demselben netcup-Webhosting wie die Team-App und sieht aus wie der Shop (Elfenbein, Dünen, Glas-Dock). Die Schrift ist ab 1.5 dieselbe wie in der Team-App: Inter für Text, Cormorant Garamond für Titel und Zahlen. Nur der Firmenname steht weiter in Castoro und Tenor Sans.
 
 **Was Kundinnen und Kunden damit machen:**
 - mit dem **Perfume-Cloud-Kundenkonto** anmelden (dasselbe Konto wie im Shop, Code per E-Mail statt Passwort; neue Konten entstehen dabei automatisch)
@@ -79,6 +79,38 @@ Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungsl
 3. **Shopify-Rechte prüfen** (Teil B, Schritt 2): Für Befragung und Empfehlungslinks braucht die App **Name und E-Mail** zu Bestellungen (geschützte Kundendaten). Fehlt die Freigabe, laufen Punkte und alles andere weiter, nur steht auf der **Übersicht** ein roter Hinweis.
 4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort die **Testbestellung**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
+
+## Update 1.4 → 1.5 (Schrift wie in der Team-App, drei Versprechen, Stufenfarben)
+
+Punkte, Stufen, Mitglieder und Codes bleiben, wie sie sind. Die Umstellung schickt **keine** Mitteilungen. Ist 1.4 noch nicht aufgespielt, zuerst die Schritte aus **Update 1.3.2 → 1.4** (ohne dessen Theme-Schritt 6) und dann diese hier.
+
+1. Neue **`perfumecloud-club-upload.zip`** nach `app.perfumecloud.de/httpdocs` hochladen, „Vorhandene Dateien ersetzen“, dann `https://app.perfumecloud.de/admin` einmal öffnen. Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: „Version 1.5.0“.
+2. **Theme:** Shopify-Admin → **Onlineshop → Themes** → **Theme hinzufügen → ZIP-Datei hochladen** → `perfume-cloud-theme-1.5.zip`. Es enthält alles aus 1.4 und bleibt **unveröffentlicht**. In der **Vorschau** prüfen, am Handy und am Computer:
+   - Startseite: die drei **Versprechen** nach der Kollektion, darunter der Club (als Gast die vier Stufen, angemeldet die eigene Karte)
+   - Warenkorb: Versprechen kompakt unter der Bestellung, Zahlarten, **Club-Punkte einlösen**
+   - `/pages/club`, Fußzeile mit Zahlarten, Passwortseite
+3. **Theme-Einstellungen → Versprechen:** Titel, Text und Symbol der drei Punkte. Bitte nur schreiben, was für **jede** Bestellung stimmt:
+   - **Versand:** Grenze und Lieferzeit genau wie unter **Einstellungen → Versand** (dort sind es 50 €, im Theme steht deshalb „ab 50 €“). Ändert ihr die Grenze in Shopify, hier mit ändern.
+   - **Verpackung:** Statt „Nachhaltig“ steht „Ohne Plastik verpackt“. Allgemeine Umweltaussagen wie „nachhaltig“ oder „umweltfreundlich“ sind seit dem 27.09.2026 ohne anerkannten Nachweis verboten (EU-Richtlinie 2024/825, im UWG umgesetzt). Konkrete Aussagen sind erlaubt, wenn sie stimmen. Stimmt „ohne Plastik“ nicht für jedes Paket, den Text ändern oder den Punkt leeren (ein leerer Titel blendet ihn aus).
+   - **Bezahlung:** „Sicher“ meint den verschlüsselten Shopify-Checkout. Die Zahlarten zeigt das Theme selbst aus Shopify an.
+4. Optional: Startseite → **Club auf der Startseite** → **Stufen für Gäste**: „Ruhige Karten mit Metallfarbe“ (Standard, wie auf der Club-Seite) oder „Große Metallkarten“. Mitglieder sehen immer ihre eigene Metallkarte mit Punktestand.
+5. Empfohlen: Shopify-Admin → **Einstellungen → Allgemein → Shop-Standards → Währungsanzeige → Formatierung ändern**. „HTML ohne Währung“ auf `{{amount_with_comma_separator}} €` und „HTML mit Währung“ auf `{{amount_with_comma_separator}} EUR`. Dann stehen auch Produktpreise und Warenkorb so, wie man es in Deutschland erwartet („59,00 €“ statt „€59.00“). Die Club-Teile im Theme schreiben Euro-Beträge schon selbst richtig („ab 1.000 € Einkauf“).
+6. Team-App auf **1.9.1** bringen (ANLEITUNG.md, „Update auf Version 1.9“). Darin ändert sich nur die Hilfe zum Club-Update.
+
+**Was sich für Mitglieder ändert:**
+- **Schrift wie in der Team-App:** Inter für Text, Cormorant Garamond für Titel und große Zahlen. Alle Ziffern sind gleich hoch und stehen auf einer Linie (vorher waren sie unterschiedlich hoch). Der Firmenname bleibt in Castoro und Tenor Sans. Die Schriften sind gehintet und damit auch unter Windows scharf.
+- **Stufen mit Metallfarbe, aber ruhig:** Die Karten im Shop behalten ihr Design und bekommen eine feine Linie in Bronze, Silber, Gold oder Platin an der Oberkante, eine kleine Münze vor dem Namen und farbige Punkte vor den Vorteilen. Dazu steht, wie viel Prozent eine Stufe zurückgibt („also 5 % zurück“).
+- **Drei Versprechen** auf der Startseite und im Warenkorb, **Zahlarten** in der Fußzeile und im Warenkorb.
+
+**Wo man was ändert:**
+
+| Was | Wo |
+|---|---|
+| Texte und Symbole der Versprechen | Theme-Editor → **Theme-Einstellungen → Versprechen** |
+| Stufen: Namen, Grenzen, Punkte je Euro, Vorteile | Club-Admin → **Einstellungen → Mitgliedschaftsstufen**. Shop und App übernehmen es von selbst. |
+| Metallfarben der Stufen im Shop | `assets/club.css`, Block „1.5: Stufenfarben, dezent“ (vier Farben je Stufe) |
+| Metallfarben in der App | `kunden-app/web/src/styles.css`, ganz oben `--t-bronze` usw. |
+| Schriften für App und Theme | `kunden-app/web/scripts/schriften.py` erzeugt sie neu, mit `--theme <ordner>` auch fürs Theme (Aufruf steht oben in der Datei) |
 
 ## Update 1.3.2 → 1.4 (vier Stufen, Punkte im Warenkorb, Club auf der Startseite)
 
@@ -315,6 +347,8 @@ Am einfachsten: Claude Bescheid sagen, dann überträgt Claude die Dateien ins L
 | `snippets/club-daten.liquid`, `club-kopf.liquid`, `club-punkte.liquid` | Daten, Header-Chip, Punktezeile |
 | `snippets/club-einloesen.liquid` | Ab 1.4: Punkte im Warenkorb einlösen (braucht den App-Proxy aus Teil N) |
 | `snippets/club-karte.liquid`, `club-zahl.liquid`, `club-komma.liquid` | Ab 1.4: Metallkarte der Stufe, Zahlen mit Tausenderpunkt und Komma |
+| `snippets/club-stufen.liquid`, `club-euro.liquid` | Ab 1.5: Stufen als ruhige Karten mit Metallfarbe (Startseite und Club-Regeln), Euro-Beträge auf Deutsch |
+| `sections/versprechen.liquid`, `snippets/versprechen.liquid`, `snippets/zahlarten.liquid` | Ab 1.5: drei Versprechen (Texte in den Theme-Einstellungen) und Zahlarten. Brauchen Symbole, Schriften, `perfume-cloud.css` und die Einstellungen aus dem ganzen Theme 1.5, deshalb am besten die ZIP hochladen statt einzeln kopieren. |
 | `snippets/warteliste-voll.liquid` | Ab 1.4: Hinweis statt Formular, wenn die Warteliste voll ist |
 | `sections/club-warenkorb.liquid` + `templates/cart.json` | Warenkorb-Seite mit Punkten und Einlösen |
 | `sections/club-start.liquid` | Ab 1.4: Club auf der Startseite (Gäste: vier Stufen, Mitglieder: eigene Karte und Stand) |

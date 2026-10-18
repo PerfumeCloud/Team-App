@@ -62,6 +62,13 @@
           </div>
         </div>
       </form>
+      {%- if section.settings.versprechen -%}
+        <div class="versprechen versprechen-klein">
+          <h2 class="sr">Versand und Bezahlung</h2>
+          {% render 'versprechen', art: 'klein' %}
+          {% render 'zahlarten' %}
+        </div>
+      {%- endif -%}
     {%- endif -%}
   </div>
 </section>
@@ -71,7 +78,8 @@
   "name": "Warenkorb mit Punkten",
   "settings": [
     { "type": "text", "id": "leer", "label": "Text bei leerem Warenkorb", "default": "Dein Warenkorb ist noch leer." },
-    { "type": "text", "id": "hinweis", "label": "Hinweis unter der Summe", "default": "Inkl. MwSt., zzgl. Versand." }
+    { "type": "text", "id": "hinweis", "label": "Hinweis unter der Summe", "default": "Inkl. MwSt., zzgl. Versand." },
+    { "type": "checkbox", "id": "versprechen", "label": "Versprechen unter der Bestellung zeigen", "info": "Texte und Symbole: Theme-Einstellungen → Versprechen", "default": true }
   ]
 }
 {% endschema %}

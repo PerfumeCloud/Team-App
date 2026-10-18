@@ -73,7 +73,7 @@
         {%- if modus == 'warenkorb' and prog.redeem_points > 0 -%}
           {%- assign stand = customer.metafields.club.punkte.value | default: 0 -%}
           {%- assign danach = stand | plus: punkte -%}
-          {%- if stand < prog.redeem_points and danach >= prog.redeem_points %} · danach reicht es für {{ prog.redeem_cents | money_without_trailing_zeros | replace: ' ', '&nbsp;' }} Rabatt{% endif -%}
+          {%- if stand < prog.redeem_points and danach >= prog.redeem_points %} · danach reicht es für {% render 'club-euro', cents: prog.redeem_cents %} Rabatt{% endif -%}
         {%- endif -%}
       {%- else -%}
         <a href="{{ prog.app_url | default: 'https://app.perfumecloud.de' }}">Kostenlos beitreten</a>{% if prog.welcome_points > 0 %}, dazu {{ prog.welcome_points }} Punkte Willkommensbonus{% endif %}

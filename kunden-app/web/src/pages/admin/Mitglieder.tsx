@@ -185,12 +185,12 @@ export function Mitglied() {
         </div>
         <div className="kennzahl">
           <span className="label">Mitglied seit</span>
-          <b style={{ fontSize: '1.4rem' }}>{datum(m.joined_at)}</b>
+          <b style={{ fontSize: '1.5rem' }}>{datum(m.joined_at)}</b>
           <small>zuletzt aktiv {seit(m.last_seen_at)}</small>
         </div>
         <div className="kennzahl">
           <span className="label">Push</span>
-          <b style={{ fontSize: '1.4rem' }}>{m.devices > 0 ? `${m.devices} ${m.devices === 1 ? 'Gerät' : 'Geräte'}` : 'aus'}</b>
+          <b style={{ fontSize: '1.5rem' }}>{m.devices > 0 ? `${m.devices} ${m.devices === 1 ? 'Gerät' : 'Geräte'}` : 'aus'}</b>
         </div>
       </div>
 
@@ -285,7 +285,7 @@ export function Mitglied() {
             {data.codes.map((c) => (
               <li key={c.id}>
                 <span className="was">
-                  <span style={{ fontFamily: '"Tenor Sans", sans-serif', letterSpacing: '.08em' }}>{c.code}</span>
+                  <span className="code-text">{c.code}</span>
                   <small>
                     {codeStatus(c)} · erstellt {datum(c.created_at)}
                   </small>

@@ -1,5 +1,6 @@
 /* Perfume Cloud Club im Shop: Punkteanzeige, Punktestand im Kopf, Warenkorb mit Einlösen, Club auf der Startseite.
-   Nur Farben aus der Theme-Palette (Elfenbein, Holz, Amber), feste 1px-Linien statt Schatten für scharfe Kanten. */
+   Nur Farben aus der Theme-Palette (Elfenbein, Holz, Amber), feste 1px-Linien statt Schatten für scharfe Kanten.
+   Schrift wie im Theme (ab 1.5): Inter für Text und Zahlen, Cormorant Garamond für Titel und große Zahlen. */
 
 /* ===== Zeile „Mit dieser Bestellung sammelst du 59 Punkte“ ===== */
 .club-punkte{display:flex;align-items:flex-start;gap:.75rem;width:100%;padding:.9rem 1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);border-radius:1rem;background:rgba(255,255,255,.45);color:var(--amber,#232120)}
@@ -7,16 +8,16 @@
 .club-punkte-zeichen{width:1.25rem;height:1.25rem;flex:none;margin-top:.15rem;fill:var(--wood,#80562F)}
 .club-punkte-text{display:grid;gap:.15rem;min-width:0}
 .club-punkte-text p{margin:0;line-height:1.4}
-.club-punkte-text b{font-weight:400;white-space:nowrap}
-.club-punkte-unter{font-size:.875rem;color:rgba(35,33,32,.72)}
+.club-punkte-text b{font-weight:600;white-space:nowrap}
+.club-punkte-unter{font-size:.8125rem;color:rgba(35,33,32,.72)}
 .club-punkte-unter a{color:var(--wood,#80562F);text-decoration:underline}
-.club-punkte-aktion{display:inline-block;padding:.05rem .45rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.75rem;letter-spacing:.06em;vertical-align:.08em}
+.club-punkte-aktion{display:inline-block;padding:.05rem .45rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:var(--schrift-text,"Inter",sans-serif);font-weight:600;font-size:.75rem;letter-spacing:.02em;vertical-align:.08em}
 
 /* ===== Punktestand im Kopf (Dock) ===== */
 .club-kopf{gap:.4rem}
 .club-kopf[hidden]{display:none}
 .club-kopf-punkt{width:.5rem;height:.5rem;border-radius:999px;background:var(--wood,#80562F);flex:none}
-.club-kopf-plus{display:inline-block;padding:.05rem .4rem;border-radius:999px;border:1px solid var(--wood,#80562F);color:var(--wood,#80562F);font-size:.75rem;line-height:1.3}
+.club-kopf-plus{display:inline-block;padding:.05rem .4rem;border-radius:999px;border:1px solid var(--wood,#80562F);color:var(--wood,#80562F);font-size:.75rem;font-weight:500;line-height:1.3;font-variant-numeric:tabular-nums}
 .club-kopf-plus[hidden]{display:none}
 /* Auf schmalen Handys ist im Dock kein Platz – dort zeigt der Warenkorb die Punkte */
 @media (max-width:559px){.club-kopf{display:none}}
@@ -32,39 +33,41 @@
 .warenkorb-bild{width:4.5rem;height:4.5rem;border-radius:.9rem;overflow:hidden;background:var(--carbon,#DDD3C5);border:var(--haar,1px) solid rgba(35,33,32,.14)}
 .warenkorb-bild img{width:100%;height:100%;object-fit:cover}
 .warenkorb-name{display:grid;gap:.1rem;min-width:0}
-.warenkorb-name a{text-decoration:none;font-style:italic;font-size:1.1875rem;line-height:1.2}
-.warenkorb-name small{font-size:.875rem;color:rgba(35,33,32,.72)}
+.warenkorb-name a{text-decoration:none;font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-weight:600;font-size:1.3125rem;line-height:1.15}
+.warenkorb-name small{font-size:.8125rem;color:rgba(35,33,32,.72)}
 .warenkorb-preis{text-align:right;white-space:nowrap}
-.warenkorb-preis s{display:block;font-size:.875rem;color:rgba(35,33,32,.6)}
+.warenkorb-preis s{display:block;font-size:.8125rem;color:rgba(35,33,32,.6)}
 .warenkorb-menge{grid-column:2 / -1;display:flex;align-items:center;gap:.75rem}
 .menge{display:inline-flex;align-items:center;border:1px solid rgba(35,33,32,.45);border-radius:999px;height:2.4rem}
-.menge a{display:grid;place-items:center;width:2.4rem;height:100%;border-radius:999px;text-decoration:none;font-size:1.125rem;color:var(--amber,#232120)}
+.menge a{display:grid;place-items:center;width:2.4rem;height:100%;border-radius:999px;text-decoration:none;font-size:1rem;color:var(--amber,#232120)}
 .menge a:hover{background:rgba(35,33,32,.08)}
 .menge output{min-width:1.8rem;text-align:center;font-variant-numeric:tabular-nums}
-.warenkorb-weg{font-size:.875rem;color:rgba(35,33,32,.72)}
+.warenkorb-weg{font-size:.8125rem;color:rgba(35,33,32,.72)}
 .warenkorb-summe{--rr:1.5rem;--rb:1px;width:100%}
 .warenkorb-summe-innen{background:var(--styx,#F4EFE6);padding:1.4rem;display:grid;gap:.9rem}
 .warenkorb-betrag{display:flex;justify-content:space-between;gap:1rem;margin:0}
-.warenkorb-betrag b{font-size:1.375rem}
-.warenkorb-rabatt{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.9375rem;color:var(--wood,#80562F)}
-.warenkorb-hinweis{margin:0;font-size:.8125rem;color:rgba(35,33,32,.72)}
+.warenkorb-betrag b{font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums}
+.warenkorb-rabatt{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.875rem;color:var(--wood,#80562F);font-variant-numeric:tabular-nums}
+.warenkorb-hinweis{margin:0;font-size:.75rem;color:rgba(35,33,32,.72)}
 .warenkorb-summe .hb{width:100%;margin-top:.2rem}
 .warenkorb-leer{display:grid;gap:1rem;justify-items:start}
 
 /* ===== Club-Regeln (Startseite und Club-Seite) ===== */
 .club-regeln{position:relative;padding:clamp(4.5rem,9vw,8.5rem) var(--rand,1.25rem)}
 .club-regeln-innen{max-width:76rem;margin:0 auto;display:grid;gap:clamp(1.6rem,3.5vw,2.6rem)}
-.club-label{margin:0;font-family:"Tenor Sans",sans-serif;font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;color:var(--wood,#80562F)}
+.club-label{margin:0;font-family:var(--schrift-text,"Inter",sans-serif);font-weight:500;font-size:.75rem;letter-spacing:.16em;text-transform:uppercase;color:var(--wood,#80562F)}
+/* Der Name des Clubs ist Firmenname: wie „PERFUME CLOUD“ in Tenor Sans */
+.club-marke-name{font-family:var(--schrift-marke-gross,"Tenor Sans Marke",sans-serif);font-weight:400;font-size:.8125rem;letter-spacing:.2em}
 .club-kopfzeile{display:grid;gap:.9rem;max-width:44rem}
-.club-kopfzeile h2{font-size:clamp(2.5rem,1.5rem + 3.6vw,4.4rem);line-height:1}
-.club-kopfzeile p{font-size:1.1875rem}
+.club-kopfzeile h2{font-size:clamp(2.75rem,1.65rem + 4vw,4.8rem);line-height:1}
+.club-kopfzeile p{font-size:1.0625rem;line-height:1.65}
 .club-aktion-band{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.8rem 1.1rem;border-radius:1rem;border:var(--haar,1px) solid var(--wood,#80562F);background:rgba(128,86,47,.08)}
-.club-aktion-band b{font-weight:400;font-style:italic}
+.club-aktion-band b{font-weight:600}
 .club-schritte{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
 @media (min-width:760px){.club-schritte{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .club-schritt{display:grid;align-content:start;gap:.5rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:var(--haar,1px) solid rgba(35,33,32,.22);background:rgba(255,255,255,.35)}
-.club-schritt .nr{font-family:"Tenor Sans",sans-serif;font-size:.8125rem;letter-spacing:.2em;color:var(--wood,#80562F)}
-.club-schritt-titel{margin:0;font-style:italic;font-size:clamp(1.25rem,1rem + .6vw,1.5rem);line-height:1.2}
+.club-schritt .nr{font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-style:italic;font-weight:500;font-size:1.125rem;letter-spacing:.02em;color:var(--wood,#80562F)}
+.club-schritt-titel{margin:0;font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-weight:600;font-size:clamp(1.375rem,1.15rem + .6vw,1.625rem);line-height:1.15}
 .club-schritt p{margin:0}
 .club-stufen{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
 @media (min-width:760px){.club-stufen{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -72,21 +75,21 @@
 .club-stufe{display:grid;align-content:start;gap:.7rem;padding:clamp(1.2rem,2.4vw,1.7rem);border-radius:1.5rem;border:var(--haar,1px) solid rgba(35,33,32,.22);background:var(--styx,#F4EFE6)}
 .club-stufe.ist-meine{border-color:var(--wood,#80562F);box-shadow:inset 0 0 0 1px var(--wood,#80562F)}
 .club-stufe-kopf{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
-.club-stufe-name{margin:0;font-size:1.625rem;line-height:1.1}
-.club-stufe-satz{margin:0;font-size:1.0625rem}
-.club-stufe-satz b{font-size:1.5rem;font-weight:400;color:var(--wood,#80562F)}
-.club-stufe-ab{margin:0;font-size:.875rem;color:rgba(35,33,32,.72)}
+.club-stufe-name{margin:0;font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-weight:600;font-size:1.75rem;line-height:1.1}
+.club-stufe-satz{margin:0;font-size:.9375rem}
+.club-stufe-satz b{font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-size:1.75rem;font-weight:600;color:var(--wood,#80562F)}
+.club-stufe-ab{margin:0;font-size:.8125rem;color:rgba(35,33,32,.72)}
 .club-stufe ul{margin:0;padding:0;list-style:none;display:grid;gap:.4rem;border-top:var(--haar,1px) solid rgba(35,33,32,.18);padding-top:.8rem}
-.club-stufe li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
+.club-stufe li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.875rem;line-height:1.45}
 .club-stufe li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
-.club-marke{display:inline-block;padding:.1rem .55rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase}
+.club-marke{display:inline-block;padding:.1rem .55rem;border-radius:999px;background:var(--wood,#80562F);color:var(--styx,#F4EFE6);font-family:var(--schrift-text,"Inter",sans-serif);font-weight:600;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;line-height:1.4}
 .club-boni{display:grid;gap:.8rem}
-.club-boni h3{font-size:1.5rem}
+.club-boni h3{font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-weight:600;font-size:1.625rem}
 .club-boni ul{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:var(--haar,1px) solid rgba(35,33,32,.22)}
 @media (min-width:760px){.club-boni ul{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:2.5rem}}
 .club-boni li{display:flex;justify-content:space-between;gap:1rem;padding:.75rem 0;border-bottom:var(--haar,1px) solid rgba(35,33,32,.22)}
-.club-boni li b{font-weight:400;color:var(--wood,#80562F);white-space:nowrap}
-.club-klein{margin:0;font-size:.875rem;color:rgba(35,33,32,.72);max-width:52rem}
+.club-boni li b{font-weight:500;font-variant-numeric:tabular-nums;color:var(--wood,#80562F);white-space:nowrap}
+.club-klein{margin:0;font-size:.8125rem;line-height:1.6;color:rgba(35,33,32,.72);max-width:52rem}
 .club-aktion-knopf{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.4rem}
 .club-aktion-knopf .leise{color:rgba(35,33,32,.72)}
 
@@ -101,15 +104,16 @@
 }
 .club-start{position:relative;padding:clamp(4.5rem,9vw,8.5rem) var(--rand,1.25rem)}
 .club-start-innen{max-width:76rem;margin:0 auto;display:grid;gap:clamp(1.8rem,3.5vw,2.8rem)}
-.club-start b{font-weight:400}
+.club-start b{font-weight:600}
 
 /* Metallkarte im Seitenverhältnis einer Bankkarte */
 .club-metall{position:relative;isolation:isolate;aspect-ratio:1.586;width:100%;max-width:22rem;border-radius:1rem;padding:1rem 1.1rem;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
   background:var(--t-eigen);color:var(--titel,#232120);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 .7rem 1.6rem -1rem rgba(20,14,8,.6);transition:transform .5s var(--weich,ease)}
 .club-metall::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.26) 45%,transparent 58%);mix-blend-mode:soft-light;pointer-events:none}
-.club-metall .oben{display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase}
-.club-metall .name{font-family:"Tenor Sans",sans-serif;font-size:1.6rem;letter-spacing:.24em;text-transform:uppercase;line-height:1}
-.club-metall .unten{display:flex;justify-content:space-between;align-items:flex-end;gap:.8rem;font-size:.875rem;font-variant-numeric:tabular-nums}
+.club-metall .oben{display:flex;justify-content:space-between;align-items:flex-start;gap:.8rem;font-family:var(--schrift-text,"Inter",sans-serif);font-weight:500;font-size:.75rem;letter-spacing:.14em;text-transform:uppercase}
+.club-metall .oben span:first-child{font-family:var(--schrift-marke-gross,"Tenor Sans Marke",sans-serif);font-weight:400;font-size:.6875rem;letter-spacing:.2em;line-height:1.6}
+.club-metall .name{font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-weight:600;font-size:1.75rem;letter-spacing:.2em;text-transform:uppercase;line-height:1}
+.club-metall .unten{display:flex;justify-content:space-between;align-items:flex-end;gap:.8rem;font-size:.8125rem;font-weight:500;font-variant-numeric:tabular-nums}
 .k-bronze{background:var(--t-bronze);color:#FFF4E8}
 .k-silber{background:var(--t-silber);color:#1E2227}
 .k-gold{background:var(--t-gold);color:#2A1E08}
@@ -126,10 +130,10 @@
 .club-metall-eintrag{display:grid;gap:1rem;align-content:start}
 .club-metall-text{display:grid;gap:.35rem}
 .club-metall-text p{margin:0}
-.club-metall-text b{font-style:italic;color:var(--titel,#232120)}
-.club-metall-ab{font-size:.875rem;color:rgba(35,33,32,.72)}
+.club-metall-text b{font-weight:600;color:var(--titel,#232120)}
+.club-metall-ab{font-size:.8125rem;color:rgba(35,33,32,.72)}
 .club-metall-text ul,.club-vorteile ul{margin:.35rem 0 0;padding:.75rem 0 0;list-style:none;display:grid;gap:.4rem;border-top:var(--haar,1px) solid rgba(35,33,32,.18)}
-.club-metall-text li,.club-vorteile li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.9375rem;line-height:1.4}
+.club-metall-text li,.club-vorteile li{display:grid;grid-template-columns:1rem 1fr;gap:.5rem;font-size:.875rem;line-height:1.45}
 .club-metall-text li::before,.club-vorteile li::before{content:"";width:.4rem;height:.4rem;margin:.45rem 0 0 .2rem;border-radius:999px;background:var(--wood,#80562F)}
 @media (hover:hover){.club-metall-eintrag:hover .club-metall{transform:translateY(-4px)}}
 @media (max-width:759px){
@@ -147,70 +151,95 @@
 @media (min-width:760px){.club-mein{grid-template-columns:minmax(0,22rem) minmax(0,1fr)}}
 .club-mein-text{display:grid;gap:1rem;justify-items:start}
 .club-mein-text>p{margin:0;max-width:34rem}
-.club-mein-text b{font-style:italic;color:var(--titel,#232120)}
+.club-mein-text b{font-weight:600;color:var(--titel,#232120)}
 .club-stand{display:flex;align-items:baseline;gap:.55rem}
-.club-stand b{font-style:normal;font-size:clamp(3.2rem,2.2rem + 4vw,4.8rem);line-height:.9;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.club-stand span{font-size:1.25rem;font-style:italic}
-.club-gesperrt{display:flex;gap:.6rem;align-items:flex-start;padding:.75rem 1rem;border-radius:1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);background:rgba(128,86,47,.07);font-size:.9375rem;line-height:1.45}
+.club-stand b{font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-style:normal;font-weight:500;font-size:clamp(3.6rem,2.4rem + 4.5vw,5.4rem);line-height:.9;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.club-stand span{font-family:var(--schrift-titel,"Cormorant Garamond",serif);font-weight:500;font-size:1.5rem;font-style:italic}
+.club-gesperrt{display:flex;gap:.6rem;align-items:flex-start;padding:.75rem 1rem;border-radius:1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);background:rgba(128,86,47,.07);font-size:.875rem;line-height:1.5}
 .club-gesperrt svg{width:1.05rem;height:1.05rem;flex:none;margin-top:.15rem;fill:none;stroke:var(--wood,#80562F);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .club-weg{display:grid;gap:.55rem;width:100%;max-width:30rem}
-.club-weg p{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.9375rem}
+.club-weg p{display:flex;justify-content:space-between;gap:1rem;margin:0;font-size:.875rem}
 .club-weg .leise{color:rgba(35,33,32,.66);font-variant-numeric:tabular-nums}
 .club-balken{display:block;height:.5rem;border-radius:999px;background:rgba(35,33,32,.1);box-shadow:inset 0 0 0 1px rgba(35,33,32,.06);overflow:hidden}
 .club-balken i{display:block;height:100%;width:var(--anteil,0%);min-width:.5rem;border-radius:inherit;animation:club-fuellen 1.4s var(--weich,ease) .2s both}
 @keyframes club-fuellen{from{width:0}}
 @media (prefers-reduced-motion:reduce){.club-balken i{animation:none}.club-metall{transition:none}}
-.club-weg-ende{font-style:italic}
+.club-weg-ende{font-weight:500}
 .club-vorteile{display:grid;gap:.2rem;width:100%;max-width:30rem}
 .club-textlink{color:var(--titel,#232120);text-decoration:underline;text-decoration-color:rgba(35,33,32,.35);text-underline-offset:.22em}
 .club-textlink:hover{text-decoration-color:var(--titel,#232120)}
 
 /* Rechenbeispiel */
 .club-beispiel{display:grid;gap:.8rem;max-width:44rem;width:100%}
-.club-tabelle{width:100%;border-collapse:collapse;font-size:.9375rem;font-variant-numeric:tabular-nums}
+.club-tabelle{width:100%;border-collapse:collapse;font-size:.875rem;font-variant-numeric:tabular-nums}
 .club-tabelle th,.club-tabelle td{padding:.65rem .5rem;border-bottom:var(--haar,1px) solid rgba(35,33,32,.18);text-align:left;font-weight:400}
-.club-tabelle thead th{font-family:"Tenor Sans",sans-serif;font-size:.6875rem;letter-spacing:.2em;text-transform:uppercase;color:rgba(46,42,39,.66)}
-.club-tabelle tbody th{font-style:italic}
+.club-tabelle thead th{font-family:var(--schrift-text,"Inter",sans-serif);font-weight:500;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:rgba(46,42,39,.66)}
+.club-tabelle tbody th{font-weight:500}
 .club-tabelle .zahl{text-align:right;white-space:nowrap}
 .club-tabelle tbody tr:last-child>*{border-bottom:0}
 .club-tabelle tr.aktuell>*{background:rgba(255,255,255,.7)}
 .club-tabelle tr.aktuell>:first-child{border-radius:.7rem 0 0 .7rem;box-shadow:inset 2px 0 0 var(--wood,#80562F)}
 .club-tabelle tr.aktuell>:last-child{border-radius:0 .7rem .7rem 0}
 .club-tabelle .club-marke{margin-left:.35rem;vertical-align:.1em;font-style:normal}
-@media (max-width:380px){.club-tabelle{font-size:.875rem}.club-tabelle th,.club-tabelle td{padding:.55rem .3rem}}
+@media (max-width:380px){.club-tabelle{font-size:.8125rem}.club-tabelle th,.club-tabelle td{padding:.55rem .3rem}}
 
 /* ===== 1.4: Punkte im Warenkorb einlösen ===== */
 .club-einloesen{display:grid;gap:.75rem;padding:1rem;border-radius:1.1rem;border:var(--haar,1px) solid rgba(128,86,47,.35);background:rgba(255,255,255,.5)}
 .club-einloesen[hidden]{display:none}
 .club-einloesen[aria-busy] button{opacity:.55;cursor:progress}
 .club-einloesen-kopf{display:flex;justify-content:space-between;align-items:baseline;gap:.8rem;flex-wrap:wrap}
-.club-einloesen-stand{margin:0;font-size:.9375rem;font-variant-numeric:tabular-nums;color:var(--titel,#232120)}
+.club-einloesen-stand{margin:0;font-size:.875rem;font-variant-numeric:tabular-nums;color:var(--titel,#232120)}
 .club-einloesen-wahl{display:grid;gap:.7rem}
 .club-einloesen-wahl[hidden],.club-einloesen-aktiv[hidden],.club-einloesen-gesperrt[hidden],.club-einloesen-meldung[hidden]{display:none}
 .club-stepper{display:grid;grid-template-columns:2.75rem minmax(0,1fr) 2.75rem;align-items:center;gap:.4rem;border:1px solid rgba(35,33,32,.35);border-radius:999px;background:var(--styx,#F4EFE6);padding:.2rem}
-.club-stepper button{width:2.75rem;height:2.75rem;border:0;border-radius:999px;background:transparent;font:inherit;font-size:1.25rem;color:var(--titel,#232120);cursor:pointer;touch-action:manipulation}
+.club-stepper button{width:2.75rem;height:2.75rem;border:0;border-radius:999px;background:transparent;font:inherit;font-size:1.125rem;color:var(--titel,#232120);cursor:pointer;touch-action:manipulation}
 .club-stepper button:hover:not(:disabled){background:rgba(35,33,32,.08)}
 .club-stepper button:disabled{opacity:.3;cursor:default}
-.club-stepper p{margin:0;text-align:center;font-size:.9375rem;font-variant-numeric:tabular-nums;white-space:nowrap}
-.club-stepper output{font-size:1.125rem;color:var(--titel,#232120)}
-.club-stepper b{font-weight:400;font-style:italic;color:var(--titel,#232120)}
+.club-stepper p{margin:0;text-align:center;font-size:.875rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.club-stepper output{font-size:1rem;font-weight:600;color:var(--titel,#232120)}
+.club-stepper b{font-weight:600;color:var(--titel,#232120)}
 .club-einloesen-knoepfe{display:flex;gap:.5rem;flex-wrap:wrap}
-.club-knopf{flex:1 1 auto;min-height:2.75rem;padding:0 1.1rem;border-radius:999px;border:1px solid rgba(35,33,32,.45);background:transparent;font:inherit;font-size:.9375rem;color:var(--titel,#232120);cursor:pointer;white-space:nowrap;touch-action:manipulation}
+.club-knopf{flex:1 1 auto;min-height:2.75rem;padding:0 1.1rem;border-radius:999px;border:1px solid rgba(35,33,32,.45);background:transparent;font:inherit;font-weight:500;font-size:.875rem;color:var(--titel,#232120);cursor:pointer;white-space:nowrap;touch-action:manipulation}
 .club-knopf[hidden]{display:none}
 .club-knopf:hover{background:rgba(35,33,32,.06)}
 .club-knopf-voll{background:var(--titel,#232120);border-color:var(--titel,#232120);color:var(--styx,#F4EFE6)}
 .club-knopf-voll:hover{background:#000}
 .club-einloesen-aktiv{display:grid;gap:.35rem}
 .club-einloesen-aktiv>p:first-child{display:flex;justify-content:space-between;gap:1rem;margin:0}
-.club-einloesen-aktiv b{font-weight:400;font-style:italic;color:var(--wood,#80562F)}
+.club-einloesen-aktiv b{font-weight:600;color:var(--wood,#80562F)}
 .club-einloesen-aktiv.passt-nicht .club-einloesen-klein{color:#8A3B1E}
-.club-einloesen-klein{margin:0;font-size:.8125rem;line-height:1.45;color:rgba(35,33,32,.72)}
+.club-einloesen-klein{margin:0;font-size:.75rem;line-height:1.5;color:rgba(35,33,32,.72)}
 .club-einloesen-links{display:flex;gap:1.2rem;margin:.1rem 0 0}
-.club-einloesen .club-textlink{padding:0;border:0;background:none;font:inherit;font-size:.875rem;cursor:pointer}
-.club-einloesen-gesperrt{list-style:none;margin:0;padding:.6rem 0 0;border-top:var(--haar,1px) solid rgba(35,33,32,.14);display:flex;flex-wrap:wrap;gap:.35rem .5rem;font-size:.8125rem;color:rgba(35,33,32,.72)}
+.club-einloesen .club-textlink{padding:0;border:0;background:none;font:inherit;font-size:.8125rem;cursor:pointer}
+.club-einloesen-gesperrt{list-style:none;margin:0;padding:.6rem 0 0;border-top:var(--haar,1px) solid rgba(35,33,32,.14);display:flex;flex-wrap:wrap;gap:.35rem .5rem;font-size:.75rem;color:rgba(35,33,32,.72)}
 .club-einloesen-gesperrt li:not(.club-label){padding:.1rem .55rem;border-radius:999px;border:1px solid rgba(35,33,32,.2);font-variant-numeric:tabular-nums}
-.club-einloesen-gesperrt .club-label{flex-basis:100%;font-size:.6875rem}
-.club-einloesen-meldung{margin:0;font-size:.875rem;line-height:1.45}
+.club-einloesen-gesperrt .club-label{flex-basis:100%;font-size:.75rem}
+.club-einloesen-meldung{margin:0;font-size:.8125rem;line-height:1.5}
 .club-einloesen-meldung.ist-fehler{color:#8A3B1E}
-.club-einloesen-gast{margin:0;font-size:.9375rem}
-.warenkorb-rabatt.ist-club{font-style:italic}
+.club-einloesen-gast{margin:0;font-size:.875rem}
+.warenkorb-rabatt.ist-club{font-weight:500}
+
+/* ===== 1.5: Stufenfarben, dezent =====
+   Die Karten bleiben wie sie sind (Elfenbein, feine Linie, Holzfarbe für Zahlen). Die Stufe zeigt sich nur an drei Stellen:
+   eine feine Metalllinie an der Oberkante, eine kleine Münze vor dem Namen und die Punkte vor den Vorteilen.
+   Je Stufe vier Töne: hell (Glanz), mitte, dunkel (Rand) und ton (einfarbig, für kleine Punkte). */
+.club-stufe{position:relative;--m-hell:#E3DACD;--m-mitte:#C4B49C;--m-dunkel:#9E8C72;--m-ton:#A8967C}
+.club-stufe.s-bronze{--m-hell:#E6B98F;--m-mitte:#B87747;--m-dunkel:#7A4220;--m-ton:#9C5A2F}
+.club-stufe.s-silber{--m-hell:#E9ECEF;--m-mitte:#AEB4BC;--m-dunkel:#6F767F;--m-ton:#858C95}
+.club-stufe.s-gold{--m-hell:#F0DCA4;--m-mitte:#C9A65C;--m-dunkel:#8C6A2B;--m-ton:#B08A43}
+.club-stufe.s-platin{--m-hell:#9A9DA3;--m-mitte:#4A4D54;--m-dunkel:#1E2024;--m-ton:#3B3E44}
+/* Linie auf dem geraden Stück der Oberkante, an den Enden ausgeblendet wie ein Lichtreflex */
+.club-stufe::before{content:"";position:absolute;top:calc(var(--haar,1px) * -1);left:1.5rem;right:1.5rem;height:2px;border-radius:2px;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,var(--m-dunkel) 10%,var(--m-mitte) 32%,var(--m-hell) 50%,var(--m-mitte) 68%,var(--m-dunkel) 90%,transparent 100%)}
+.club-stufe-name{display:flex;align-items:center;gap:.6rem}
+/* Münze: Licht von oben links, feiner dunkler Rand, kleiner Schatten */
+.club-stufe-muenze{flex:none;width:.875rem;height:.875rem;border-radius:50%;transform:translateY(.06em);
+  background:radial-gradient(circle at 34% 28%,var(--m-hell) 0%,var(--m-mitte) 52%,var(--m-dunkel) 100%);
+  box-shadow:inset 0 0 0 .5px rgba(30,20,10,.28),inset 0 1px 1px rgba(255,255,255,.45),0 1px 2px rgba(58,42,26,.22)}
+.club-stufe li::before{background:var(--m-ton)}
+.club-stufe-zurueck{display:block;color:rgba(35,33,32,.72)}
+/* Nebeneinander stehen Satz, Schwelle und Linie über den Vorteilen in allen Karten auf gleicher Höhe */
+@supports (grid-template-rows:subgrid){
+  @media (min-width:760px){.club-stufe{grid-row:span 4;grid-template-rows:subgrid;row-gap:.7rem}.club-stufe ul{align-content:start}}
+}
+@media (forced-colors:active){.club-stufe::before{background:CanvasText}.club-stufe-muenze{background:CanvasText}}

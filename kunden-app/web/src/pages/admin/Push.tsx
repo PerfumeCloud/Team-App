@@ -178,7 +178,7 @@ export default function PushSeite() {
                 <div className={`vorlage${enabled ? '' : ' aus'}`} key={t.key}>
                   <label className="schalter" style={{ borderBottom: 0, paddingTop: 0 }}>
                     <span>
-                      <b style={{ fontWeight: 400 }}>{t.label}</b>
+                      <b style={{ fontWeight: 500 }}>{t.label}</b>
                       <small>Platzhalter: {t.vars.map((v) => `{${v}}`).join(' ')}</small>
                     </span>
                     <input type="checkbox" checked={enabled} onChange={(e) => setzen(t.key, { enabled: e.target.checked })} aria-label={`${t.label} senden`} />
