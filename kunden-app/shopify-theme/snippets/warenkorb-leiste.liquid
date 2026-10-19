@@ -1,0 +1,18 @@
+{%- comment -%}
+  Warenkorb als Leiste am rechten Rand: öffnet sich bei Links zum Warenkorb und nach „In den Warenkorb“, ohne die Seite
+  zu verlassen. Ohne JavaScript (oder auf der Warenkorb-Seite selbst) bleibt alles beim normalen Warenkorb.
+  Den Inhalt lädt perfume-cloud.js erst beim Öffnen (sections/warenkorb-leiste.liquid). Im Layout:  {% render 'warenkorb-leiste' %}
+{%- endcomment -%}
+{%- unless template.name == 'cart' -%}
+<dialog class="leiste" aria-labelledby="leiste-titel" data-leiste="{{ routes.cart_url }}">
+  <div class="leiste-innen">
+    <div class="leiste-kopf">
+      <h2 id="leiste-titel">Dein <em>Warenkorb</em></h2>
+      <button class="leiste-zu" type="button" data-leiste-zu><svg aria-hidden="true"><use href="#i-x"/></svg><span class="sr">Warenkorb schließen</span></button>
+    </div>
+    <div class="leiste-inhalt" data-leiste-inhalt>
+      <p class="leiste-laden" role="status">Warenkorb wird geladen …</p>
+    </div>
+  </div>
+</dialog>
+{%- endunless -%}

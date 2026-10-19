@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, CircleAlert, ExternalLink, Eye, FlaskConical, Mail as MailIcon, Paperclip, Reply, Send, UserRound } from 'lucide-react';
+import { Check, CircleAlert, ExternalLink, Eye, FlaskConical, Mail as MailIcon, Paperclip, Reply, Send, Sparkles, UserRound } from 'lucide-react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { Email, MailMessage, ReplyResult, ReplyTemplate, TemplatesResponse } from '../lib/types';
@@ -64,7 +64,7 @@ export function MailSheet({ mail, open, onClose, compose }: { mail: Email | null
       xl
       title={
         <div className="min-w-0">
-          <div className="truncate text-[17px] font-semibold text-ink">{mail.subject || '(ohne Betreff)'}</div>
+          <h2 className="truncate text-[17px] font-semibold text-ink">{mail.subject || '(ohne Betreff)'}</h2>
           <div className="truncate text-[13px] text-ink-3">
             {sender}
             {mail.from_name && mail.from_email ? ` <${mail.from_email}>` : ''} · an {mail.mailbox}
@@ -265,7 +265,27 @@ function Composer({
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [preview, setPreview] = useState<ReplyResult | null>(null);
-  const [busy, setBusy] = useState<'fill' | 'preview' | 'test' | 'send' | null>(null);
+  const [busy, setBusy] = useState<'fill' | 'ai' | 'preview' | 'test' | 'send' | null>(null);
+  const [aiUsed, setAiUsed] = useState(false);
+
+  // KI-Entwurf: ersetzt ein leeres Feld, sonst wird nachgefragt
+  async function aiDraft() {
+    if (text.trim() && !window.confirm('Den bisherigen Text durch einen KI-Entwurf ersetzen?')) return;
+    setBusy('ai');
+    try {
+      const r = await api<{ text: string }>('POST', `/emails/${mail.id}/draft`, { order: msg.order_number });
+      setText(r.text);
+      setMissing([]);
+      setTemplateId(null);
+      setPreview(null);
+      setAiUsed(true);
+      requestAnimationFrame(() => areaRef.current?.focus());
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function useTemplate(t: ReplyTemplate) {
     setBusy('fill');
@@ -304,6 +324,7 @@ function Composer({
         if (r.email) putEmail(r.email);
         writeDraft(mail.id, '');
         setText('');
+        setAiUsed(false);
         toast(r.message ?? 'Antwort verschickt', 'success');
         r.warnings?.forEach((w) => toast(w, 'error'));
         onSent();
@@ -326,8 +347,19 @@ function Composer({
         </a>
       </div>
 
-      {tpl && tpl.templates.length > 0 && (
+      {tpl && (tpl.templates.length > 0 || tpl.ai) && (
         <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {tpl.ai && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void aiDraft()}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-3 text-[13px] font-medium text-accent transition-colors hover:brightness-[0.98] disabled:opacity-50"
+            >
+              <Sparkles className={cx('h-3.5 w-3.5', busy === 'ai' && 'animate-pulse')} aria-hidden />
+              {busy === 'ai' ? 'Schreibt …' : 'KI-Entwurf'}
+            </button>
+          )}
           {tpl.templates.map((t) => (
             <button
               key={t.id}
@@ -354,6 +386,12 @@ function Composer({
           setPreview(null);
         }}
       />
+      {aiUsed && (
+        <p className="mt-2 flex gap-2 rounded-xl bg-accent-soft p-2.5 text-[13px] text-ink-2">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+          <span>Entwurf von der KI – bitte Fakten und Ton prüfen, bevor du ihn verschickst.</span>
+        </p>
+      )}
       {missing.length > 0 && (
         <p className="mt-2 flex gap-2 rounded-xl bg-warn/10 p-2.5 text-[13px] text-warn">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />

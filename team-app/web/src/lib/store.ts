@@ -67,6 +67,14 @@ interface State extends Data {
 
 const CACHE_KEY = 'pc-cache-v1';
 
+/** Erster Abgleich ohne Zwischenspeicher (neues Gerät, frisch angemeldet): erst die Daten holen, dann die App zeigen.
+ *  Sonst erscheinen Kacheln und Hinweise nacheinander und die Seite springt. Höchstens 4 Sekunden warten, der Rest kommt nach. */
+async function firstSync() {
+  const { sync } = useStore.getState();
+  await Promise.race([sync({ full: true }).catch(() => undefined), new Promise((r) => setTimeout(r, 4000))]);
+  useStore.setState({ phase: 'ready' });
+}
+
 const empty: Data = {
   me: null,
   prefs: null,
@@ -197,8 +205,8 @@ export const useStore = create<State>((set, get) => ({
         return;
       }
       const me = await api<{ user: User; prefs: Prefs }>('GET', '/me');
-      set({ ...empty, me: me.user, prefs: me.prefs, phase: 'ready' });
-      await get().sync({ full: true });
+      set({ ...empty, me: me.user, prefs: me.prefs });
+      await firstSync();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) set({ phase: 'login', bootError: null });
       else if (e instanceof ApiError) {
@@ -212,14 +220,14 @@ export const useStore = create<State>((set, get) => ({
   async setSession(user) {
     const prev = get().me;
     if (prev && prev.id !== user.id) localStorage.removeItem(CACHE_KEY);
-    set({ ...empty, me: user, phase: 'ready' });
+    set({ ...empty, me: user, phase: 'boot' });
     try {
       const me = await api<{ user: User; prefs: Prefs }>('GET', '/me');
       set({ me: me.user, prefs: me.prefs });
     } catch {
       /* egal */
     }
-    await get().sync({ full: true });
+    await firstSync();
   },
 
   async logout() {

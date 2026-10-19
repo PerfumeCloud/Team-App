@@ -744,6 +744,7 @@ final class InstagramPosts
         $own = mb_strtolower(Instagram::username());
         $media = Db::all("SELECT id FROM ig_media WHERE posted_at >= ? AND comments > 0 AND product_type <> 'STORY' ORDER BY posted_at DESC LIMIT 15", [Util::now() - 30 * self::DAY]);
         $new = [];
+        $complaints = [];
         $now = Util::now();
         foreach ($media as $m) {
             $r = Instagram::get('/' . $m['id'] . '/comments', ['fields' => 'id,text,username,timestamp,like_count,replies{id,username,timestamp}', 'limit' => 50]);
@@ -779,11 +780,23 @@ final class InstagramPosts
                 // Beim allerersten Abgleich keine Flut an Push-Nachrichten
                 if (!$replied && $at > $now - 2 * self::DAY && Settings::get('instagram_comments_seen')) {
                     $new[] = ['user' => $user, 'text' => (string) ($c['text'] ?? '')];
+                    // Klingt nach Beschwerde → Aufgabe für den Kundenservice. Geantwortet wird nur von Hand.
+                    $word = self::complaint((string) ($c['text'] ?? ''));
+                    if ($word !== null) {
+                        $complaints[] = self::complaintTask($user, (string) ($c['text'] ?? ''), $word, (string) $m['id']);
+                    }
                 }
             }
         }
         Settings::set('instagram_comments_seen', true);
-        if ($new) {
+        if ($complaints) {
+            Notify::users(array_column(self::people(), 'id'), 'instagram', [
+                'title' => count($complaints) === 1 ? 'Mögliche Beschwerde auf Instagram' : count($complaints) . ' mögliche Beschwerden auf Instagram',
+                'body' => '@' . $complaints[0]['user'] . ': ' . mb_substr($complaints[0]['text'], 0, 100) . ' · Aufgabe ist angelegt.',
+                'url' => '/planung/' . $complaints[0]['task'],
+                'tag' => 'ig-complaint',
+            ]);
+        } elseif ($new) {
             Notify::users(array_column(self::people(), 'id'), 'instagram', [
                 'title' => count($new) === 1 ? 'Neuer Kommentar auf Instagram' : count($new) . ' neue Kommentare auf Instagram',
                 'body' => '@' . $new[0]['user'] . ': ' . mb_substr($new[0]['text'], 0, 100),
@@ -792,6 +805,53 @@ final class InstagramPosts
             ]);
         }
         return count($new);
+    }
+
+    /** Wörter, bei denen ein Kommentar nach Ärger mit einer Bestellung klingt (ganze Wörter, auch mit Endung). */
+    private const COMPLAINT = '/\b(kaputt\w*|ausgelaufen\w*|ausläuft|beschädigt\w*|defekt\w*|zerbrochen\w*|undicht\w*|nicht angekommen|nie angekommen|noch nicht (da|angekommen|geliefert)|wo bleibt|warte(n)? seit|keine antwort|retoure\w*|rücksendung\w*|zurückschicken|erstattung\w*|geld zurück|storniert\w*|stornieren|stornierung\w*|reklamation\w*|reklamier\w*|beschwerde\w*|enttäuscht\w*|enttäuschung\w*|betrug\w*|betrüger\w*|abzocke\w*|fake|scam|falsche[nrs]? (artikel|duft|parfum|lieferung|flasche))\b/iu';
+
+    /** Das gefundene Beschwerde-Wort oder null. */
+    public static function complaint(string $text): ?string
+    {
+        return preg_match(self::COMPLAINT, $text, $m) ? mb_strtolower($m[1]) : null;
+    }
+
+    /** Aufgabe „Beschwerde auf Instagram“ wie bei einer schlechten Bewertung: hoch, Kundenservice, heute fällig. */
+    private static function complaintTask(string $user, string $text, string $word, string $mediaId): array
+    {
+        $now = Util::now();
+        $id = Util::uuid();
+        $link = (string) (Db::value('SELECT permalink FROM ig_media WHERE id = ?', [$mediaId]) ?? '');
+        Db::insert('tasks', [
+            'id' => $id,
+            'title' => mb_substr("Instagram: mögliche Beschwerde von @$user", 0, 300),
+            'description' => implode("\n", array_filter([
+                "Kommentar von @$user (erkannt an „{$word}“):",
+                '„' . mb_substr($text, 0, 1000) . '“',
+                $link !== '' ? 'Beitrag: ' . $link : null,
+                '',
+                'Antwort bitte von Hand in der App (Instagram → Kommentare): öffentlich kurz und freundlich, Details per Direktnachricht oder Mail – keine Bestelldaten öffentlich.',
+            ], static fn ($l) => $l !== null)),
+            'status' => 'todo',
+            'priority' => 'high',
+            'category' => 'Kundenservice',
+            'assignee_id' => null,
+            'due_date' => date('Y-m-d'),
+            'position' => (float) $now,
+            'checklist' => Util::json([
+                ['id' => Util::uuid(), 'text' => 'Öffentlich antworten und um Direktnachricht bitten', 'done' => false],
+                ['id' => Util::uuid(), 'text' => 'Bestellung finden und Lösung anbieten', 'done' => false],
+                ['id' => Util::uuid(), 'text' => 'Ergebnis als Kundennotiz festhalten', 'done' => false],
+            ]),
+            'source_email_id' => null,
+            'completed_at' => null,
+            'created_by' => null,
+            'updated_by' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted' => 0,
+        ]);
+        return ['task' => $id, 'user' => $user, 'text' => $text];
     }
 
     public static function unansweredCount(): int

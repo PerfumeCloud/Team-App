@@ -150,6 +150,16 @@ final class Api
                 return Replies::fill($me, $mail, (string) ($b['text'] ?? ''), isset($b['order']) && is_string($b['order']) ? $b['order'] : null);
             }],
             ['POST', '/emails/([0-9a-f]{40})/reply', static fn (string $id) => Replies::reply(Auth::require(), $id, Http::body())],
+            // Antwortentwurf per KI (nur wenn ein Admin einen Schlüssel hinterlegt hat; verschickt nichts)
+            ['POST', '/emails/([0-9a-f]{40})/draft', static fn (string $id) => AiDraft::draft(Auth::require(), $id, Http::body())],
+            ['GET', '/admin/ai', static function () {
+                Auth::requireAdmin();
+                return AiDraft::settings();
+            }],
+            ['PUT', '/admin/ai', static function () {
+                Auth::requireAdmin();
+                return AiDraft::save(Http::body());
+            }],
             // Ordner wie in Outlook (direkt auf dem Mailserver), Gesendet
             ['POST', '/emails/([0-9a-f]{40})/move', static fn (string $id) => MailFolders::moveEmail(Auth::require(), $id, (string) (Http::body()['to'] ?? ''))],
             ['GET', '/mail/folders', static fn () => MailFolders::folders(Auth::require(), (string) Http::query('box', ''), Http::query('fresh') === '1')],
@@ -179,7 +189,7 @@ final class Api
             }],
             ['GET', '/templates', static function () {
                 Auth::require();
-                return ['templates' => Replies::templates(), 'placeholders' => Replies::PLACEHOLDERS, 'footer' => Replies::footer(), 'fromName' => Replies::fromName(), 'footerImage' => Signature::view('team')];
+                return ['templates' => Replies::templates(), 'placeholders' => Replies::PLACEHOLDERS, 'footer' => Replies::footer(), 'fromName' => Replies::fromName(), 'footerImage' => Signature::view('team'), 'ai' => AiDraft::configured()];
             }],
             ['PUT', "/templates/$uuid", static fn (string $id) => ['templates' => Replies::saveTemplate(Auth::requireAdmin(), $id, Http::body())]],
             ['DELETE', "/templates/$uuid", static function (string $id) {
@@ -577,6 +587,24 @@ final class Api
                 Auth::requireAdmin();
                 $r = Backup::create('manuell');
                 return ['created' => $r, 'backup' => Backup::status()];
+            }],
+            // Kopie in einen S3-Speicher (Cloudflare R2, Hetzner Object Storage …)
+            ['PUT', '/admin/backup/s3', static function () {
+                Auth::requireAdmin();
+                S3::save(Http::body());
+                return ['backup' => Backup::status()];
+            }],
+            ['POST', '/admin/backup/s3/test', static function () {
+                Auth::requireAdmin();
+                return S3::test() + ['backup' => Backup::status()];
+            }],
+            ['POST', '/admin/backup/s3/upload', static function () {
+                Auth::requireAdmin();
+                $name = Backup::files()[0]['name'] ?? null;
+                if ($name === null) {
+                    throw new HttpError(404, 'Es gibt noch keine Sicherung.');
+                }
+                return S3::upload($name) + ['backup' => Backup::status()];
             }],
             ['POST', '/admin/backup/verify', static function () {
                 Auth::requireAdmin();

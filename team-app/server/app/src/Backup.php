@@ -7,6 +7,7 @@ namespace PC;
  * Datensicherung: jede Nacht eine verschlüsselte Kopie der Datenbank (Team-App und Club, falls er hier liegt).
  * Aufbewahrt werden die letzten 14 Tage und 8 Wochen (die wöchentliche geht zusätzlich per Mail an die
  * Auswertungsadresse, z. B. auswertung@perfumecloud.de – so liegt immer eine Kopie außerhalb des Servers).
+ * Ist ein S3-Speicher eingerichtet (siehe S3), geht jede nächtliche Sicherung zusätzlich dorthin.
  *
  * Verschlüsselung: AES-256-GCM, Schlüssel aus dem Sicherungs-Passwort (PBKDF2-SHA256, 200 000 Runden).
  * Ohne das Passwort lässt sich eine Sicherung nicht öffnen – auch nicht von uns.
@@ -56,6 +57,7 @@ final class Backup
             'lastMail' => Settings::get('backup_last_mail'),
             'files' => self::files(),
             'email' => Reports::email(),
+            's3' => S3::status(),
         ];
     }
 
@@ -233,6 +235,13 @@ final class Backup
         $weekly = (int) date('N') === Reports::weeklyConfig()['day'];
         try {
             $r = self::create($weekly ? 'woche' : 'nacht');
+            // Jede Nacht zusätzlich eine Kopie in den Cloud-Speicher, falls eingerichtet
+            if (S3::config()['on'] && S3::configured()) {
+                $up = S3::upload($r['name']);
+                if (!$up['ok']) {
+                    self::alert('Sicherung nicht im Cloud-Speicher', $up['message']);
+                }
+            }
             if ($weekly) {
                 $mail = self::mail($r['name']);
                 if (!$mail['sent']) {

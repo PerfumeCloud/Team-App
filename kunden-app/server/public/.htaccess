@@ -31,7 +31,7 @@ DirectoryIndex index.html
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
   Header always set Strict-Transport-Security "max-age=31536000"
 
-  <FilesMatch "\.(js|css|woff2|png|svg|webp)$">
+  <FilesMatch "\.(js|css|woff2|png|svg|webp|avif)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
   <FilesMatch "(index\.html|sw\.js|manifest\.webmanifest)$">

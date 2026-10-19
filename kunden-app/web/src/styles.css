@@ -8,7 +8,7 @@
   --amber-hell:#2E2A27; --amber-leise:rgba(35,33,32,.72);
   --gruen:#8BC49E; --gruen-tief:#3E7553;
   --text:#2E2A27; --titel:#232120; --em:#80562F; --gold:#80562F;
-  --leise:rgba(46,42,39,.66);
+  --leise:rgba(46,42,39,.72); /* .72 statt .66: mindestens 4,5:1 auch auf den beigen Karten (WCAG AA) */
   --linie:rgba(35,33,32,.18);
   --glas-feld:rgba(255,255,255,.55); --glas-feld-hover:rgba(255,255,255,.72); --glas-linie:rgba(255,255,255,.95);
   --glas-glanz:rgba(255,255,255,.9); --glas-schatten:rgba(58,42,26,.32);
@@ -41,6 +41,9 @@ b,strong,th{font-weight:600}
 a{color:inherit;text-underline-offset:.22em;text-decoration-thickness:1px;transition:text-decoration-color .2s,opacity .2s}
 a:hover{text-decoration-color:var(--wood)}
 button,a,summary{touch-action:manipulation}
+/* Trefferflächen mindestens 24 Pixel hoch (WCAG 2.5.8): Aufklapp-Zeilen und kleine Links neben Überschriften */
+summary{padding-block:.25rem}
+a.klein{display:inline-block;padding-block:.2rem}
 button{font:inherit;color:inherit}
 h1,h2,h3,h4{font-family:var(--schrift-titel);font-weight:600;line-height:1.15;margin:0;text-wrap:balance;color:var(--titel)}
 h1{font-weight:500;letter-spacing:-.01em}
@@ -204,7 +207,7 @@ input[type="checkbox"]:checked::after{content:"";width:.7rem;height:.4rem;border
 .seitenkopf{display:grid;gap:.5rem}
 .seitenkopf h1{font-size:clamp(2.6rem,1.8rem + 3.4vw,4rem);line-height:1}
 .seitenkopf p{max-width:36rem;color:var(--amber-hell)}
-.zurueck{display:inline-flex;align-items:center;gap:.35rem;font-weight:500;font-size:.875rem;color:var(--leise);text-decoration:none;margin-bottom:.2rem}
+.zurueck{display:inline-flex;align-items:center;min-height:1.75rem;gap:.35rem;font-weight:500;font-size:.875rem;color:var(--leise);text-decoration:none;margin-bottom:.2rem}
 .zurueck:hover{color:var(--text)}
 .zurueck svg{width:1rem;height:1rem}
 

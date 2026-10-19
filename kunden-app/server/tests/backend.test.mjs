@@ -1802,7 +1802,7 @@ test('1.4: Empfehlung erst mit der Bestellung, Storno, Rückgabe, Verfall-Erinne
   const queued = sql('SELECT COUNT(*) AS n FROM club_push_queue')[0].n;
   r = await emil.req('GET', '/me');
   assert.equal(r.status, 200);
-  assert.equal(setting('schema_version'), '1.5.0');
+  assert.equal(setting('schema_version'), '1.5.1');
   assert.ok(setting('rules_14'));
   assert.deepEqual(sql('SELECT tier, tier_floor FROM club_members WHERE id = ?', [emilId])[0], { tier: 'gold', tier_floor: 'gold' });
   assert.equal(r.data.tier.key, 'gold', 'Stufe bleibt trotz Rückgabe');

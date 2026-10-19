@@ -5,11 +5,13 @@ import { Duenen, Toaster, zeichen } from './ui';
 
 export function Logo({ to = '/', zusatz }: { to?: string; zusatz?: ReactNode }) {
   return (
-    <Link className="kopf-logo" to={to} aria-label="Perfume Cloud Club, zur Übersicht">
-      <img src={zeichen} alt="" />
+    <Link className="kopf-logo" to={to}>
+      <img src={zeichen} alt="" width={954} height={995} />
       <b>
         Perfume <em>Cloud</em> {zusatz ?? 'Club'}
       </b>
+      {/* Ergänzung nur zum Vorlesen; kein aria-label, damit der Name mit dem sichtbaren Text beginnt */}
+      <span className="sr">, zur Übersicht</span>
     </Link>
   );
 }

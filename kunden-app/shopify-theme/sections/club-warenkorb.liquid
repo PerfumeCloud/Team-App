@@ -1,75 +1,13 @@
 {%- comment -%}
   Warenkorb mit Club-Punkten: einlösen direkt in der Summe (ab Club 1.4) und „Mit dieser Bestellung sammelst du 59 Punkte“.
   Mengen ändern geht ohne Neuladen (club.js lädt den Abschnitt neu), ohne JavaScript über normale Links.
+  Der Inhalt steht in snippets/warenkorb-inhalt.liquid, den nutzt auch die Warenkorb-Leiste.
 {%- endcomment -%}
 <section class="seite warenkorb" aria-labelledby="seite-titel" data-warenkorb="{{ section.id }}">
   <div class="seite-innen warenkorb-innen">
     <h1 id="seite-titel">Dein <em>Warenkorb</em></h1>
     <p class="sr" role="status" tabindex="-1" data-warenkorb-status>{{ cart.item_count }} Artikel im Warenkorb, Zwischensumme {{ cart.total_price | money }}</p>
-    {%- if cart.item_count == 0 -%}
-      <div class="warenkorb-leer">
-        <p>{{ section.settings.leer }}</p>
-        <a class="hb hb-klein" href="{{ routes.root_url }}"><span class="hb-text">Zur Startseite</span><span class="hb-hover" aria-hidden="true"><span>Zur Startseite</span><svg aria-hidden="true"><use href="#i-tropfen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
-      </div>
-    {%- else -%}
-      <form class="warenkorb-raster" action="{{ routes.cart_url }}" method="post" novalidate>
-        <ul class="warenkorb-liste">
-          {%- for item in cart.items -%}
-            <li class="warenkorb-zeile">
-              <div class="warenkorb-bild">
-                {%- if item.image -%}{{ item.image | image_url: width: 180 | image_tag: alt: '', loading: 'lazy', width: 90, height: 90 }}{%- endif -%}
-              </div>
-              <div class="warenkorb-name">
-                <a href="{{ item.url }}">{{ item.product.title }}</a>
-                {%- unless item.product.has_only_default_variant -%}<small>{{ item.variant.title }}</small>{%- endunless -%}
-                {%- for d in item.line_level_discount_allocations -%}<small>{{ d.discount_application.title }}: −{{ d.amount | money }}</small>{%- endfor -%}
-              </div>
-              <p class="warenkorb-preis">
-                {%- if item.original_line_price != item.final_line_price -%}<s>{{ item.original_line_price | money }}</s>{%- endif -%}
-                {{ item.final_line_price | money }}
-              </p>
-              <div class="warenkorb-menge">
-                <span class="menge">
-                  <a href="{{ routes.cart_change_url }}?line={{ forloop.index }}&amp;quantity={{ item.quantity | minus: 1 }}" data-zeile="{{ forloop.index }}" data-menge="{{ item.quantity | minus: 1 }}" aria-label="Eins weniger: {{ item.product.title | escape }}">−</a>
-                  <output aria-label="Menge {{ item.product.title | escape }}">{{ item.quantity }}</output>
-                  <a href="{{ routes.cart_change_url }}?line={{ forloop.index }}&amp;quantity={{ item.quantity | plus: 1 }}" data-zeile="{{ forloop.index }}" data-menge="{{ item.quantity | plus: 1 }}" aria-label="Eins mehr: {{ item.product.title | escape }}">+</a>
-                </span>
-                <a class="warenkorb-weg" href="{{ item.url_to_remove }}" data-zeile="{{ forloop.index }}" data-menge="0">Entfernen</a>
-              </div>
-            </li>
-          {%- endfor -%}
-        </ul>
-
-        <div class="rand glas warenkorb-summe">
-          <div class="warenkorb-summe-innen">
-            {% render 'club-einloesen' %}
-            {%- for d in cart.cart_level_discount_applications -%}
-              {%- liquid
-                assign d_titel = d.title
-                assign d_club = false
-                assign d_gross = d.title | upcase
-                if d_gross contains 'CLUB-PUNKTE-'
-                  assign d_titel = 'Club-Punkte'
-                  assign d_club = true
-                endif
-              -%}
-              <p class="warenkorb-rabatt{% if d_club %} ist-club{% endif %}"><span>{{ d_titel }}</span><span>−{{ d.total_allocated_amount | money }}</span></p>
-            {%- endfor -%}
-            <p class="warenkorb-betrag"><span>Zwischensumme</span><b>{{ cart.total_price | money }}</b></p>
-            <p class="warenkorb-hinweis">{{ section.settings.hinweis }}</p>
-            {% render 'club-punkte', modus: 'warenkorb', cents: cart.total_price %}
-            <button class="hb" type="submit" name="checkout"><span class="hb-text">Zur Kasse</span><span class="hb-hover" aria-hidden="true"><span>Zur Kasse</span><svg aria-hidden="true"><use href="#i-wagen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></button>
-          </div>
-        </div>
-      </form>
-      {%- if section.settings.versprechen -%}
-        <div class="versprechen versprechen-klein">
-          <h2 class="sr">Versand und Bezahlung</h2>
-          {% render 'versprechen', art: 'klein' %}
-          {% render 'zahlarten' %}
-        </div>
-      {%- endif -%}
-    {%- endif -%}
+    {% render 'warenkorb-inhalt', ort: 'seite', leer: section.settings.leer, hinweis: section.settings.hinweis, versprechen: section.settings.versprechen %}
   </div>
 </section>
 

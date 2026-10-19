@@ -83,13 +83,10 @@
         const p = punkteFuer(warenkorb);
         if (plus) {
           plus.hidden = p <= 0;
-          plus.textContent = `+${zahl(p)}`;
+          plus.innerHTML = `+${zahl(p)}<span class="club-sr"> ${wort(p)} mit deinem Warenkorb</span>`;
         }
         const stand = el.querySelector('[data-club-stand]');
         if (stand) stand.textContent = zahl(Number(daten.punkte) || 0);
-        el.setAttribute('aria-label', daten.mitglied
-          ? `Perfume Cloud Club: ${zahl(Number(daten.punkte) || 0)} Punkte${p > 0 ? `, mit deinem Warenkorb ${zahl(p)} dazu` : ''}`
-          : `Mit deinem Warenkorb sammelst du im Club ${zahl(p)} Punkte`);
         if (!daten.mitglied) el.hidden = p <= 0;
         return;
       }
@@ -113,6 +110,8 @@
         const c = await r.json();
         warenkorb = Number(c.total_price) || 0;
         zeichnen();
+        // Für die Anzahl im Kopf (perfume-cloud.js)
+        document.dispatchEvent(new CustomEvent('warenkorb:stand', { detail: c }));
       } catch {
         /* offline: alte Anzeige bleibt */
       }
@@ -448,6 +447,14 @@
       aendern = !aendern;
       einloesenZeigen();
     }
+  });
+
+  // Warenkorb-Leiste geöffnet (perfume-cloud.js): Summe übernehmen, Punkte und Einlösen ausfüllen
+  document.addEventListener('warenkorb:geladen', () => {
+    const el = document.querySelector('[data-warenkorb] [data-club-punkte="warenkorb"]');
+    if (el) warenkorb = Number(el.dataset.cents) || 0;
+    zeichnen();
+    einloesenLaden();
   });
 
   einloesenLaden();

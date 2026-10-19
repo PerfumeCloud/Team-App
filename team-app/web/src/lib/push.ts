@@ -9,6 +9,16 @@ export const isStandalone = () =>
 
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
+/** Sofort, ohne auf den Service Worker zu warten: so steht beim ersten Bild schon fest, ob „Push aktivieren“ erscheint
+ *  (sonst rutscht der Hinweis nachträglich herein und schiebt die Seite). Nur bei erteilter Erlaubnis prüft pushState() genauer. */
+export function pushStateNow(): PushState {
+  if (isIos() && !isStandalone()) return 'needs-install';
+  if (!supported()) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission === 'default') return 'default';
+  return 'subscribed';
+}
+
 export async function pushState(): Promise<PushState> {
   if (isIos() && !isStandalone()) return 'needs-install';
   if (!supported()) return 'unsupported';

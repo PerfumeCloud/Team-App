@@ -17,6 +17,7 @@ Diese Punkte gehören in die **Datenschutzerklärung**, die **Einwilligungstexte
 | 9 | Teilnahmebedingungen veröffentlichen | Shopify-Seite `/pages/club` | vor dem Club-Start |
 | 10 | Impressum und Datenschutz verlinken | Club-App, Mails | erledigt, nur prüfen |
 | 11 | Absatz „Instagram“ | Datenschutzerklärung | sobald Instagram in der Team-App verbunden ist |
+| 12 | KI-Entwürfe (Anthropic) und Cloud-Speicher für Sicherungen | Datenschutzerklärung, Verträge | bevor ihr das jeweils in der Team-App einschaltet (ab 1.10) |
 
 ---
 
@@ -107,3 +108,19 @@ Die Team-App ist mit eurem Instagram-Konto verbunden (Auswertung, Beiträge ver�
 Vorschlag für die Datenschutzerklärung (ergänzt den Absatz zu Social Media, falls es ihn schon gibt):
 
 > **Instagram.** Wir betreiben ein Unternehmensprofil auf Instagram (Meta Platforms Ireland Ltd., Merrion Road, Dublin 4, Irland). Für die Statistiken zu unserem Profil (z. B. Reichweite, Alter, Geschlecht und Städte unserer Follower, nur zusammengefasst) sind wir mit Meta gemeinsam verantwortlich (Art. 26 DSGVO); die Vereinbarung von Meta dazu findet ihr unter <https://www.facebook.com/legal/terms/page_controller_addendum>. Wenn du einen unserer Beiträge kommentierst, verarbeiten wir deinen Benutzernamen und deinen Kommentar in unserem internen Team-Werkzeug, um dir zu antworten (Art. 6 Abs. 1 lit. f DSGVO, unser Interesse: Kommunikation mit unserer Community). Diese Daten löschen wir dort nach 90 Tagen. Das Werkzeug läuft auf unserem eigenen Server bei der netcup GmbH in Deutschland. Für die Verarbeitung durch Instagram selbst gilt die Datenschutzrichtlinie von Instagram: <https://privacycenter.instagram.com/policy>.
+
+## 12. KI-Entwürfe und Cloud-Speicher (Team-App ab 1.10)
+
+Beides ist ausgeschaltet, bis ein Admin es einrichtet.
+
+**KI-Entwürfe (Anthropic).** Tippt jemand beim Antworten auf **KI-Entwurf**, gehen Betreff und Text dieser Mail, der Vorname, die Bestellungen (Nummer, Datum, Status, Düfte, Sendungsnummer) und der Club-Stand an Anthropic. Keine Mailadresse, Telefonnummer oder Anschrift. Vor dem Einschalten:
+- Im Anthropic-Konto (console.anthropic.com) den **Auftragsverarbeitungsvertrag (Data Processing Addendum)** annehmen. Darin stehen Vertragspartner, Speicherdauer und die Grundlage für eine Übermittlung in die USA (z. B. Standardvertragsklauseln). Bitte dort nachlesen und hier eintragen, statt es zu raten.
+- Laut den kommerziellen Bedingungen von Anthropic werden Daten aus der API nicht zum Training verwendet. Auch das bitte beim Abschluss prüfen.
+- Vorschlag für die Datenschutzerklärung (ergänzt Absatz 6):
+
+> **Antwortentwürfe mit KI.** Für Antworten auf deine Nachricht können wir uns einen Entwurf von einem KI-Dienst schreiben lassen. Dazu übermitteln wir den Text deiner Nachricht, deinen Vornamen sowie Angaben zu deinen Bestellungen und deinem Club-Stand an Anthropic [Vertragspartner und Anschrift aus dem DPA], die in unserem Auftrag tätig ist (Art. 28 DSGVO). Deine E-Mail-Adresse und Anschrift übermitteln wir nicht. Jeder Entwurf wird von einem Menschen gelesen und angepasst, bevor wir antworten; es gibt keine automatisierte Entscheidung. [Übermittlung in Drittländer: Grundlage laut DPA.] Rechtsgrundlage ist unser berechtigtes Interesse an einer schnellen Antwort (Art. 6 Abs. 1 lit. f DSGVO).
+
+**Cloud-Speicher für Sicherungen.** Die verschlüsselten Sicherungen (sie enthalten alle Daten der Team-App und des Clubs) liegen zusätzlich bei dem Speicher-Anbieter, den ihr einrichtet, z. B. Cloudflare R2. Der Anbieter kann sie ohne das Sicherungs-Passwort nicht lesen. Trotzdem:
+- Den Auftragsverarbeitungsvertrag des Anbieters annehmen (bei Cloudflare Teil der Bedingungen im Dashboard), beim Bucket als Standort **EU** wählen.
+- In Absatz 6 ergänzen: „Verschlüsselte Sicherungskopien speichern wir zusätzlich bei [Anbieter] in der EU und löschen sie nach 30 Tagen.“ Die Löschregel im Bucket muss dazu passen (ANLEITUNG.md, Teil K4).
+

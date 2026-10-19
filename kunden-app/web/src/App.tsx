@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 import { api, ApiError, fehlertext, vorschauBeenden, vorschauId } from './lib/api';
 import { KundeCtx, StatusCtx } from './lib/kontext';
@@ -13,9 +13,13 @@ import Praemien from './pages/Praemien';
 import Konto from './pages/Konto';
 import Feedback from './pages/Feedback';
 import { VorschauLeiste } from './components/Club';
-import Einrichtung from './pages/Einrichtung';
-import AdminApp from './pages/admin/AdminApp';
-import Bewertung, { Abmelden } from './pages/Bewertung';
+
+// Einrichtung, Admin-Bereich und die Links aus Mails braucht ein Mitglied nicht: eigene Pakete,
+// damit die Kundenansicht auf dem Handy schneller startet.
+const Einrichtung = lazy(() => import('./pages/Einrichtung'));
+const AdminApp = lazy(() => import('./pages/admin/AdminApp'));
+const Bewertung = lazy(() => import('./pages/Bewertung'));
+const Abmelden = lazy(() => import('./pages/Bewertung').then((m) => ({ default: m.Abmelden })));
 
 export default function App() {
   return (
@@ -73,14 +77,23 @@ function StatusGate() {
   }
   return (
     <StatusCtx.Provider value={status}>
-      <Routes>
-        <Route path="/einrichtung" element={status.installed ? <Navigate to="/admin" replace /> : <Einrichtung />} />
-        <Route path="/admin/*" element={<AdminApp />} />
-        {/* Ohne Anmeldung, nur mit dem Link aus Mail oder Push */}
-        <Route path="/bewertung/:token" element={<Bewertung />} />
-        <Route path="/abmelden/:token" element={<Abmelden />} />
-        <Route path="/*" element={<KundenApp status={status} />} />
-      </Routes>
+      <Suspense
+        fallback={
+          <>
+            <Duenen />
+            <Laden />
+          </>
+        }
+      >
+        <Routes>
+          <Route path="/einrichtung" element={status.installed ? <Navigate to="/admin" replace /> : <Einrichtung />} />
+          <Route path="/admin/*" element={<AdminApp />} />
+          {/* Ohne Anmeldung, nur mit dem Link aus Mail oder Push */}
+          <Route path="/bewertung/:token" element={<Bewertung />} />
+          <Route path="/abmelden/:token" element={<Abmelden />} />
+          <Route path="/*" element={<KundenApp status={status} />} />
+        </Routes>
+      </Suspense>
     </StatusCtx.Provider>
   );
 }

@@ -52,7 +52,7 @@
     <div class="club-kopfzeile">
       <p class="club-label club-marke-name" translate="no">{{ prog.name | default: 'Perfume Cloud Club' | escape }}</p>
       <h2 id="h-club-{{ section.id }}">{{ section.settings.titel }}</h2>
-      {%- if section.settings.text != blank -%}<p>{{ section.settings.text }}</p>{%- endif -%}
+      {%- if section.settings.text != blank -%}<p>{{ section.settings.text | escape }}</p>{%- endif -%}
     </div>
 
     {%- liquid

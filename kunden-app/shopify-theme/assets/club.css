@@ -173,7 +173,7 @@
 .club-beispiel{display:grid;gap:.8rem;max-width:44rem;width:100%}
 .club-tabelle{width:100%;border-collapse:collapse;font-size:.875rem;font-variant-numeric:tabular-nums}
 .club-tabelle th,.club-tabelle td{padding:.65rem .5rem;border-bottom:var(--haar,1px) solid rgba(35,33,32,.18);text-align:left;font-weight:400}
-.club-tabelle thead th{font-family:var(--schrift-text,"Inter",sans-serif);font-weight:500;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:rgba(46,42,39,.66)}
+.club-tabelle thead th{font-family:var(--schrift-text,"Inter",sans-serif);font-weight:500;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:rgba(46,42,39,.74)}
 .club-tabelle tbody th{font-weight:500}
 .club-tabelle .zahl{text-align:right;white-space:nowrap}
 .club-tabelle tbody tr:last-child>*{border-bottom:0}
@@ -243,3 +243,26 @@
   @media (min-width:760px){.club-stufe{grid-row:span 4;grid-template-rows:subgrid;row-gap:.7rem}.club-stufe ul{align-content:start}}
 }
 @media (forced-colors:active){.club-stufe::before{background:CanvasText}.club-stufe-muenze{background:CanvasText}}
+/* Nur für Screenreader (eigene Klasse, damit club.css in jedem Theme reicht) */
+.club-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ===== Warenkorb in der Leiste: eine Spalte, etwas kompakter ===== */
+.warenkorb-in-leiste{display:grid;gap:.4rem}
+.warenkorb-in-leiste .warenkorb-raster{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+.warenkorb-in-leiste .warenkorb-liste{border-top:0}
+.warenkorb-in-leiste .warenkorb-zeile{grid-template-columns:3.75rem minmax(0,1fr) auto}
+.warenkorb-in-leiste .warenkorb-bild{width:3.75rem;height:3.75rem}
+.warenkorb-in-leiste .warenkorb-name a{font-size:1.1875rem}
+.warenkorb-in-leiste .warenkorb-summe-innen{padding:1.1rem}
+.warenkorb-in-leiste .warenkorb-leer{padding-top:1.4rem}
+.warenkorb-in-leiste .versprechen-klein{padding-top:.4rem}
+.warenkorb-in-leiste .versprechen-klein .versprechen-reihe{grid-template-columns:minmax(0,1fr);border-top:0}
+.warenkorb-in-leiste .versprechen-klein .versprechen-punkt{border-top:var(--haar,1px) solid rgba(35,33,32,.16);padding:.9rem 0}
+/* Weg zur nächsten Stufe (Seite und Leiste) */
+.warenkorb-stufe{margin:0;font-size:.875rem;line-height:1.5}
+.warenkorb-stufe b{font-weight:600;color:var(--wood,#80562F)}
+.leiste-kasse{position:sticky;bottom:0;z-index:2;display:grid;gap:.5rem;margin:0 -1.4rem;padding:.9rem 1.4rem 1.2rem;background:var(--styx,#F4EFE6);border-top:var(--haar,1px) solid rgba(35,33,32,.16);box-shadow:0 -1rem 1.5rem -1rem rgba(58,42,26,.18)}
+.leiste-kasse .hb{width:100%;margin-top:.2rem}
+.warenkorb-weg{display:inline-block;padding-block:.25rem}
+.warenkorb-in-leiste>:last-child{margin-bottom:1.4rem}
+.warenkorb-in-leiste>form:last-child{margin-bottom:0}

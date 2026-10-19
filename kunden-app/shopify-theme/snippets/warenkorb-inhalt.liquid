@@ -1,0 +1,104 @@
+{%- comment -%}
+  Inhalt des Warenkorbs: Zeilen, Club-Punkte einlösen, Summe, Kasse. Derselbe Inhalt auf der Warenkorb-Seite und in der
+  Warenkorb-Leiste, damit beide immer dasselbe zeigen.
+  {% render 'warenkorb-inhalt', ort: 'seite', leer: section.settings.leer, hinweis: section.settings.hinweis, versprechen: section.settings.versprechen %}
+  ort: 'seite' (sections/club-warenkorb) oder 'leiste' (sections/warenkorb-leiste)
+{%- endcomment -%}
+{%- liquid
+  assign ort = ort | default: 'seite'
+  assign club_status = nil
+  if customer and customer.tags contains 'club'
+    assign club_status = customer.metafields.club.status.value
+  endif
+-%}
+{%- if cart.item_count == 0 -%}
+  <div class="warenkorb-leer">
+    <p>{{ leer | escape }}</p>
+    {%- if ort == 'leiste' -%}
+      <button class="hb hb-klein" type="button" data-leiste-zu><span class="hb-text">Weiter umsehen</span><span class="hb-hover" aria-hidden="true"><span>Weiter umsehen</span><svg aria-hidden="true"><use href="#i-tropfen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></button>
+    {%- else -%}
+      <a class="hb hb-klein" href="{{ routes.root_url }}"><span class="hb-text">Zur Startseite</span><span class="hb-hover" aria-hidden="true"><span>Zur Startseite</span><svg aria-hidden="true"><use href="#i-tropfen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></a>
+    {%- endif -%}
+  </div>
+{%- else -%}
+  <form class="warenkorb-raster" action="{{ routes.cart_url }}" method="post" novalidate>
+    <ul class="warenkorb-liste">
+      {%- for item in cart.items -%}
+        <li class="warenkorb-zeile">
+          <div class="warenkorb-bild">
+            {%- if item.image -%}{{ item.image | image_url: width: 180 | image_tag: alt: '', loading: 'lazy', width: 90, height: 90 }}{%- endif -%}
+          </div>
+          <div class="warenkorb-name">
+            <a href="{{ item.url }}">{{ item.product.title }}</a>
+            {%- unless item.product.has_only_default_variant -%}<small>{{ item.variant.title }}</small>{%- endunless -%}
+            {%- for d in item.line_level_discount_allocations -%}<small>{{ d.discount_application.title }}: −{{ d.amount | money }}</small>{%- endfor -%}
+          </div>
+          <p class="warenkorb-preis">
+            {%- if item.original_line_price != item.final_line_price -%}<s>{{ item.original_line_price | money }}</s>{%- endif -%}
+            {{ item.final_line_price | money }}
+          </p>
+          <div class="warenkorb-menge">
+            <span class="menge">
+              <a href="{{ routes.cart_change_url }}?line={{ forloop.index }}&amp;quantity={{ item.quantity | minus: 1 }}" data-zeile="{{ forloop.index }}" data-menge="{{ item.quantity | minus: 1 }}" aria-label="Eins weniger: {{ item.product.title | escape }}">−</a>
+              <output aria-label="Menge {{ item.product.title | escape }}">{{ item.quantity }}</output>
+              <a href="{{ routes.cart_change_url }}?line={{ forloop.index }}&amp;quantity={{ item.quantity | plus: 1 }}" data-zeile="{{ forloop.index }}" data-menge="{{ item.quantity | plus: 1 }}" aria-label="Eins mehr: {{ item.product.title | escape }}">+</a>
+            </span>
+            <a class="warenkorb-weg" href="{{ item.url_to_remove }}" data-zeile="{{ forloop.index }}" data-menge="0">Entfernen</a>
+          </div>
+        </li>
+      {%- endfor -%}
+    </ul>
+
+    <div class="rand glas warenkorb-summe">
+      <div class="warenkorb-summe-innen">
+        {% render 'club-einloesen' %}
+        {%- for d in cart.cart_level_discount_applications -%}
+          {%- liquid
+            assign d_titel = d.title
+            assign d_club = false
+            assign d_gross = d.title | upcase
+            if d_gross contains 'CLUB-PUNKTE-'
+              assign d_titel = 'Club-Punkte'
+              assign d_club = true
+            endif
+          -%}
+          <p class="warenkorb-rabatt{% if d_club %} ist-club{% endif %}"><span>{{ d_titel }}</span><span>−{{ d.total_allocated_amount | money }}</span></p>
+        {%- endfor -%}
+        {%- unless ort == 'leiste' -%}
+          <p class="warenkorb-betrag"><span>Zwischensumme</span><b>{{ cart.total_price | money }}</b></p>
+          <p class="warenkorb-hinweis">{{ hinweis | escape }}</p>
+        {%- endunless -%}
+        {% render 'club-punkte', modus: 'warenkorb', cents: cart.total_price %}
+        {%- comment -%} Stufen-Weg aus club.status (pflegt die Club-App): zählt jeder bezahlte Einkauf {%- endcomment -%}
+        {%- if club_status.naechste_stufe != blank and club_status.fehlt_cents > 0 -%}
+          {%- assign stufe_rest = club_status.fehlt_cents | minus: cart.total_price -%}
+          <p class="warenkorb-stufe">
+            {%- if stufe_rest <= 0 -%}
+              Mit dieser Bestellung erreichst du <b>{{ club_status.naechste_stufe | escape }}</b>.
+            {%- else -%}
+              Danach noch <b>{% render 'club-euro', cents: stufe_rest %}</b> Einkauf bis {{ club_status.naechste_stufe | escape }}.
+            {%- endif -%}
+          </p>
+        {%- endif -%}
+        {%- unless ort == 'leiste' -%}
+          <button class="hb" type="submit" name="checkout"><span class="hb-text">Zur Kasse</span><span class="hb-hover" aria-hidden="true"><span>Zur Kasse</span><svg aria-hidden="true"><use href="#i-wagen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></button>
+        {%- endunless -%}
+      </div>
+    </div>
+    {%- if ort == 'leiste' -%}
+      {%- comment -%} In der Leiste bleiben Summe und Kasse unten stehen, auch wenn der Inhalt länger ist {%- endcomment -%}
+      <div class="leiste-kasse">
+        <p class="warenkorb-betrag"><span>Zwischensumme</span><b>{{ cart.total_price | money }}</b></p>
+        <p class="warenkorb-hinweis">{{ hinweis | escape }}</p>
+        <button class="hb" type="submit" name="checkout"><span class="hb-text">Zur Kasse</span><span class="hb-hover" aria-hidden="true"><span>Zur Kasse</span><svg aria-hidden="true"><use href="#i-wagen"/></svg></span><span class="hb-punkt" aria-hidden="true"></span></button>
+      </div>
+    {%- endif -%}
+  </form>
+  {%- if versprechen -%}
+    <div class="versprechen versprechen-klein">
+      <h2 class="sr">Versand und Bezahlung</h2>
+      {% render 'versprechen', art: 'klein' %}
+      {% render 'zahlarten' %}
+    </div>
+  {%- endif -%}
+{%- endif -%}

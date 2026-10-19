@@ -74,7 +74,7 @@ export function punkteText(p: OrderPoints | null, prog: Program): string {
 export function BestellungKarte({ o }: { o: Order }) {
   const mehr = o.items.length - 4;
   return (
-    <Link className="karte bestellung" to={`/bestellungen/${o.id}`} aria-label={`Bestellung ${o.name}, ${o.status.label}`}>
+    <Link className="karte bestellung" to={`/bestellungen/${o.id}`}>
       <div className="bestellung-kopf">
         <p className="bestellung-nr">
           Bestellung {o.name}

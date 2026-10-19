@@ -322,7 +322,7 @@ final class Replies
         return preg_match('/^\p{Lu}[\p{L}\'-]{1,30}$/u', $first) && !preg_match('/^(GmbH|Team|Shop|Service|Support|Info)$/i', $first) ? $first : '';
     }
 
-    private static function firstName(string $name): string
+    public static function firstName(string $name): string
     {
         return explode(' ', trim($name))[0] ?? $name;
     }

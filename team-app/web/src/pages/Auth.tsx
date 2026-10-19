@@ -8,7 +8,7 @@ import { isStandalone } from '../lib/push';
 
 function AuthFrame({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
-    <div className="safe-top flex min-h-dvh flex-col items-center justify-center px-5 py-10">
+    <main className="safe-top flex min-h-dvh flex-col items-center justify-center px-5 py-10">
       <div className={cx('w-full', wide ? 'max-w-[520px]' : 'max-w-[400px]')}>
         <div className="mb-8 flex flex-col items-center text-center">
           <Logo className="mb-4 h-20 w-20" />
@@ -17,7 +17,7 @@ function AuthFrame({ children, wide }: { children: ReactNode; wide?: boolean }) 
         </div>
         {children}
       </div>
-    </div>
+    </main>
   );
 }
 

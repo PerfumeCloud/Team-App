@@ -148,7 +148,6 @@ export default function Calendar() {
                   key={day}
                   onClick={() => setSelected(day)}
                   onDoubleClick={() => setDraft({ start_date: day })}
-                  aria-label={`${longDayLabel(day)}${sp.length ? `, ${sp.map((x) => x.title).join(', ')}` : ''}${evs.length ? `, ${evs.length} Termin${evs.length === 1 ? '' : 'e'}` : ''}`}
                   aria-pressed={isSel}
                   className={cx(
                     'flex min-h-[52px] flex-col items-stretch gap-0.5 p-1 text-left transition-colors sm:min-h-[92px] sm:p-1.5',
@@ -156,7 +155,15 @@ export default function Calendar() {
                     isSel ? 'ring-2 ring-inset ring-accent' : 'hover:bg-surface-2',
                   )}
                 >
+                  {/* Vorgelesen wird nur diese Zeile; Zahl, Punkte und Titel sind für die Augen (kein aria-label, damit nichts doppelt ist) */}
+                  <span className="sr-only">
+                    {longDayLabel(day)}
+                    {sp.length ? `, ${sp.map((x) => x.title).join(', ')}` : ''}
+                    {evs.length ? `, ${evs.length} Termin${evs.length === 1 ? '' : 'e'}` : ''}
+                    {taskCount ? `, ${taskCount} Aufgabe${taskCount === 1 ? '' : 'n'}` : ''}
+                  </span>
                   <span
+                    aria-hidden="true"
                     className={cx(
                       'tnum mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[13px] sm:mx-0',
                       day === today ? 'bg-accent font-semibold text-accent-ink' : holiday ? cx('font-semibold text-bad', !inMonth && 'opacity-60') : inMonth ? 'text-ink' : 'text-ink-3',
@@ -165,15 +172,15 @@ export default function Calendar() {
                     {parse(day).getDate()}
                   </span>
                   {/* Handy: Punkte */}
-                  <span className="flex justify-center gap-0.5 sm:hidden">
+                  <span className="flex justify-center gap-0.5 sm:hidden" aria-hidden="true">
                     {sp.some((x) => x.type === 'aktion') && <span className="u-amber h-1.5 w-1.5 rounded-full" style={{ background: 'var(--u-fg)' }} />}
                     {evs.slice(0, 3).map((e) => (
                       <KindDot key={e.id} kind={e.kind} className="h-1.5 w-1.5" />
                     ))}
                     {taskCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-ink-3/60" />}
                   </span>
-                  {/* Desktop: Titel */}
-                  <span className="hidden flex-col gap-0.5 sm:flex">
+                  {/* Desktop: Titel (für Screenreader steht alles schon in der Zeile oben) */}
+                  <span className="hidden flex-col gap-0.5 sm:flex" aria-hidden="true">
                     {sp.map((x) => (
                       <span
                         key={x.title}
@@ -281,7 +288,7 @@ function TaskLine({ t, onOpen }: { t: Task; onOpen: () => void }) {
   return (
     <div className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-surface-2">
       <TaskCheck task={t} size={20} />
-      <button onClick={onOpen} className={cx('min-w-0 flex-1 truncate text-left text-[14px] text-ink-2', t.status === 'done' && 'line-through')}>
+      <button onClick={onOpen} className={cx('min-w-0 flex-1 truncate py-0.5 text-left text-[14px] text-ink-2', t.status === 'done' && 'line-through')}>
         <span className="mr-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-3">Aufgabe</span>
         {t.title}
       </button>

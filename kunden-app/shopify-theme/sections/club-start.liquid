@@ -93,7 +93,7 @@
         {%- endif -%}
       {%- else -%}
         <h2 id="h-club-{{ section.id }}">{{ section.settings.titel }}</h2>
-        {%- if section.settings.text != blank -%}<p>{{ section.settings.text }}</p>{%- endif -%}
+        {%- if section.settings.text != blank -%}<p>{{ section.settings.text | escape }}</p>{%- endif -%}
       {%- endif -%}
     </div>
 

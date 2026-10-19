@@ -110,6 +110,12 @@ switch ($cmd) {
         echo Util::json(['users' => $cols('users'), 'push' => $cols('push_subscriptions'), 'schema' => Settings::get('schema_version')]);
         break;
 
+    case 'backup-nightly':
+        // Nacht-Sicherung sofort (Datum zurücksetzen); vor 2 Uhr sichert der Cronjob nicht
+        Settings::delete('backup_date');
+        echo Util::json(['out' => \PC\Backup::nightly(), 'hour' => (int) date('G')]);
+        break;
+
     case 'instagram-run':
         // Cronjob-Teil für Instagram (veröffentlichen, erinnern, abgleichen, verlängern)
         echo Util::json(['out' => Instagram::run()]);

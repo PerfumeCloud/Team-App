@@ -53,6 +53,7 @@ function SyncStatus({ compact }: { compact?: boolean }) {
       <span
         className={cx('h-2 w-2 rounded-full', pending ? 'bg-warn' : 'bg-good')}
         title={pending ? 'Wird gespeichert …' : `Synchron · ${relative(lastSyncAt, now)}`}
+        role="img"
         aria-label={pending ? 'Wird gespeichert' : 'Synchron'}
       />
     );
@@ -79,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh lg:flex">
       {/* Seitenleiste (Desktop) */}
-      <aside className="sticky top-0 hidden h-dvh w-[252px] shrink-0 flex-col border-r border-line/70 bg-surface/60 px-4 py-6 lg:flex">
+      <aside aria-label="Seitenleiste" className="sticky top-0 hidden h-dvh w-[252px] shrink-0 flex-col border-r border-line/70 bg-surface/60 px-4 py-6 lg:flex">
         <div className="mb-8 flex items-center gap-3 px-2">
           <Logo className="h-10 w-10" />
           <div className="leading-tight">
@@ -172,13 +173,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               key={to}
               onClick={() => navigate(to)}
-              className={cx('relative flex min-w-0 flex-1 flex-col items-center gap-1 pb-1.5 pt-2.5 text-[10px] font-medium tracking-[-0.01em]', isActive(to) ? 'text-accent' : 'text-ink-3')}
+              className={cx('relative flex min-w-0 flex-1 flex-col items-center gap-1 pb-1.5 pt-2.5 text-[11px] font-medium tracking-[-0.01em]', isActive(to) ? 'text-accent' : 'text-ink-3')}
               aria-current={isActive(to) ? 'page' : undefined}
             >
               <span className="relative">
                 <Icon className="h-[22px] w-[22px]" strokeWidth={isActive(to) ? 2.2 : 1.8} />
                 {badges[to] ? (
-                  <span className="tnum absolute -right-2.5 -top-1.5 min-w-[17px] rounded-full bg-accent px-1 text-center text-[10px] font-bold leading-[17px] text-accent-ink ring-2 ring-surface">
+                  <span className="tnum absolute -right-2.5 -top-1.5 min-w-[17px] rounded-full bg-accent px-1 text-center text-[11px] font-semibold leading-[17px] text-accent-ink ring-2 ring-surface">
                     {badges[to]}
                   </span>
                 ) : null}
@@ -199,7 +200,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
         <h1 className="page-title">{title}</h1>
         {subtitle && <p className="mt-1.5 text-[15px] text-ink-2">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

@@ -180,7 +180,15 @@ function General() {
             setThemePref(v);
           }}
           options={[
-            { value: 'auto', label: <span className="flex items-center gap-1.5"><Monitor className="h-3.5 w-3.5" /> Automatisch</span> },
+            {
+              value: 'auto',
+              label: (
+                <span className="flex items-center gap-1.5">
+                  <Monitor className="h-3.5 w-3.5" /> <span className="sm:hidden">Auto</span>
+                  <span className="max-sm:hidden">Automatisch</span>
+                </span>
+              ),
+            },
             { value: 'light', label: <span className="flex items-center gap-1.5"><Sun className="h-3.5 w-3.5" /> Hell</span> },
             { value: 'dark', label: <span className="flex items-center gap-1.5"><Moon className="h-3.5 w-3.5" /> Dunkel</span> },
           ]}
@@ -879,7 +887,7 @@ function seconds(ms: number): string {
 function CopyRow({ value, label }: { value: string; label: string }) {
   return (
     <div className="mt-2 flex items-center gap-2">
-      <input className="field min-w-0 flex-1 font-mono text-[13px]" readOnly value={value} onFocus={(e) => e.target.select()} />
+      <input className="field min-w-0 flex-1 font-mono text-[13px]" readOnly value={value} onFocus={(e) => e.target.select()} aria-label={label} />
       <Button
         variant="secondary"
         className="shrink-0 px-3 sm:px-4"

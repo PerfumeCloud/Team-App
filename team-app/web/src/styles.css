@@ -10,13 +10,14 @@
   --line: 230 222 209;
   --ink: 30 32 36;
   --ink-2: 86 90 97;
-  --ink-3: 110 113 119;
+  /* Leise Schrift, Grün, Gelb und Rot etwas dunkler: mindestens 4,5:1 auch auf getönten Flächen (WCAG AA) */
+  --ink-3: 102 105 111;
   --accent: 47 78 133;
   --accent-ink: 255 255 255;
   --accent-soft: 230 236 246;
-  --good: 46 125 79;
-  --warn: 168 102 26;
-  --bad: 180 68 58;
+  --good: 44 120 76;
+  --warn: 144 88 22;
+  --bad: 171 65 55;
   --chart: #2f5fa8;
   --chart-wash: rgb(47 95 168 / 0.1);
   --grid: #ebe4d8;
@@ -122,7 +123,7 @@
     @apply mb-1.5 block text-[13px] font-medium text-ink-2;
   }
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3;
+    @apply text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-3;
   }
   .page-title {
     @apply font-display text-[34px] font-semibold leading-[1.05] tracking-[-0.01em] text-ink md:text-[40px];

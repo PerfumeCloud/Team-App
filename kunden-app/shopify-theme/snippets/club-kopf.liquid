@@ -1,6 +1,8 @@
 {%- comment -%}
   Perfume Cloud Club im Kopf: Punktestand der Mitglieder („240 P“, bei vollem Warenkorb „+59“ dazu),
   Nicht-Mitglieder sehen nur bei vollem Warenkorb, wie viele Punkte sie im Club bekämen.
+  Vorgelesen wird der sichtbare Text mit versteckter Ergänzung („297 Punkte im Perfume Cloud Club“), kein aria-label,
+  damit Name und sichtbarer Text zusammenpassen (WCAG 2.5.3).
   Lädt außerdem club.css, die Club-Daten und club.js – deshalb reicht eine Zeile im Theme:
   in sections/kopf.liquid vor dem Link zum Kundenkonto  {% render 'club-kopf' %}
 {%- endcomment -%}
@@ -20,7 +22,7 @@
 <script src="{{ 'club.js' | asset_url }}" defer></script>
 {%- if club != blank -%}
   {%- if club_mitglied -%}
-    <a class="dock-punkt dock-text club-kopf" href="{{ club.app_url | default: 'https://app.perfumecloud.de' }}" data-club-punkte="kopf" aria-label="Perfume Cloud Club: {{ club_stand }} Punkte"><span class="club-kopf-punkt" aria-hidden="true"></span><span><span data-club-stand>{{ club_stand }}</span>&nbsp;P</span><span class="club-kopf-plus" data-club-plus hidden></span></a>
+    <a class="dock-punkt dock-text club-kopf" href="{{ club.app_url | default: 'https://app.perfumecloud.de' }}" data-club-punkte="kopf"><span class="club-kopf-punkt" aria-hidden="true"></span><span><span data-club-stand>{{ club_stand }}</span>&nbsp;P<span class="club-sr">unkte im Perfume Cloud Club</span></span><span class="club-kopf-plus" data-club-plus hidden></span></a>
   {%- else -%}
     <a class="dock-punkt dock-text club-kopf" href="{{ routes.cart_url }}" data-club-punkte="kopf" hidden><span class="club-kopf-punkt" aria-hidden="true"></span><span>Club</span><span class="club-kopf-plus" data-club-plus hidden></span></a>
   {%- endif -%}

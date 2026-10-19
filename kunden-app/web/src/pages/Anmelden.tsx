@@ -149,7 +149,7 @@ export default function Anmelden({ onLogin }: { onLogin: (me: Me) => void }) {
             </div>
             <div className="vorschau" aria-hidden="true">
               <PunkteKarte points={beispiel(program)} program={program} klein />
-              <img className="schwebe" src={flakon} srcSet={flakonSrcSet} alt="" />
+              <img className="schwebe" src={flakon} srcSet={flakonSrcSet} alt="" width={360} height={681} />
             </div>
           </section>
 

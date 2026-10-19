@@ -165,7 +165,8 @@ export function WertTabelle({ p, aktuell }: { p: Program; aktuell?: string }) {
       <p>
         {punkteWort(p.redeem_points)} sind {euro(p.redeem_cents)} wert. Wie viele Punkte du für jeden Euro bekommst, hängt von deiner Stufe ab.
       </p>
-      <div className="tabelle-rahmen">
+      {/* Am schmalen Handy seitlich scrollbar, deshalb mit der Tastatur erreichbar und benannt */}
+      <div className="tabelle-rahmen" tabIndex={0} role="region" aria-label="Wert der Punkte je Stufe">
         <table className="wert-tabelle">
           <thead>
             <tr>

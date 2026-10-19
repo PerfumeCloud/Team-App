@@ -12,7 +12,8 @@ import { AutoTextarea, Avatar, Button, Chip, cx, IconButton, Segmented, Sheet } 
 export const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'Offen', doing: 'In Arbeit', done: 'Erledigt' };
 export const PRIORITY_LABEL: Record<Priority, string> = { low: 'Niedrig', normal: 'Normal', high: 'Hoch' };
 
-export function TaskCheck({ task, size = 22 }: { task: Task; size?: number }) {
+/** Mindestens 24 × 24 Pixel, damit man den Kreis sicher trifft (WCAG 2.5.8). */
+export function TaskCheck({ task, size = 24 }: { task: Task; size?: number }) {
   const saveTask = useStore((s) => s.saveTask);
   const done = task.status === 'done';
   return (
@@ -25,10 +26,10 @@ export function TaskCheck({ task, size = 22 }: { task: Task; size?: number }) {
         if (!done) toast(`„${task.title}“ erledigt`, 'success', { label: 'Rückgängig', run: () => saveTask({ id: task.id, status: prev }) });
       }}
       className={cx(
-        'flex shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all active:scale-90',
+        'relative z-10 flex shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all active:scale-90',
         done ? 'border-accent bg-accent text-accent-ink' : 'border-ink-3/50 text-transparent hover:border-accent hover:text-accent/50',
       )}
-      style={{ width: size, height: size }}
+      style={{ width: Math.max(size, 24), height: Math.max(size, 24) }}
     >
       <Check className="h-[60%] w-[60%]" strokeWidth={3} />
     </button>
@@ -52,20 +53,18 @@ export function TaskCard({ task, onOpen, compact, draggable }: { task: Task; onO
   const commentCount = useMemo(() => Object.values(comments).filter((c) => c.task_id === task.id).length, [comments, task.id]);
   const done = task.status === 'done';
   const checklistDone = task.checklist.filter((c) => c.done).length;
+  // Die ganze Karte öffnet die Aufgabe über den Titel-Knopf (seine Fläche liegt über der Karte);
+  // der Haken liegt darüber und bleibt ein eigener Knopf, also keine Knöpfe ineinander.
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
       draggable={draggable}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/task-id', task.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
       className={cx(
-        'card group flex cursor-pointer gap-3 p-3.5 transition-all hover:shadow-lift',
-        done && 'opacity-60',
+        'card group relative flex cursor-pointer gap-3 p-3.5 transition-all hover:shadow-lift',
+        done && 'bg-surface/60 shadow-none',
         draggable && 'active:cursor-grabbing',
       )}
     >
@@ -73,7 +72,16 @@ export function TaskCard({ task, onOpen, compact, draggable }: { task: Task; onO
         <TaskCheck task={task} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className={cx('text-[15px] font-medium leading-snug text-ink', done && 'line-through decoration-ink-3')}>{task.title}</div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={cx(
+            'block text-left text-[15px] font-medium leading-snug after:absolute after:inset-0 after:rounded-2xl after:content-[""] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-accent/40',
+            done ? 'text-ink-3 line-through decoration-ink-3' : 'text-ink',
+          )}
+        >
+          {task.title}
+        </button>
         {!compact && task.description && <p className="mt-1 line-clamp-2 text-[13px] text-ink-2">{task.description}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {task.priority === 'high' && !done && (

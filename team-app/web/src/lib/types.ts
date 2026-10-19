@@ -541,6 +541,16 @@ export interface TemplatesResponse {
   footer: string;
   fromName: string;
   footerImage?: SignatureImage;
+  /** KI-Entwürfe eingerichtet (Admin hat einen API-Schlüssel hinterlegt) */
+  ai?: boolean;
+}
+
+export interface AiSettings {
+  configured: boolean;
+  model: string;
+  models: Record<string, string>;
+  month: { month: string; drafts: number; input: number; output: number };
+  last: { ok: boolean; at: number; model?: string; message?: string } | null;
 }
 
 export interface ReplyResult {
@@ -656,6 +666,19 @@ export interface BackupStatus {
   lastMail: { ok: boolean; at: number; to: string; message: string } | null;
   files: BackupFile[];
   email: string;
+  /** Kopie in einen S3-kompatiblen Speicher (Cloudflare R2, Hetzner, AWS); das Geheimnis kommt nie zurück */
+  s3: BackupS3;
+}
+
+export interface BackupS3 {
+  on: boolean;
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  access_key: string;
+  hasSecret: boolean;
+  last: { ok: boolean; message: string; at: number; name?: string; size?: number } | null;
 }
 
 export interface BackupSummary {

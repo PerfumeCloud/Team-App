@@ -15,6 +15,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { Section } from '../components/section';
@@ -25,7 +26,7 @@ import { SignatureImageField } from '../components/signature-image';
 import { Button, Chip, cx, IconButton, Sheet, Spinner, Toggle } from '../components/ui';
 import { api, ApiError, uuid } from '../lib/api';
 import { useStore } from '../lib/store';
-import type { BackupStatus, BackupSummary, Prefs, ReplyTemplate, ReportsAdmin, ShippingSettings, TemplatesResponse, WeeklyReport } from '../lib/types';
+import type { AiSettings, BackupStatus, BackupSummary, Prefs, ReplyTemplate, ReportsAdmin, ShippingSettings, TemplatesResponse, WeeklyReport } from '../lib/types';
 import { dateTime, relative } from '../lib/format';
 import { useNow } from '../lib/hooks';
 import { toast } from '../lib/toast';
@@ -215,6 +216,8 @@ export function TemplatesPanel() {
         </div>
       </Section>
 
+      <AiSection />
+
       <TemplateSheet
         template={editing}
         placeholders={data.placeholders}
@@ -226,6 +229,86 @@ export function TemplatesPanel() {
         }}
       />
     </>
+  );
+}
+
+// ---------------- KI-Entwürfe ----------------
+
+function AiSection() {
+  const [data, setData] = useState<AiSettings | null>(null);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void run(async () => setData(await api<AiSettings>('GET', '/admin/ai')));
+  }, []);
+
+  async function save(patch: { key?: string; model?: string }, done?: string) {
+    setBusy(true);
+    const r = await run(() => api<AiSettings>('PUT', '/admin/ai', patch));
+    setBusy(false);
+    if (r) {
+      setData(r);
+      setKey('');
+      clearTemplatesCache();
+      if (done) toast(done, 'success');
+    }
+  }
+
+  if (!data) return null;
+  return (
+    <Section
+      title="KI-Entwürfe"
+      description="Beim Antworten schreibt Claude (von Anthropic) auf Knopfdruck einen Entwurf – mit Bestellung, Versand und Club-Punkten. Verschickt wird nichts, bevor ihr den Text prüft und auf Senden tippt."
+    >
+      <div className="space-y-3">
+        <p className="flex items-center gap-2 text-[14px]">
+          {data.configured ? <CircleCheck className="h-4 w-4 text-good" aria-hidden /> : <Sparkles className="h-4 w-4 text-ink-3" aria-hidden />}
+          {data.configured ? 'Eingerichtet – der Knopf „KI-Entwurf“ erscheint beim Beantworten.' : 'Noch aus. Zum Einschalten einen API-Schlüssel eintragen.'}
+        </p>
+        <div>
+          <label className="label" htmlFor="ai-key">
+            {data.configured ? 'Neuer API-Schlüssel (leer lassen, um ihn zu behalten)' : 'API-Schlüssel'}
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input id="ai-key" className="field" type="password" autoComplete="off" value={key} placeholder="sk-ant-…" onChange={(e) => setKey(e.target.value)} />
+            <Button className="shrink-0" variant="secondary" icon={<KeyRound className="h-4 w-4" />} loading={busy} disabled={!key.trim()} onClick={() => void save({ key }, 'Schlüssel gespeichert')}>
+              Speichern
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[12px] text-ink-3">
+            Den Schlüssel gibt es unter console.anthropic.com → API Keys. Er wird verschlüsselt gespeichert und nie wieder angezeigt. Bezahlt wird je Entwurf (wenige Cent), am besten mit Ausgabenlimit im Anthropic-Konto.
+          </p>
+        </div>
+        <div>
+          <label className="label" htmlFor="ai-model">
+            Modell
+          </label>
+          <select id="ai-model" className="field" value={data.model} disabled={busy} onChange={(e) => void save({ model: e.target.value }, 'Modell gespeichert')}>
+            {Object.entries(data.models).map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="text-[13px] text-ink-3">
+          Diesen Monat: {data.month.drafts} {data.month.drafts === 1 ? 'Entwurf' : 'Entwürfe'}
+          {data.last && !data.last.ok && data.last.message ? ` · Zuletzt: ${data.last.message}` : ''}
+        </p>
+        <p className="flex gap-2 rounded-xl bg-warn/10 p-2.5 text-[13px] text-warn">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            Datenschutz: Für einen Entwurf gehen Text der Mail, Vorname, Bestellungen und Club-Stand an Anthropic. Bitte in der Datenschutzerklärung nennen und den Auftragsverarbeitungsvertrag (DPA) von Anthropic annehmen.
+          </span>
+        </p>
+        {data.configured && (
+          <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} disabled={busy} onClick={() => window.confirm('KI-Entwürfe ausschalten und den Schlüssel löschen?') && void save({ key: '' }, 'Ausgeschaltet')}>
+            Ausschalten
+          </Button>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -404,14 +487,14 @@ export function ReportsPanel() {
           {w.on && (
             <Row label="Wann?">
               <div className="flex gap-2">
-                <select className="field w-auto py-2" value={w.day} onChange={(e) => void save({ weekly: { day: Number(e.target.value) } })}>
+                <select className="field w-auto py-2" aria-label="Wochentag" value={w.day} onChange={(e) => void save({ weekly: { day: Number(e.target.value) } })}>
                   {data.reports.days.map((d, i) => (
                     <option key={d} value={i + 1}>
                       {d}
                     </option>
                   ))}
                 </select>
-                <select className="field w-auto py-2" value={w.hour} onChange={(e) => void save({ weekly: { hour: Number(e.target.value) } })}>
+                <select className="field w-auto py-2" aria-label="Uhrzeit" value={w.hour} onChange={(e) => void save({ weekly: { hour: Number(e.target.value) } })}>
                   {Array.from({ length: 17 }, (_, i) => i + 6).map((h) => (
                     <option key={h} value={h}>
                       {h} Uhr
@@ -646,6 +729,8 @@ function BackupSection({ status, onStatus }: { status: BackupStatus; onStatus: (
         </ul>
       )}
 
+      {status.hasPassword && <CloudCopy status={status} onStatus={onStatus} />}
+
       <details className="mt-4 rounded-2xl border border-line p-4">
         <summary className="cursor-pointer text-[14px] font-medium text-ink">Aus Datei wiederherstellen (z. B. aus der Mail)</summary>
         <div className="mt-3 space-y-2">
@@ -667,6 +752,113 @@ function BackupSection({ status, onStatus }: { status: BackupStatus; onStatus: (
         }}
       />
     </Section>
+  );
+}
+
+/** Kopie jeder Nacht-Sicherung in einen S3-kompatiblen Speicher außerhalb des Servers. */
+function CloudCopy({ status, onStatus }: { status: BackupStatus; onStatus: (b: BackupStatus) => void }) {
+  const s3 = status.s3;
+  const [form, setForm] = useState({ endpoint: s3.endpoint, region: s3.region, bucket: s3.bucket, prefix: s3.prefix, access_key: s3.access_key, secret: '' });
+  const [busy, setBusy] = useState<string | null>(null);
+  const now = useNow();
+  const ready = !!(s3.endpoint && s3.bucket && s3.access_key && s3.hasSecret);
+  const changed = form.endpoint !== s3.endpoint || form.region !== s3.region || form.bucket !== s3.bucket || form.prefix !== s3.prefix || form.access_key !== s3.access_key || form.secret !== '';
+
+  async function act<T>(key: string, fn: () => Promise<T>) {
+    setBusy(key);
+    const r = await run(fn);
+    setBusy(null);
+    return r;
+  }
+
+  async function save(patch: Record<string, unknown>, done: string) {
+    const r = await act('save', () => api<{ backup: BackupStatus }>('PUT', '/admin/backup/s3', patch));
+    if (r) {
+      onStatus(r.backup);
+      const n = r.backup.s3;
+      setForm({ endpoint: n.endpoint, region: n.region, bucket: n.bucket, prefix: n.prefix, access_key: n.access_key, secret: '' });
+      toast(done, 'success');
+    }
+  }
+
+  async function send(path: string, key: string) {
+    const r = await act(key, () => api<{ ok: boolean; message: string; backup: BackupStatus }>('POST', path, {}));
+    if (r) {
+      onStatus(r.backup);
+      toast(r.message, r.ok ? 'success' : 'error');
+    }
+  }
+
+  const field = (id: keyof typeof form, label: string, extra: { placeholder?: string; type?: string; hint?: string } = {}) => (
+    <div>
+      <label className="label" htmlFor={`s3-${id}`}>
+        {label}
+      </label>
+      <input
+        id={`s3-${id}`}
+        className="field"
+        type={extra.type ?? 'text'}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={extra.placeholder}
+        value={form[id]}
+        onChange={(e) => setForm({ ...form, [id]: e.target.value })}
+      />
+      {extra.hint && <p className="mt-1 text-[12px] text-ink-3">{extra.hint}</p>}
+    </div>
+  );
+
+  return (
+    <details className="mt-4 rounded-2xl border border-line p-4" open={s3.on || undefined}>
+      <summary className="cursor-pointer text-[14px] font-medium text-ink">
+        Kopie in einen Cloud-Speicher {s3.on && <Chip tone="good">An</Chip>}
+      </summary>
+      <div className="mt-3 space-y-3">
+        <p className="text-[13px] text-ink-2">
+          Falls der Server ausfällt: Jede Nacht-Sicherung geht zusätzlich verschlüsselt in einen S3-Speicher, z. B. Cloudflare R2 (bis 10 GB kostenlos) oder Hetzner Object Storage. Der Speicher sieht nur unlesbare Dateien.
+        </p>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5">
+          <span className="text-[14px] text-ink">Jede Nacht hochladen</span>
+          <Toggle label="Jede Nacht in den Cloud-Speicher hochladen" checked={s3.on} disabled={!ready || busy !== null} onChange={(v) => void save({ on: v }, v ? 'Wird ab heute Nacht hochgeladen' : 'Hochladen ausgeschaltet')} />
+        </div>
+        {s3.last && (
+          <p className={cx('flex items-start gap-2 text-[13px]', s3.last.ok ? 'text-ink-3' : 'text-bad')}>
+            {s3.last.ok ? <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-good" aria-hidden /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
+            <span>
+              {relative(s3.last.at, now)}: {s3.last.message}
+              {s3.last.size !== undefined && ` (${mb(s3.last.size)})`}
+            </span>
+          </p>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">{field('endpoint', 'Adresse (Endpoint)', { placeholder: 'https://<konto-id>.r2.cloudflarestorage.com' })}</div>
+          {field('bucket', 'Bucket', { placeholder: 'perfumecloud-sicherung' })}
+          {field('region', 'Region', { placeholder: 'auto', hint: 'R2: auto · Hetzner: z. B. fsn1 · AWS: z. B. eu-central-1' })}
+          {field('access_key', 'Zugriffsschlüssel-ID')}
+          {field('secret', s3.hasSecret ? 'Geheimer Schlüssel (leer lassen, um ihn zu behalten)' : 'Geheimer Schlüssel', { type: 'password' })}
+          <div className="sm:col-span-2">{field('prefix', 'Ordner im Bucket', { placeholder: 'team-app' })}</div>
+        </div>
+        <p className="text-[12px] text-ink-3">
+          Tipp: Dem Schlüssel nur Schreibrechte für diesen einen Bucket geben und im Speicher eine Regel anlegen, die Dateien nach z. B. 30 Tagen löscht – die App löscht dort selbst nichts.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button icon={<KeyRound className="h-4 w-4" />} loading={busy === 'save'} disabled={!changed || busy !== null} onClick={() => void save(form.secret ? form : { ...form, secret: undefined }, 'Cloud-Speicher gespeichert')}>
+            Speichern
+          </Button>
+          <Button variant="secondary" icon={<ShieldCheck className="h-4 w-4" />} loading={busy === 'test'} disabled={!ready || changed || busy !== null} onClick={() => void send('/admin/backup/s3/test', 'test')}>
+            Verbindung testen
+          </Button>
+          <Button variant="secondary" icon={<FileUp className="h-4 w-4" />} loading={busy === 'up'} disabled={!ready || changed || !status.files.length || busy !== null} onClick={() => void send('/admin/backup/s3/upload', 'up')}>
+            Neueste hochladen
+          </Button>
+          {s3.hasSecret && (
+            <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} disabled={busy !== null} onClick={() => window.confirm('Geheimen Schlüssel löschen und das Hochladen ausschalten?') && void save({ forget: true }, 'Schlüssel gelöscht')}>
+              Schlüssel löschen
+            </Button>
+          )}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -740,7 +932,7 @@ function ShippingSection({ value, onChange }: { value: ShippingSettings; onChang
     <Section title="Versand" description="Erinnerung für liegengebliebene Bestellungen und Vorgaben für „Versenden“.">
       <div className="divide-y divide-line/70">
         <Row label="Erinnerung ab" hint={value.remind_days ? 'Morgens ab 9 Uhr als Push (Benachrichtigungen → Versand-Erinnerung)' : 'Aus'}>
-          <select className="field w-auto py-2" value={value.remind_days} onChange={(e) => void save({ remind_days: Number(e.target.value) })}>
+          <select className="field w-auto py-2" aria-label="Erinnerung ab" value={value.remind_days} onChange={(e) => void save({ remind_days: Number(e.target.value) })}>
             <option value={0}>Aus</option>
             {Array.from({ length: 14 }, (_, i) => i + 1).map((d) => (
               <option key={d} value={d}>
@@ -750,7 +942,7 @@ function ShippingSection({ value, onChange }: { value: ShippingSettings; onChang
           </select>
         </Row>
         <Row label="Versanddienst vorauswählen" hint="Wird überschrieben, wenn die App die Nummer erkennt">
-          <select className="field w-auto py-2" value={value.default_carrier} onChange={(e) => void save({ default_carrier: e.target.value })}>
+          <select className="field w-auto py-2" aria-label="Versanddienst vorauswählen" value={value.default_carrier} onChange={(e) => void save({ default_carrier: e.target.value })}>
             {CARRIERS.map((c) => (
               <option key={c}>{c}</option>
             ))}

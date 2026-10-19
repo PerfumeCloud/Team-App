@@ -19,7 +19,11 @@ const PORT = 18000 + Math.floor(Math.random() * 1000);
 const IG_PORT = PORT + 4000;
 // PC_SHOPIFY_TEST: Shopify-Aufrufe gehen an den Nachbau weiter unten
 const SHOP_PORT = PORT + 5000;
-const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1', PC_INSTAGRAM_TEST: `http://127.0.0.1:${IG_PORT}`, PC_SHOPIFY_TEST: `http://127.0.0.1:${SHOP_PORT}` };
+// PC_AI_TEST: KI-Entwürfe gehen an den Nachbau der Anthropic-API weiter unten
+const AI_PORT = PORT + 6000;
+// PC_S3_TEST: Cloud-Speicher darf im Test http://127.0.0.1 sein (Nachbau weiter unten)
+const S3_PORT = PORT + 7000;
+const env = { ...process.env, PC_CONFIG: join(tmp, 'config.php'), PC_STORAGE: tmp, PC_PUSH_TEST: '1', PC_INSTAGRAM_TEST: `http://127.0.0.1:${IG_PORT}`, PC_SHOPIFY_TEST: `http://127.0.0.1:${SHOP_PORT}`, PC_AI_TEST: `http://127.0.0.1:${AI_PORT}`, PC_S3_TEST: '1' };
 const IMAP_PORT = PORT + 1000;
 const SMTP_PORT = PORT + 2000;
 const CLOSED_PORT = PORT + 3000;
@@ -53,7 +57,7 @@ const pushServer = http.createServer((req, res) => {
 
 // Nachbau von Instagram (Anmeldung, Graph API): /www/oauth/…, /api/oauth/access_token, /graph/…
 const HOUR = 3600000;
-const ig = { followers: 1500, revoked: false, calls: [], created: [], published: [], replies: [], refreshed: 0, tokens: new Set(), media: [] };
+const ig = { followers: 1500, revoked: false, calls: [], created: [], published: [], replies: [], refreshed: 0, tokens: new Set(), media: [], moreComments: [] };
 const igMedia = (n, type, product, hoursAgo, caption, reach, likes) => ({
   id: `m-${n}`, media_type: type, media_product_type: product, caption, permalink: `https://www.instagram.com/p/M${n}/`,
   media_url: `https://cdn.example/m${n}.jpg`, timestamp: new Date(Date.now() - hoursAgo * HOUR).toISOString(), like_count: likes, comments_count: n === 1 ? 2 : 0, _reach: reach,
@@ -126,6 +130,7 @@ const igServer = http.createServer((req, res) => {
         { id: '180001', text: 'Wie riecht der? 😍', username: 'anna.duft', timestamp: new Date(Date.now() - 2 * HOUR).toISOString(), like_count: 1, replies: { data: [] } },
         { id: '180002', text: 'Toll!', username: 'ben', timestamp: new Date(Date.now() - 5 * HOUR).toISOString(), like_count: 0, replies: { data: [{ id: '190001', username: 'perfumecloud.de' }] } },
         { id: '180003', text: 'Eigener Kommentar', username: 'perfumecloud.de', timestamp: new Date().toISOString(), replies: { data: [] } },
+        ...ig.moreComments,
       ] });
     }
     m = rest.match(/^\/(\d+)\/replies$/);
@@ -316,6 +321,56 @@ const clubServer = http.createServer((req, res) => {
   });
 });
 
+// Nachbau der Anthropic-API (POST /v1/messages): Schlüssel „sk-ant-falsch…“ → 401, sonst ein fester Entwurf
+const aiCalls = [];
+const aiServer = http.createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    const body = JSON.parse(Buffer.concat(chunks).toString() || '{}');
+    aiCalls.push({ path: req.url, headers: req.headers, body });
+    if (String(req.headers['x-api-key']).startsWith('sk-ant-falsch')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(
+      JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: 'Hallo Jürgen,\n\ndanke für deine Nachricht! Wir schauen sofort nach deiner Bestellung.' }], usage: { input_tokens: 900, output_tokens: 60 } }),
+    );
+  });
+});
+
+// Nachbau eines S3-Speichers: prüft die Signatur (AWS Signature V4) selbst nach und merkt sich die Dateien
+const S3_KEYS = { AKTEST: 'geheim-s3-schluessel-1234' };
+const s3Objects = new Map();
+const s3Server = http.createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    const body = Buffer.concat(chunks);
+    const fail = (status, code) => res.writeHead(status, { 'Content-Type': 'application/xml' }).end(`<?xml version="1.0"?><Error><Code>${code}</Code></Error>`);
+    const m = /^AWS4-HMAC-SHA256 Credential=([^/]+)\/(\d{8})\/([^/]+)\/s3\/aws4_request, SignedHeaders=([a-z0-9;-]+), Signature=([0-9a-f]{64})$/.exec(req.headers.authorization ?? '');
+    if (!m) return fail(400, 'AuthorizationHeaderMalformed');
+    const [, key, day, region, signed, signature] = m;
+    const secret = S3_KEYS[key];
+    if (!secret) return fail(403, 'InvalidAccessKeyId');
+    const sha = (x) => crypto.createHash('sha256').update(x).digest('hex');
+    if (req.headers['x-amz-content-sha256'] !== sha(body)) return fail(400, 'XAmzContentSHA256Mismatch');
+    const headers = signed.split(';').map((h) => `${h}:${String(req.headers[h]).trim()}\n`).join('');
+    const canonical = [req.method, req.url, '', headers, signed, req.headers['x-amz-content-sha256']].join('\n');
+    const amzDate = req.headers['x-amz-date'];
+    const toSign = ['AWS4-HMAC-SHA256', amzDate, `${day}/${region}/s3/aws4_request`, sha(canonical)].join('\n');
+    let k = `AWS4${secret}`;
+    for (const part of [day, region, 's3', 'aws4_request']) k = crypto.createHmac('sha256', k).update(part).digest();
+    if (crypto.createHmac('sha256', k).update(toSign).digest('hex') !== signature) return fail(403, 'SignatureDoesNotMatch');
+    if (!signed.split(';').includes('host') || !amzDate.startsWith(day)) return fail(403, 'SignatureDoesNotMatch');
+    const [, bucket, ...rest] = decodeURIComponent(req.url).split('/');
+    if (bucket !== 'pc-sicherung') return fail(404, 'NoSuchBucket');
+    if (req.method !== 'PUT') return fail(405, 'MethodNotAllowed');
+    s3Objects.set(rest.join('/'), { body, type: req.headers['content-type'] });
+    res.writeHead(200, { ETag: `"${sha(body).slice(0, 32)}"` }).end();
+  });
+});
+
 const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
 
 /** Text einer Mail (alle base64-Teile dekodiert). */
@@ -388,6 +443,8 @@ before(async () => {
   await waitFor(imap, 'ready');
   await new Promise((resolve) => igServer.listen(IG_PORT, '127.0.0.1', resolve));
   await new Promise((resolve) => shopServer.listen(SHOP_PORT, '127.0.0.1', resolve));
+  await new Promise((resolve) => aiServer.listen(AI_PORT, '127.0.0.1', resolve));
+  await new Promise((resolve) => s3Server.listen(S3_PORT, '127.0.0.1', resolve));
   pushPort = await listen(pushServer);
   clubUrl = `http://127.0.0.1:${await listen(clubServer)}`;
 });
@@ -399,6 +456,8 @@ after(() => {
   clubServer.close();
   shopServer.close();
   igServer.close();
+  aiServer.close();
+  s3Server.close();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -1505,6 +1564,58 @@ test('Antworten aus der App: voller Text, Bausteine, Test an mich, Versand mit K
   assert.equal((await admin.req('PUT', '/admin/mail-signature', { image: null })).data.image, null);
 });
 
+test('KI-Entwurf: nur mit Schlüssel vom Admin, Mail und Daten gehen mit, Adresse nicht, Fehler verständlich', async () => {
+  const id = helper('sql', "SELECT id FROM emails WHERE from_email = 'juergen@example.de'")[0].id;
+  assert.equal((await kim.req('GET', '/templates')).data.ai, false);
+  const aus = await kim.req('POST', `/emails/${id}/draft`, {});
+  assert.equal(aus.status, 409);
+  assert.equal((await kim.req('PUT', '/admin/ai', { key: 'sk-ant-' + 'x'.repeat(30) })).status, 403);
+  assert.equal((await admin.req('PUT', '/admin/ai', { key: 'zu kurz' })).status, 422);
+
+  const an = await admin.req('PUT', '/admin/ai', { key: 'sk-ant-test-' + 'a'.repeat(30) });
+  assert.equal(an.status, 200, JSON.stringify(an.data));
+  assert.equal(an.data.configured, true);
+  assert.equal(an.data.model, 'claude-opus-5-5');
+  assert.ok(!JSON.stringify(an.data).includes('aaaaaaaaaa'), 'Schlüssel kommt nie zurück');
+  assert.equal((await kim.req('GET', '/templates')).data.ai, true);
+
+  const d = await kim.req('POST', `/emails/${id}/draft`, {});
+  assert.equal(d.status, 200, JSON.stringify(d.data));
+  assert.match(d.data.text, /^Hallo Jürgen,/);
+  const call = aiCalls.at(-1);
+  assert.equal(call.path, '/v1/messages');
+  assert.equal(call.headers['anthropic-version'], '2023-06-01');
+  assert.equal(call.headers['x-api-key'], 'sk-ant-test-' + 'a'.repeat(30));
+  assert.equal(call.body.model, 'claude-opus-5-5');
+  assert.match(call.body.system, /Keine Grußformel/);
+  const prompt = call.body.messages[0].content;
+  assert.match(prompt, /<mail>[\s\S]*ich warte seit einer Woche[\s\S]*<\/mail>/);
+  assert.match(prompt, /Vorname der Kundin \/ des Kunden: Jürgen/);
+  assert.ok(!prompt.includes('juergen@example.de'), 'keine Mailadresse an die KI');
+  assert.match(prompt, /So klingen unsere Textbausteine/);
+
+  // Modell wechseln, Verbrauch zählen
+  await admin.req('PUT', '/admin/ai', { model: 'claude-haiku-5-5' });
+  await kim.req('POST', `/emails/${id}/draft`, { hint: 'kurz halten' });
+  assert.equal(aiCalls.at(-1).body.model, 'claude-haiku-5-5');
+  assert.match(aiCalls.at(-1).body.messages[0].content, /Wunsch des Teams für diese Antwort: kurz halten/);
+  const st = await admin.req('GET', '/admin/ai');
+  assert.equal(st.data.month.drafts, 2);
+  assert.equal(st.data.month.input, 1800);
+
+  // Falscher Schlüssel: verständliche Meldung, nichts im Antwortfeld
+  await admin.req('PUT', '/admin/ai', { key: 'sk-ant-falsch-' + 'b'.repeat(30) });
+  const f = await kim.req('POST', `/emails/${id}/draft`, {});
+  assert.equal(f.status, 502);
+  assert.match(f.data.error, /API-Schlüssel wird nicht angenommen/);
+  assert.equal((await admin.req('GET', '/admin/ai')).data.last.ok, false);
+
+  // Ausschalten
+  const weg = await admin.req('PUT', '/admin/ai', { key: '' });
+  assert.equal(weg.data.configured, false);
+  assert.equal((await kim.req('POST', `/emails/${id}/draft`, {})).status, 409);
+});
+
 test('Postfach-Ordner wie in Outlook: Gesendet, eigene Ordner, einsortieren, zurück, umbenennen, löschen', async () => {
   helper('mail', String(IMAP_PORT));
   const box = 'support@perfumecloud.de';
@@ -1705,6 +1816,60 @@ test('Datensicherung: Passwort, sichern, prüfen, Mail an Auswertungsadresse, wi
   assert.equal((await admin.req('POST', '/admin/backup/restore', { token: ok.token, confirm: 'WIEDERHERSTELLEN' })).status, 410);
 });
 
+test('Datensicherung: Kopie in einen S3-Speicher mit Signatur v4, Geheimnis bleibt verborgen, jede Nacht', async () => {
+  const s3 = (body) => admin.req('PUT', '/admin/backup/s3', body);
+  assert.equal((await kim.req('PUT', '/admin/backup/s3', { bucket: 'x' })).status, 403);
+  assert.equal((await kim.req('POST', '/admin/backup/s3/test', {})).status, 403);
+  assert.equal((await s3({ endpoint: 'http://speicher.example' })).status, 422, 'nur https');
+  assert.equal((await s3({ bucket: 'Gross_Buchstaben' })).status, 422);
+  let r = await admin.req('POST', '/admin/backup/s3/test', {});
+  assert.equal(r.data.ok, false);
+  assert.match(r.data.message, /nicht vollständig eingerichtet/);
+
+  // Falsches Geheimnis → Speicher lehnt die Signatur ab, verständlich gemeldet
+  r = await s3({ endpoint: `http://127.0.0.1:${S3_PORT}/`, region: 'auto', bucket: 'pc-sicherung', prefix: '/team-app/', access_key: 'AKTEST', secret: 'falsch-falsch-falsch' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.backup.s3.endpoint, `http://127.0.0.1:${S3_PORT}`);
+  assert.equal(r.data.backup.s3.prefix, 'team-app');
+  assert.equal(r.data.backup.s3.hasSecret, true);
+  assert.ok(!JSON.stringify(r.data).includes('falsch-falsch'), 'Geheimnis kommt nie zurück');
+  r = await admin.req('POST', '/admin/backup/s3/test', {});
+  assert.equal(r.data.ok, false);
+  assert.match(r.data.message, /geheime Schlüssel passt nicht/);
+  assert.equal(r.data.backup.s3.last.ok, false);
+
+  // Richtiges Geheimnis: Testdatei und neueste Sicherung kommen an, Inhalt unverändert und verschlüsselt
+  await s3({ secret: S3_KEYS.AKTEST });
+  r = await admin.req('POST', '/admin/backup/s3/test', {});
+  assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  assert.match(s3Objects.get('team-app/verbindungstest.txt').body.toString(), /Verbindungstest/);
+  r = await admin.req('POST', '/admin/backup/s3/upload', {});
+  assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  const newest = r.data.backup.files[0].name;
+  const obj = s3Objects.get(`team-app/${newest}`);
+  assert.ok(obj, [...s3Objects.keys()].join(','));
+  assert.equal(obj.body.subarray(0, 4).toString(), 'PCBK');
+  assert.equal(obj.body.length, r.data.backup.files[0].size);
+  assert.equal(r.data.backup.s3.last.name, newest);
+  assert.ok(!JSON.stringify((await admin.req('GET', '/admin/reports')).data).includes(S3_KEYS.AKTEST));
+
+  // Jede Nacht: mit „An“ geht die Nacht-Sicherung mit hoch (der Cronjob sichert erst ab 2 Uhr)
+  await s3({ on: true });
+  const n = await helperAsync('backup-nightly');
+  if (n.hour >= 2) {
+    assert.match(n.out, /^pc-.*\.pcbak$/, JSON.stringify(n));
+    assert.ok(s3Objects.has(`team-app/${n.out}`), 'Nacht-Sicherung im Speicher');
+  }
+
+  // Falscher Bucket, dann Schlüssel löschen → aus
+  await s3({ bucket: 'gibt-es-nicht' });
+  r = await admin.req('POST', '/admin/backup/s3/test', {});
+  assert.match(r.data.message, /gibt es dort nicht/);
+  r = await s3({ forget: true });
+  assert.equal(r.data.backup.s3.hasSecret, false);
+  assert.equal(r.data.backup.s3.on, false);
+});
+
 test('Wochenrückblick: Kennzahlen mit Vorwoche, Antwortzeit, Vorschau an mich, Auswertungsadresse', async () => {
   helper('seed-orders', '30');
   const r = await kim.req('GET', '/reports/weekly');
@@ -1840,6 +2005,25 @@ test('Instagram: verbinden, Abgleich, Auswertung, Kommentare, Planer mit Freigab
   assert.equal(c.comments.find((x) => x.id === '180001').replied_by, 'Marius');
   assert.deepEqual(ig.replies.at(-1), { id: '180001', message: 'Warm und süß – nach Amber und Vanille 🤍' });
   assert.equal((await admin.req('POST', '/instagram/comments/180001/reply', { text: '' })).status, 422);
+
+  // Neuer Kommentar, der nach Beschwerde klingt → Aufgabe für den Kundenservice, keine automatische Antwort
+  const comment = (id, text, username) => ({ id, text, username, timestamp: new Date().toISOString(), like_count: 0, replies: { data: [] } });
+  ig.moreComments.push(comment('180010', 'Meine Flasche kam KAPUTT an 😕 und auf meine Mail kam keine Antwort', 'carla.k'), comment('180011', 'Wann kommt der Winterduft? Bin gespannt!', 'dora'));
+  const repliesBefore = ig.replies.length;
+  await admin.req('POST', '/admin/instagram/test');
+  const complaint = () => helper('sql', "SELECT title, description, priority, category, status, checklist FROM tasks WHERE deleted = 0 AND title LIKE 'Instagram: mögliche Beschwerde%'");
+  let ct = complaint();
+  assert.equal(ct.length, 1, JSON.stringify(ct));
+  assert.equal(ct[0].title, 'Instagram: mögliche Beschwerde von @carla.k');
+  assert.equal(ct[0].priority, 'high');
+  assert.equal(ct[0].category, 'Kundenservice');
+  assert.match(ct[0].description, /erkannt an „kaputt“/);
+  assert.match(ct[0].description, /instagram\.com\/p\/M1/);
+  assert.equal(JSON.parse(ct[0].checklist).length, 3);
+  assert.equal(ig.replies.length, repliesBefore, 'keine automatische Antwort');
+  await admin.req('POST', '/admin/instagram/test');
+  assert.equal(complaint().length, 1, 'derselbe Kommentar legt keine zweite Aufgabe an');
+  ig.moreComments.length = 0;
 
   // Kim bekommt Instagram-Zugang
   assert.equal((await admin.req('PUT', `/admin/users/${kimId}`, { instagram_access: true })).data.user.instagram_access, 1);

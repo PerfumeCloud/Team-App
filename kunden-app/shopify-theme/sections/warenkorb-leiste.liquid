@@ -1,0 +1,20 @@
+{%- comment -%}
+  Inhalt der Warenkorb-Leiste. Steht in keiner Vorlage: perfume-cloud.js holt ihn über die Section Rendering API
+  (?section_id=warenkorb-leiste), sobald jemand die Leiste öffnet. So kostet die Leiste beim Seitenaufbau nichts.
+  Die Hülle (Dialog mit Titel und Schließen) steht in snippets/warenkorb-leiste.liquid.
+{%- endcomment -%}
+<div class="warenkorb warenkorb-in-leiste" data-warenkorb="{{ section.id }}" data-anzahl="{{ cart.item_count }}">
+  <p class="sr" role="status" tabindex="-1" data-warenkorb-status>{{ cart.item_count }} Artikel im Warenkorb, Zwischensumme {{ cart.total_price | money }}</p>
+  {% render 'warenkorb-inhalt', ort: 'leiste', leer: section.settings.leer, hinweis: section.settings.hinweis, versprechen: section.settings.versprechen %}
+</div>
+
+{% schema %}
+{
+  "name": "Warenkorb-Leiste",
+  "settings": [
+    { "type": "text", "id": "leer", "label": "Text bei leerem Warenkorb", "default": "Dein Warenkorb ist noch leer." },
+    { "type": "text", "id": "hinweis", "label": "Hinweis unter der Summe", "default": "Inkl. MwSt., zzgl. Versand." },
+    { "type": "checkbox", "id": "versprechen", "label": "Versprechen unter der Bestellung zeigen", "default": true }
+  ]
+}
+{% endschema %}

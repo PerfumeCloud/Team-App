@@ -389,6 +389,25 @@ export const HELP: HelpArticle[] = [
     open: { to: '/einstellungen/vorlagen', label: 'Vorlagen' },
   },
   {
+    id: 'ki-entwurf',
+    category: 'postfach',
+    title: 'KI-Entwurf für eine Antwort',
+    intro: 'Claude (von Anthropic) schreibt auf Knopfdruck einen Entwurf. Verschickt wird nichts, bevor du ihn liest und auf Senden tippst.',
+    keywords: 'ki claude anthropic entwurf antwort automatisch api schlüssel',
+    steps: [
+      'Ein Admin trägt einmal einen eigenen API-Schlüssel ein: **Einstellungen → Vorlagen → KI-Entwürfe** (Schlüssel von console.anthropic.com → API Keys).',
+      'Mail öffnen → **Antworten** → **KI-Entwurf**. Mitgeschickt werden Mailtext, Vorname, Bestellungen mit Versand und der Club-Stand, keine Mailadresse.',
+      'Entwurf lesen, Fakten prüfen und anpassen. Rabatte, Gutscheine oder Erstattungen schlägt die KI nie von selbst vor.',
+      '**Vorschau** → **Senden** wie gewohnt.',
+    ],
+    problems: [
+      { q: '„Der API-Schlüssel wird nicht angenommen“', a: 'Schlüssel in der Anthropic-Konsole prüfen und unter **Einstellungen → Vorlagen** neu eintragen.' },
+      { q: '„Kein Guthaben mehr“', a: 'Im Anthropic-Konto unter **Billing** aufladen. Ein Ausgabenlimit dort schützt vor Überraschungen.' },
+      { q: 'Der Knopf fehlt', a: 'Es ist noch kein Schlüssel eingetragen, oder die App wurde seit dem Eintragen nicht neu geladen.' },
+    ],
+    open: { to: '/einstellungen/vorlagen', label: 'Vorlagen' },
+  },
+  {
     id: 'signatur',
     category: 'postfach',
     title: 'Signatur mit Bild oder Logo',
@@ -487,7 +506,7 @@ export const HELP: HelpArticle[] = [
   {
     id: 'club-update',
     category: 'club',
-    title: 'Members Club aktualisieren (auf Version 1.5.0)',
+    title: 'Members Club aktualisieren (auf Version 1.5.1)',
     intro:
       'Meldet die Team-App „Der Members Club läuft noch auf Version …“ oder zeigt die Testbestellung „Nicht gefunden“, ist der Club älter als die Team-App.',
     admin: true,
@@ -497,7 +516,8 @@ export const HELP: HelpArticle[] = [
       'netcup **Plesk** → **Dateien** → Ordner `app.perfumecloud.de/httpdocs` öffnen.',
       '**Hochladen** → ZIP wählen → beim Menü **⋯** **Dateien extrahieren**, „Vorhandene Dateien ersetzen“ anhaken.',
       '`app.perfumecloud.de` einmal öffnen. Der Club ergänzt die Datenbank selbst.',
-      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.5.0“.',
+      'Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**. Dort steht jetzt „Version 1.5.1“.',
+      'Mit 1.5.1 öffnet der Warenkorb im Shop als Seitenleiste, mit Club-Punkten, Einlösen und dem Weg zur nächsten Stufe. Dafür das Theme 1.5.1 unveröffentlicht hochladen und in der Vorschau prüfen.',
       'Mit 1.5 haben Club-App und Shop die Schrift der Team-App (Inter und Cormorant Garamond, gleich hohe Ziffern). Nur der Firmenname bleibt in seiner Schrift. Dazu kommen dezente Metallfarben an den Stufen und im Theme die drei Versprechen: Versand, Verpackung, Bezahlung.',
       'Mit 1.4 gelten die neuen Punkte-Regeln: vier Stufen nach dem Einkaufswert seit dem Beitritt, Punkte sofort gutgeschrieben und 14 Tage nach der Bestellung einlösbar, Erinnerungen 60 und 30 Tage vor dem Verfall. Bisherige Stufen bleiben erhalten, die Umstellung verschickt keine Mitteilungen.',
       'Punkte im Warenkorb einlösen: einmal den **App-Proxy** in der Shopify-App einrichten und das neue Theme unveröffentlicht hochladen, prüfen und dann veröffentlichen (Anleitung `docs/KUNDEN-APP.md`, **Update 1.3.2 → 1.4**).',
@@ -616,6 +636,7 @@ export const HELP: HelpArticle[] = [
       'Text schreiben, Zeitpunkt wählen → **Zur Prüfung geben**.',
       'Jemand anderes öffnet **Prüfen & freigeben** → **Freigeben**. Die App veröffentlicht zum Zeitpunkt selbst.',
       'Reels und Videos: zum Zeitpunkt kommt ein Push mit **Jetzt posten**, dann in der Instagram-App posten.',
+      'Klingt ein neuer Kommentar nach Ärger („kaputt“, „nicht angekommen“, „Rücksendung“ …), legt die App eine Aufgabe für den **Kundenservice** an und schickt einen Push. Geantwortet wird nur von Hand unter **Instagram → Kommentare**.',
     ],
     problems: [{ q: '„Bild nicht abrufbar“', a: '`team.perfumecloud.de` muss ohne Passwortschutz erreichbar sein, Instagram holt die Bilder dort ab.' }],
     open: { to: '/instagram/planung', label: 'Planer' },
@@ -648,9 +669,14 @@ export const HELP: HelpArticle[] = [
       '**Einstellungen → Auswertungen → Auswertungsadresse** prüfen → **Testmail**.',
       '**Datensicherung:** Sicherungs-Passwort festlegen (mindestens 10 Zeichen) und sofort in die Passwortliste. Ohne Passwort lässt sich keine Sicherung öffnen.',
       '**Jetzt sichern**, dann **Letzte prüfen**.',
+      '**Kopie in einen Cloud-Speicher** (empfohlen): z. B. Cloudflare R2 (bis 10 GB kostenlos) oder Hetzner Object Storage. Adresse, Bucket, Region und Schlüssel eintragen → **Speichern** → **Verbindung testen** → **Jede Nacht hochladen** an.',
       '**Wochenrückblick:** Tag und Uhrzeit wählen, per Mail und/oder Push. **Vorschau** zeigt die laufende Woche.',
     ],
-    problems: [{ q: '„Letzte Sicherung fehlgeschlagen“', a: 'Die Meldung darunter nennt den Grund. Meist fehlt das Sicherungs-Passwort.' }],
+    problems: [
+      { q: '„Letzte Sicherung fehlgeschlagen“', a: 'Die Meldung darunter nennt den Grund. Meist fehlt das Sicherungs-Passwort.' },
+      { q: '„Der geheime Schlüssel passt nicht“ oder „Den Bucket gibt es dort nicht“', a: 'Zugriffsschlüssel-ID und geheimen Schlüssel neu aus dem Speicher kopieren, Bucket-Namen klein schreiben. Bei R2 als Region `auto`.' },
+      { q: 'Der Speicher wird immer voller', a: 'Die App löscht im Cloud-Speicher nichts. Dort eine Regel anlegen, die Dateien nach z. B. 30 Tagen löscht (R2: Object lifecycle rules).' },
+    ],
     open: { to: '/einstellungen/auswertungen', label: 'Auswertungen' },
   },
   {

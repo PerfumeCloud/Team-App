@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useEffect, useId, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
 import { LoaderCircle, X } from 'lucide-react';
 import type { User } from '../lib/types';
@@ -88,6 +88,7 @@ export function Avatar({ user, size = 28, ring }: { user?: User | null; size?: n
       <span
         className="inline-flex shrink-0 items-center justify-center rounded-full border border-dashed border-line text-ink-3"
         style={{ width: size, height: size, fontSize: size * 0.4 }}
+        role="img"
         aria-label="Niemand"
       >
         ?
@@ -99,6 +100,7 @@ export function Avatar({ user, size = 28, ring }: { user?: User | null; size?: n
       className={cx(`u-${user.color}`, 'inline-flex shrink-0 items-center justify-center rounded-full font-semibold', ring && 'ring-2 ring-surface')}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.38), background: 'var(--u-bg)', color: 'var(--u-fg)' }}
       title={user.name}
+      role="img"
       aria-label={user.name}
     >
       {initials(user.name)}
@@ -145,7 +147,8 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={cx(
             'flex-1 whitespace-nowrap rounded-lg font-medium transition-all',
-            size === 'sm' ? 'h-7 px-2.5 text-[13px]' : 'h-8 px-3 text-[14px]',
+            // Auf sehr schmalen Handys (320 Pixel) etwas weniger Rand, damit drei Optionen in die Zeile passen
+            size === 'sm' ? 'h-7 px-2.5 text-[13px] max-[359px]:px-2' : 'h-8 px-3 text-[14px] max-[359px]:px-2.5',
             o.value === value ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink',
           )}
         >
@@ -234,9 +237,10 @@ export function Sheet({ open, onClose, children, title, wide, xl }: { open: bool
       document.body.style.overflow = prev;
     };
   }, [open, onClose]);
+  const titleId = useId();
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-stretch lg:justify-end" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-stretch lg:justify-end" role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : 'Fenster'}>
       <div className="absolute inset-0 animate-fade-in bg-[rgb(20_20_24/0.35)] backdrop-blur-[2px]" onClick={onClose} />
       <div
         className={cx(
@@ -246,7 +250,9 @@ export function Sheet({ open, onClose, children, title, wide, xl }: { open: bool
       >
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line lg:hidden" />
         <div className="flex items-center justify-between gap-3 px-5 pb-2 pt-3 lg:px-6 lg:pt-5">
-          <div className="min-w-0 flex-1">{title}</div>
+          <div className="min-w-0 flex-1" id={titleId}>
+            {title}
+          </div>
           <IconButton label="Schließen" onClick={onClose}>
             <X className="h-5 w-5" />
           </IconButton>
@@ -291,5 +297,6 @@ export function Toasts() {
 }
 
 export function Logo({ className }: { className?: string }) {
-  return <img src="/brand/monogram.png" alt="" className={cx('select-none dark:invert', className)} draggable={false} />;
+  // WebP (16 statt 30 KB), 256 Pixel reichen für 80 Pixel bei dreifacher Auflösung
+  return <img src="/brand/monogram.webp" alt="" width={256} height={256} className={cx('select-none dark:invert', className)} draggable={false} />;
 }

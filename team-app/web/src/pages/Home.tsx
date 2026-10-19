@@ -11,7 +11,7 @@ import { openImportantCount, sortTasks, useStore } from '../lib/store';
 import { useStats } from '../lib/stats';
 import { euro, firstName, greeting, longDay, relative, todayISO, addDays } from '../lib/format';
 import { useNow } from '../lib/hooks';
-import { isStandalone, pushState } from '../lib/push';
+import { isStandalone, pushState, pushStateNow } from '../lib/push';
 import { useInstall } from '../lib/install';
 
 export default function Home() {
@@ -25,7 +25,7 @@ export default function Home() {
   const loadStats = useStats((s) => s.load);
   const navigate = useNavigate();
   const now = useNow();
-  const [push, setPush] = useState<string>('subscribed');
+  const [push, setPush] = useState<string>(pushStateNow);
   const [idea, setIdea] = useState('');
 
   useEffect(() => {
@@ -62,6 +62,18 @@ export default function Home() {
       ).slice(0, 5),
     [eventsMap, today, meta],
   );
+
+  // Gleiche Einträge (gleiche Person, gleicher Text) nur einmal zeigen, mit Anzahl und dem neuesten Zeitpunkt
+  const activityGroups = useMemo(() => {
+    const groups = new Map<string, { a: (typeof activity)[number]; n: number }>();
+    for (const a of activity) {
+      const key = `${a.user_id ?? ''}|${a.text}`;
+      const g = groups.get(key);
+      if (g) g.n++;
+      else groups.set(key, { a, n: 1 });
+    }
+    return [...groups.values()].slice(0, 9);
+  }, [activity]);
 
   const setup = me?.role === 'admin' && meta
     ? [
@@ -152,7 +164,12 @@ export default function Home() {
                 : 'Lädt …'
               : 'Shopify nicht verbunden'
           }
-          footer={stats && meta?.shopifyConfigured ? <Sparkline values={stats.series.map((d) => d.revenue)} /> : undefined}
+          footer={
+            meta?.shopifyConfigured ? (
+              // Platz für die Linie schon beim Laden freihalten, damit die Kacheln nicht springen
+              stats ? <Sparkline values={stats.series.map((d) => d.revenue)} /> : <div className="h-9" aria-hidden />
+            ) : undefined
+          }
           onClick={() => navigate('/statistik')}
         />
         <StatTile
@@ -271,7 +288,7 @@ export default function Home() {
           <div className="card p-2">
             {activity.length ? (
               <ul>
-                {activity.slice(0, 9).map((a) => {
+                {activityGroups.map(({ a, n }) => {
                   const u = a.user_id ? usersMap[a.user_id] : undefined;
                   const clickable = a.entity_type === 'task' && a.entity_id && tasksMap[a.entity_id];
                   return (
@@ -286,7 +303,10 @@ export default function Home() {
                           <p className="text-[14px] leading-snug text-ink-2">
                             <span className="font-semibold text-ink">{u ? firstName(u.name) : 'Jemand'}</span> {a.text}
                           </p>
-                          <p className="mt-0.5 text-[12px] text-ink-3">{relative(a.created_at, now)}</p>
+                          <p className="mt-0.5 text-[12px] text-ink-3">
+                            {relative(a.created_at, now)}
+                            {n > 1 ? ` · ${n}-mal` : ''}
+                          </p>
                         </div>
                       </button>
                     </li>

@@ -360,6 +360,15 @@ Jede Nacht ab 2 Uhr sichert die App alle Daten von Team-App **und** Club verschl
 3. **Per Mail senden** schickt die neueste Sicherung an die Auswertungsadresse.
 4. **Wiederherstellen** (in der Liste oder unter **Aus Datei wiederherstellen**, z. B. mit der Datei aus der Mail und ihrem Passwort, auch auf einem neuen Server) ersetzt alle Daten durch den Stand der Sicherung. Vorher legt die App automatisch eine Sicherung des aktuellen Stands an. Zur Bestätigung `WIEDERHERSTELLEN` eintippen.
 
+### K4 · Kopie in einen Cloud-Speicher (ab 1.10, empfohlen)
+Fällt der Server aus, liegen die Nacht-Sicherungen sonst mit ihm weg. Die App lädt deshalb jede Nacht-Sicherung zusätzlich in einen S3-kompatiblen Speicher. Die Dateien sind schon verschlüsselt, der Speicher sieht nur unlesbare Daten. Beispiel **Cloudflare R2** (bis 10 GB kostenlos, eine Sicherung hat wenige MB; Cloudflare verlangt trotzdem ein hinterlegtes Zahlungsmittel):
+1. Cloudflare-Konto → **R2 Object Storage** → **Bucket erstellen**, z. B. `perfumecloud-sicherung` (Standort: EU).
+2. Im Bucket → **Einstellungen → Object lifecycle rules**: Dateien nach **30 Tagen** löschen. Die App löscht im Speicher selbst nichts.
+3. **R2 → API-Token verwalten → API-Token erstellen**: Berechtigung **Objekt lesen und schreiben**, nur für diesen Bucket. Angezeigt werden **Zugriffsschlüssel-ID**, **geheimer Zugriffsschlüssel** und der **Endpunkt** (`https://<konto-id>.r2.cloudflarestorage.com`). Den geheimen Schlüssel sofort in die Notion-Passwortliste, Cloudflare zeigt ihn nur einmal.
+4. Team-App → **Einstellungen → Auswertungen → Datensicherung → Kopie in einen Cloud-Speicher**: Endpunkt, Bucket, Region `auto`, Zugriffsschlüssel-ID und geheimen Schlüssel eintragen → **Speichern** → **Verbindung testen** (legt `verbindungstest.txt` im Ordner `team-app` an) → **Neueste hochladen** → **Jede Nacht hochladen** einschalten.
+
+Klappt das Hochladen nachts nicht, kommt dieselbe Warnung wie bei einer fehlgeschlagenen Sicherung. Andere Anbieter gehen genauso, z. B. Hetzner Object Storage (Region etwa `fsn1`) oder AWS S3 (Region etwa `eu-central-1`). **Schlüssel löschen** schaltet das Hochladen aus.
+
 ## Teil L – Antworten, Kundeninfos und Versand
 
 ### L1 · Kundeninfos neben der Mail
@@ -369,6 +378,15 @@ Jede Nacht ab 2 Uhr sichert die App alle Daten von Team-App **und** Club verschl
 **Antworten** öffnet den Editor mit deiner **Signatur** (Einstellungen → Allgemein, auch mit **Bild**, z. B. Logo oder eingescannte Unterschrift) und den **Textbausteinen** zum Antippen. Platzhalter wie `{vorname}`, `{bestellnummer}` oder `{sendungslink}` füllt die App aus Shopify und dem Club. Mit **Ursprüngliche Mail zitieren** und **Danach als erledigt markieren**. Aus info@ und support@ geht die Antwort mit dem Absendernamen und der Fußzeile aus **Einstellungen → Vorlagen → Absender & Fußzeile** (dort auch **Logo unter der Fußzeile**), aus dem eigenen Postfach mit deinem Namen. Bilder gehen eingebettet mit der Mail raus (bis 400 KB, Breite per Regler 60–600 Pixel). Die Fußzeile samt Logo übernimmt auch der Members Club für seine Mails (ab Club 1.3).
 
 Textbausteine pflegen Admins unter **Einstellungen → Vorlagen**. Der Baustein, dessen Titel mit **„Entschuldigung“** beginnt, ist der Antwortvorschlag in den Aufgaben zu schlechten Bewertungen (Teil J).
+
+### L4 · KI-Entwurf (ab 1.10, freiwillig)
+Beim Antworten steht vor den Textbausteinen **KI-Entwurf**. Claude (von Anthropic) schreibt dann einen Entwurf ins Antwortfeld, mit den Daten aus Shopify und dem Club. Der Entwurf ist nur ein Vorschlag: lesen, Fakten prüfen, anpassen und erst dann senden. Rabatte, Gutscheine oder Erstattungen bietet die KI nie von selbst an. Die Textbausteine dienen ihr als Vorbild für den Ton.
+1. Konto auf `console.anthropic.com` anlegen → **Billing**: Guthaben aufladen (z. B. 10 €) und ein **Ausgabenlimit** setzen. Ein Entwurf kostet je nach Modell etwa 0,2 bis 3 Cent.
+2. **API Keys → Create Key**. Den Schlüssel in die Notion-Passwortliste.
+3. Team-App → **Einstellungen → Vorlagen → KI-Entwürfe**: Schlüssel eintragen → **Speichern**. **Modell**: Opus 5.5 (beste Qualität), Sonnet 5.5 oder Haiku 5.5 (günstiger). Darunter steht, wie viele Entwürfe es diesen Monat waren.
+4. **Datenschutz:** Für einen Entwurf gehen Betreff und Text der Mail, Vorname, Bestellungen (Nummer, Status, Düfte, Sendung) und Club-Stand an Anthropic, keine Mailadressen, Telefonnummern oder Anschriften. Vor dem Einschalten Anthropic in der Datenschutzerklärung als Empfänger nennen und den Auftragsverarbeitungsvertrag (DPA) von Anthropic annehmen (siehe [DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)).
+
+**Ausschalten** löscht den Schlüssel, der Knopf verschwindet.
 
 ### L3 · Versand
 Unter **Versand** (am Handy über **Zu versenden** auf der Übersicht) stehen alle offenen Bestellungen. **Versenden** trägt die Sendungsnummer in Shopify ein und markiert die Bestellung als versendet, auf Wunsch mit Versandbestätigung an die Kundin. Die Nummer kannst du mit **Scannen** direkt vom Etikett lesen (Kamera). Den Versanddienst erkennt die App an der Nummer.
@@ -463,6 +481,8 @@ Geht beim Veröffentlichen etwas schief, steht der Grund am Beitrag unter **Nich
 
 **Instagram → Kommentare** zeigt Kommentare auf euren Beiträgen der letzten 30 Tage, offene zuerst. **Antworten** schreibt direkt als euer Konto auf Instagram (mit Schnellantworten zum Anpassen). **Erledigt** blendet einen Kommentar ohne Antwort aus, z. B. Emojis oder Spam. Neue Kommentare kommen mit dem stündlichen Abgleich, mit Push.
 
+**Beschwerden (ab 1.10):** Enthält ein neuer Kommentar Wörter wie „kaputt“, „ausgelaufen“, „nicht angekommen“, „wo bleibt“, „Rücksendung“, „Erstattung“, „Reklamation“ oder „enttäuscht“, legt die App eine **Aufgabe** an (Priorität hoch, fällig heute, Kategorie „Kundenservice“) mit dem Kommentar und dem Link zum Beitrag, und der Push heißt „Mögliche Beschwerde auf Instagram“. Geantwortet wird nur von Hand: öffentlich kurz und freundlich, Details per Direktnachricht oder Mail, keine Bestelldaten öffentlich. Jeder Kommentar ergibt höchstens eine Aufgabe.
+
 ### N6 · Auswertung mit Claude und vorbereitete Beiträge
 
 1. **Instagram → Übersicht** → ganz unten **Zusammenfassung für Claude** → **Kopieren**. Der Text enthält Kennzahlen, Formate, Zeiten, Hashtags und die letzten Beiträge mit Zahlen, aber keine Namen von Kommentierenden.
@@ -502,6 +522,20 @@ Aufbau der Datei (für Claude oder zum Selbermachen):
 Unter **Hilfe** (am Computer links im Menü, am Handy oben das **Rettungsring-Symbol**) steht zu jeder Funktion eine Schritt-für-Schritt-Anleitung: Installation auf iPhone und Computer, Push, Widget, Shopify verbinden und Berechtigungen bestätigen, Postfächer, Cronjob, Members Club verbinden und aktualisieren, Testbestellung, Instagram, Signatur, Ordner, Versand, Sicherung und Wartung. Oben suchen (z. B. „read_inventory“, „Ordner“, „Push“) oder einen Bereich wählen. Jede Anleitung hat „Wenn es nicht klappt“ mit den häufigsten Fehlern und einen Knopf direkt zur passenden Einstellung. Fehlermeldungen in der App verlinken die passende Anleitung.
 
 **Links bleiben in der App:** Links zu Shop, Shopify, Instagram oder zur Sendungsverfolgung öffnen in einem **neuen Tab**. Die installierte App bleibt dabei offen, auf dem Handy wie am Computer.
+
+## Update auf Version 1.10 (KI-Entwurf, Sicherung im Cloud-Speicher, Instagram-Beschwerden)
+
+Passt zum Members Club **1.5.1** (1.5.0 geht auch). Alle Daten bleiben erhalten, die Datenbank ändert sich nicht.
+
+1. Neue **`perfumecloud-team-app-upload.zip`** hochladen und mit „Vorhandene Dateien ersetzen“ entpacken. Unter **Einstellungen** steht ganz unten „Version 1.10.0“.
+2. Auf iPhones die App einmal ganz schließen und neu öffnen.
+3. Empfohlen: **Kopie in einen Cloud-Speicher** einrichten (Teil K4). Optional: **KI-Entwürfe** (Teil L4).
+
+**Neu:**
+- **KI-Entwurf** beim Antworten (Teil L4): nur wenn ein Admin einen eigenen API-Schlüssel einträgt, nur auf Knopfdruck, verschickt wird nichts automatisch.
+- **Kopie der Datensicherung** in einen S3-Speicher wie Cloudflare R2 (Teil K4). Bisher lag die tägliche Sicherung nur auf dem Server und wöchentlich im Postfach.
+- **Instagram:** Klingt ein neuer Kommentar nach Ärger mit einer Bestellung, wird daraus eine Aufgabe für den Kundenservice (Teil N5). Antworten bleiben Handarbeit.
+- Barrierefreiheit: Mail-Fenster mit Überschrift, alle Auswahlfelder unter **Auswertungen** mit Namen für Screenreader.
 
 ## Update auf Version 1.9 (Members Club 1.5, Postfächer und Ordner anordnen)
 

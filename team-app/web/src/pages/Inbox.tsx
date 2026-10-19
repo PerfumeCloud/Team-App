@@ -121,7 +121,7 @@ export default function Inbox() {
         subtitle={meta.mailLastFetch ? `Zuletzt abgerufen ${relative(meta.mailLastFetch, now)}` : 'Wird gleich abgerufen …'}
       />
       <div className="md:grid md:grid-cols-[232px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[256px_minmax(0,1fr)]">
-        <aside className="hidden md:block">
+        <aside aria-label="Postfächer und Ordner" className="hidden md:block">
           <div className="card sticky top-4 max-h-[calc(100dvh-2rem)] overflow-y-auto p-3">{nav}</div>
         </aside>
 
@@ -282,9 +282,13 @@ function MailRow({
   return (
     <li className={cx('card p-4 transition-opacity', !open && 'opacity-70')}>
       <div className="flex items-start gap-3">
-        <div className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', !mail.seen && open ? 'bg-accent' : 'bg-transparent')} aria-label={!mail.seen ? 'Ungelesen' : undefined} />
+        <div
+          className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', !mail.seen && open ? 'bg-accent' : 'bg-transparent')}
+          {...(!mail.seen ? { role: 'img', 'aria-label': 'Ungelesen' } : { 'aria-hidden': true })}
+        />
         <div className="min-w-0 flex-1">
-          <button className="block w-full text-left" onClick={() => onOpen(false)} aria-label={`Mail von ${sender} öffnen`}>
+          {/* Ohne aria-label: vorgelesen wird, was man sieht (Absender, Zeit, Betreff) */}
+          <button className="block w-full text-left" onClick={() => onOpen(false)}>
             <div className="flex items-baseline justify-between gap-3">
               <span className={cx('truncate text-[15px] text-ink', !mail.seen ? 'font-semibold' : 'font-medium')}>{sender}</span>
               <span className="shrink-0 text-[12px] text-ink-3">{relative(mail.received_at, now)}</span>

@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin
+Disallow: /api
+Disallow: /einrichtung
+Disallow: /bewertung/
+Disallow: /abmelden/

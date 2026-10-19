@@ -111,7 +111,7 @@ export function Leer({ icon, titel, children }: { icon: ReactNode; titel: string
 export function Laden() {
   return (
     <div className="laden" role="status" aria-label="Lädt">
-      <img src={zeichen} alt="" />
+      <img src={zeichen} alt="" width={954} height={995} />
     </div>
   );
 }
@@ -248,7 +248,7 @@ export function ProduktBild({ src, alt = '' }: { src: string | null; alt?: strin
       {src && !kaputt ? (
         <img src={src} alt={alt} loading="lazy" onError={() => setKaputt(true)} />
       ) : (
-        <img className="flakon" src={flakon} srcSet={flakonSrcSet} alt={alt} />
+        <img className="flakon" src={flakon} srcSet={flakonSrcSet} alt={alt} width={360} height={681} />
       )}
     </span>
   );
@@ -328,7 +328,7 @@ export function PunkteKarte({ points, program, children, marke, klein }: { point
       <span className="sonne" aria-hidden="true" />
       <div className="punktekarte-kopf">
         <span className="marke">{marke ?? program.name}</span>
-        <img className="zeichen" src={zeichen} alt="" />
+        <img className="zeichen" src={zeichen} alt="" width={954} height={995} />
       </div>
       <div>
         <p className="stand">

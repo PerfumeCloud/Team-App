@@ -80,6 +80,23 @@ Alle Punkte, Mitglieder und Codes bleiben erhalten. **Befragung und Empfehlungsl
 4. Die Team-App auf **1.6** bringen (ANLEITUNG.md, „Update auf Version 1.6“). Erst dann kommen schlechte Bewertungen als Aufgabe in der Team-App an, Admins finden dort die **Testbestellung**, und das iPhone-Widget zeigt die Club-Mitglieder (Parameter `club`).
 5. **Teilnahmebedingungen** aktualisieren (Teil E) und die **Datenschutz-Merkliste** lesen ([DATENSCHUTZ-MERKLISTE.md](DATENSCHUTZ-MERKLISTE.md)), bevor ihr Teil L oder M einschaltet.
 
+## Update 1.5 → 1.5.1 (Warenkorb als Seitenleiste, schneller laden)
+
+Punkte, Stufen und Mitglieder bleiben, wie sie sind. Die Umstellung schickt **keine** Mitteilungen.
+
+1. Neue **`perfumecloud-club-upload.zip`** nach `app.perfumecloud.de/httpdocs` hochladen, „Vorhandene Dateien ersetzen“, dann `https://app.perfumecloud.de/admin` einmal öffnen. Team-App → **Einstellungen → Integrationen → Members Club** → **Speichern & testen**: „Version 1.5.1“.
+2. **Theme:** Shopify-Admin → **Onlineshop → Themes** → **Theme hinzufügen → ZIP-Datei hochladen** → `perfume-cloud-theme-1.5.1.zip`. Es bleibt **unveröffentlicht**. In der **Vorschau** prüfen:
+   - Etwas in den Warenkorb legen: Oben im Menü erscheint der **Warenkorb mit Anzahl**. Antippen öffnet die **Seitenleiste** rechts mit Düften, Menge, Club-Punkten, **Punkte einlösen** und **Zur Kasse** (bleibt unten stehen). Schließen mit ×, Escape oder Tippen daneben.
+   - Club-Mitglieder sehen dort, was zur nächsten Stufe fehlt („Danach noch 120 € Einkauf bis Gold“ oder „Mit dieser Bestellung erreichst du Gold“).
+   - `/cart` sieht aus wie bisher.
+3. Team-App auf **1.10** bringen (ANLEITUNG.md, „Update auf Version 1.10“). Nicht nötig für den Club, bringt aber die Sicherung im Cloud-Speicher.
+
+**Was sich ändert:**
+- **Warenkorb als Seitenleiste:** „In den Warenkorb“ führt nicht mehr weg von der Seite, sondern öffnet die Leiste. Ohne JavaScript oder bei einem Fehler geht es wie bisher zur Warenkorb-Seite. Ist der Warenkorb leer, ist das Symbol im Menü ausgeblendet. Vor dem Launch ändert sich also sichtbar nichts.
+- **Club-App lädt schneller:** Der Admin-Bereich, die Bewertungsseite und die Einrichtung werden erst geladen, wenn man sie öffnet (Mitglieder laden rund ein Viertel weniger). Bilder springen beim Laden nicht mehr.
+- **Suchmaschinen:** Admin, Einrichtung, Bewertungs- und Abmeldelinks der Club-App stehen nicht mehr in Suchmaschinen. Warenkorb und Club-Seite haben im Shop eine eigene Beschreibung.
+- **Sicherheit und Barrierefreiheit:** Texte aus dem Theme-Editor werden überall sicher ausgegeben, der Punktestand im Menü wird vollständig vorgelesen („297 Punkte im Perfume Cloud Club“).
+
 ## Update 1.4 → 1.5 (Schrift wie in der Team-App, drei Versprechen, Stufenfarben)
 
 Punkte, Stufen, Mitglieder und Codes bleiben, wie sie sind. Die Umstellung schickt **keine** Mitteilungen. Ist 1.4 noch nicht aufgespielt, zuerst die Schritte aus **Update 1.3.2 → 1.4** (ohne dessen Theme-Schritt 6) und dann diese hier.
@@ -351,6 +368,7 @@ Am einfachsten: Claude Bescheid sagen, dann überträgt Claude die Dateien ins L
 | `sections/versprechen.liquid`, `snippets/versprechen.liquid`, `snippets/zahlarten.liquid` | Ab 1.5: drei Versprechen (Texte in den Theme-Einstellungen) und Zahlarten. Brauchen Symbole, Schriften, `perfume-cloud.css` und die Einstellungen aus dem ganzen Theme 1.5, deshalb am besten die ZIP hochladen statt einzeln kopieren. |
 | `snippets/warteliste-voll.liquid` | Ab 1.4: Hinweis statt Formular, wenn die Warteliste voll ist |
 | `sections/club-warenkorb.liquid` + `templates/cart.json` | Warenkorb-Seite mit Punkten und Einlösen |
+| `snippets/warenkorb-inhalt.liquid`, `snippets/warenkorb-leiste.liquid`, `sections/warenkorb-leiste.liquid` | Ab 1.5.1: Inhalt des Warenkorbs (Seite und Leiste teilen ihn) und die Seitenleiste. Brauchen `layout/theme.liquid`, `snippets/symbole.liquid` und `perfume-cloud.css/.js` aus dem Theme 1.5.1, deshalb am besten die ZIP hochladen. |
 | `sections/club-start.liquid` | Ab 1.4: Club auf der Startseite (Gäste: vier Stufen, Mitglieder: eigene Karte und Stand) |
 | `sections/club-regeln.liquid` + `templates/page.club.json` | Abschnitt „Club-Regeln“ (älter) und Seitenvorlage `club` (nutzt ab 1.4 „Club auf der Startseite“) |
 
